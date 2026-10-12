@@ -166,6 +166,51 @@ describe('GET /api/changes', () => {
     expect(listed).toEqual(revisions);
   });
 
+  it.each(['1234567890123456', '0x10', '1e3', ' 1'])('rejects out-of-range or non-decimal since=%j with 400', async (since) => {
+    const res = await changes(alice.headers, encodeURIComponent(since));
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('invalid_request');
+  });
+
+  it('rejects a repeated since parameter with 400', async () => {
+    const res = await t.app.inject({ method: 'GET', url: '/api/changes?since=1&since=2', headers: alice.headers });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('returns nothing but the current revision when since is ahead of it', async () => {
+    const erin = await t.createUser('erin');
+    await t.app.sync.transaction(erin.id, (ops) => ops.insert(notes, { title: 'e1' }));
+    expect(await changesOk(erin.headers, 999)).toEqual({
+      revision: 1,
+      entities: { note: { upserts: [], tombstones: [] } },
+    });
+  });
+
+  it('reports a record updated and then deleted within one delta only as a tombstone', async () => {
+    const frank = await t.createUser('frank');
+    const note = await t.app.sync.transaction(frank.id, (ops) => ops.insert(notes, { title: 'f1' }));
+    const base = (await changesOk(frank.headers, 0)).revision;
+    await t.app.sync.transaction(frank.id, async (ops) => {
+      await ops.update(notes, note.id, { title: 'f1 edited' });
+      await ops.softDelete(notes, note.id);
+    });
+    const delta = await changesOk(frank.headers, base);
+    expect(delta.entities.note?.upserts).toEqual([]);
+    expect(delta.entities.note?.tombstones.map((x) => x.id)).toEqual([note.id]);
+  });
+
+  it("cannot take over another user's record by reusing its client-generated id", async () => {
+    const gina = await t.createUser('gina');
+    const hank = await t.createUser('hank');
+    const ginaNote = await t.app.sync.transaction(gina.id, (ops) => ops.insert(notes, { title: "gina's" }));
+    await expect(
+      t.app.sync.transaction(hank.id, (ops) => ops.insert(notes, { id: ginaNote.id, title: 'stolen' })),
+    ).rejects.toThrow();
+    const ginaView = await changesOk(gina.headers, 0);
+    expect(ginaView.entities.note?.upserts).toEqual([expect.objectContaining({ id: ginaNote.id, title: "gina's" })]);
+    expect((await changesOk(hank.headers, 0)).entities.note?.upserts).toEqual([]);
+  });
+
   it('rolls back the revision together with a failed transaction', async () => {
     const dave = await t.createUser('dave');
     await expect(
