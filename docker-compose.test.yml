@@ -1,0 +1,20 @@
+name: dida-clone-test
+
+# Throwaway PostgreSQL for API integration and e2e tests. Separate compose
+# project, loopback-only port, tmpfs storage: never touches dida-clone or Multica.
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "127.0.0.1:${TEST_PG_PORT:-55432}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 1s
+      timeout: 3s
+      retries: 30

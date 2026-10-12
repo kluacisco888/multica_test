@@ -1,0 +1,54 @@
+:root {
+  color-scheme: light dark;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  color: #191919;
+  background: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #e8e8e8;
+    background: #1c1c1c;
+  }
+}
+
+body {
+  margin: 0;
+}
+
+.shell {
+  display: grid;
+  place-content: center;
+  gap: 0.5rem;
+  min-height: 100vh;
+  padding: 1rem;
+  text-align: center;
+}
+
+.shell h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.status {
+  margin: 0;
+}
+
+/* Text colors keep at least 4.5:1 contrast on both backgrounds. */
+.status-ok {
+  color: #1a7f37;
+}
+
+.status-down {
+  color: #c62828;
+}
+
+@media (prefers-color-scheme: dark) {
+  .status-ok {
+    color: #5fd38d;
+  }
+  .status-down {
+    color: #ff8a80;
+  }
+}

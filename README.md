@@ -2,4 +2,113 @@
 
 本项目的目标是像素级复刻[滴答清单](https://dida365.com/)（TickTick）的网页版。
 
-开发由 Multica 上的智能体小队「软件交付小队」完成，需求与任务记录在 Multica 项目「复刻滴答清单」中。智能体协作约定见 `AGENTS.md` 与 `docs/agents/`。
+开发由 Multica 上的智能体小队「软件交付小队」完成，需求与任务记录在 Multica 项目「复刻滴答清单」中。智能体协作约定见 `AGENTS.md` 与 `docs/agents/`，术语见 `GLOSSARY.md`，决策见 `docs/adr/`。
+
+## 部署
+
+需要 Docker（含 compose v2.24+）。在仓库目录执行：
+
+```bash
+cp .env.example .env      # 先改 POSTGRES_PASSWORD，并按注释生成 APP_ENCRYPTION_KEY
+docker compose up -d
+curl http://127.0.0.1:8090/api/health
+```
+
+compose 项目名固定为 `dida-clone`，只有 `app` 和 `postgres` 两个服务，网络 `dida-clone_default`、数据卷 `dida-clone_pgdata`（数据库）和 `dida-clone_appdata`（附件，容器内 `/data/attachments`）都归这个项目独有。PostgreSQL 不对宿主机开放端口。应用启动时自动执行数据库迁移。
+
+升级：`git pull && docker compose up -d --build`。停止：`docker compose down`（不加 `-v`，否则删数据卷）。
+
+### 端口与外部地址
+
+所有配置都在 `.env`：
+
+| 变量 | 默认值 | 作用 |
+| --- | --- | --- |
+| `APP_BIND` | `127.0.0.1` | 宿主机监听地址。默认只监听本机回环，不暴露到公网 |
+| `APP_PORT` | `8090` | 宿主机端口 |
+| `PUBLIC_URL` | `http://127.0.0.1:8090` | 用户实际访问的地址；放到反向代理或 CloudFront 后面时改成对外域名 |
+| `TRUST_PROXY` | `loopback,linklocal,uniquelocal` | 信任哪些来源的 `X-Forwarded-For/-Proto/-Host`。可写 `true`、`false`、跳数或逗号分隔的 IP/CIDR |
+
+机器上已有的 Multica 占用 127.0.0.1:3000、127.0.0.1:8080 和自己的 postgres 容器，系统 nginx 占用 80 端口；默认配置与它们都不冲突，也不要把 `APP_PORT` 改成这些端口。
+
+从自己电脑访问：`ssh -L 8090:127.0.0.1:8090 <服务器>`，然后打开 http://127.0.0.1:8090 。
+
+`GET /api/health` 返回数据库状态，以及应用按 `TRUST_PROXY` 解析后看到的 `request.protocol/host/ip`，可以用来确认反向代理配置是否生效。
+
+## 备份与恢复
+
+```bash
+scripts/backup.sh                       # → backups/dida-clone-<UTC时间>.tar.gz
+scripts/restore.sh backups/xxx.tar.gz   # 覆盖当前项目的数据库和附件，需要输入项目名确认
+```
+
+备份文件是一个 `.tar.gz`，里面有 `manifest.json`、数据库 dump（`pg_dump -Fc`）和附件目录打包 `attachments.tar`。备份时应用可以在运行；恢复会先停 `app`，替换数据库和附件后再启动。
+
+两个脚本都操作当前目录下的 compose 项目，用 `COMPOSE_PROJECT_NAME` 指定别的项目。例如在同一台机器上恢复一份副本做核对，不影响正在运行的服务：
+
+```bash
+COMPOSE_PROJECT_NAME=dida-restore APP_PORT=8091 scripts/restore.sh backups/xxx.tar.gz --yes
+curl http://127.0.0.1:8091/api/health
+docker compose -p dida-restore down -v   # 核对完删除副本
+```
+
+### 迁移到新服务器
+
+1. 旧服务器：`scripts/backup.sh`。
+2. 把**备份文件和 `.env` 一起**拷到新服务器的仓库目录。**`.env` 必须带走**：`APP_ENCRYPTION_KEY` 不在备份里，丢了它，加密保存的通知渠道凭证就再也解不开；`POSTGRES_PASSWORD` 也要保持一致。
+3. 新服务器：`docker compose build && scripts/restore.sh <备份文件>`。
+4. `curl http://127.0.0.1:8090/api/health` 确认正常后，再停掉旧服务器。
+
+### 回滚数据库迁移
+
+每个迁移 `packages/server/drizzle/<tag>.sql` 都有对应的 `drizzle/rollback/<tag>.sql`（测试会检查）。回滚最近一个迁移：
+
+```bash
+docker compose stop app
+docker compose run --rm app node dist/db/rollback-cli.js
+```
+
+回滚后要先切回旧版本镜像再启动，否则应用启动时会把迁移重新执行一遍。
+
+## 开发
+
+需要 Node 24、pnpm 10（`corepack enable`）和 Docker。
+
+```bash
+pnpm install
+pnpm exec playwright install chromium   # 首次
+pnpm check        # lint + 类型检查 + 全部测试
+```
+
+结构：
+
+```text
+packages/
+├── shared/   # 前后端共用：zod schema、类型、纯领域逻辑
+├── server/   # Fastify API + 静态文件；drizzle/ 是迁移
+└── web/      # React + Vite
+e2e/          # Playwright
+scripts/      # 备份、恢复、测试辅助
+```
+
+### 测试
+
+`pnpm test` 一条命令跑完四层：
+
+| 层 | 命令 | 位置 |
+| --- | --- | --- |
+| 纯逻辑单元测试 | `pnpm test:unit` | `packages/*/src/**/*.test.ts` |
+| API 集成测试（真实 PostgreSQL） | `pnpm test:api` | `packages/server/test/api/` |
+| 假 SMTP / 假 Webhook 测试工具 | `pnpm test:fakes` | `packages/server/test/fakes/` |
+| Playwright 冒烟测试（1440px 和 390px） | `pnpm test:e2e` | `e2e/` |
+
+API 测试和 e2e 用的 PostgreSQL：设置了 `TEST_DATABASE_URL` 就用它（CI 就是这样）；否则自动启动 `docker-compose.test.yml`（项目 `dida-clone-test`，`127.0.0.1:55432`，数据在 tmpfs）。每个测试文件建一个独立的数据库。用完可以 `pnpm test:db:down`。
+
+写 API 测试用 `packages/server/test/support/test-app.ts` 的 `createTestApp()`：真实 Fastify + 迁移好的独立数据库，时钟可注入，用 `createUser()` 拿到带会话头的测试用户。
+
+### 数据层约定（ADR-0004）
+
+- 新建同步实体的表时，展开 `syncColumns()`（UUID 主键、`user_id`、`created_at`、`updated_at`、`revision`、`deleted_at`）并加 `syncIndex()`，然后在 `packages/server/src/sync/registry.ts` 注册。
+- 写这些表一律通过 `app.sync.transaction(userId, ops => ...)`：`ops.insert / update / softDelete` 会分配该用户新的修订号、按注入的时钟写 `updated_at`，删除只写 `deleted_at` 留下墓碑，并且只能改自己的数据。
+- `GET /api/changes?since=<revision>` 按实体类型返回 `upserts` 和 `tombstones`，以及当前 `revision`，下一次把它作为 `since` 传回。
+- 需要登录的接口用 `{ preHandler: app.authenticate }`。会话由 EURO-5 实现，在那之前所有这类接口都返回 401。
