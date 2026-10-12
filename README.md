@@ -106,6 +106,10 @@ API 测试和 e2e 用的 PostgreSQL：设置了 `TEST_DATABASE_URL` 就用它（
 
 写 API 测试用 `packages/server/test/support/test-app.ts` 的 `createTestApp()`：真实 Fastify + 迁移好的独立数据库，时钟可注入，用 `createUser()` 拿到带会话头的测试用户。
 
+### CI
+
+CI 定义在 `ci/github-actions.yml`：lint、类型检查、四层测试，再加一遍 compose 部署和备份恢复的冒烟测试。智能体的 GitHub token 没有 `workflow` 权限，推不了 `.github/workflows/`，所以要由维护者执行 `git mv ci/github-actions.yml .github/workflows/ci.yml` 来启用。
+
 ### 数据层约定（ADR-0004）
 
 - 新建同步实体的表时，展开 `syncColumns()`（UUID 主键、`user_id`、`created_at`、`updated_at`、`revision`、`deleted_at`）并加 `syncIndex()`，然后在 `packages/server/src/sync/registry.ts` 注册。

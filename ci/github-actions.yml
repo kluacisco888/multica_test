@@ -1,3 +1,7 @@
+# GitHub Actions workflow for this repo. It lives here instead of
+# .github/workflows/ci.yml only because the agent's token cannot push workflow
+# files (missing `workflow` scope). A maintainer activates it with:
+#   git mv ci/github-actions.yml .github/workflows/ci.yml
 name: CI
 
 on:
