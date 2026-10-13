@@ -30,24 +30,19 @@
   height: 64px;
 }
 
-.habits-title-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0;
-  color: var(--color-text);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-}
-
 .habits-title {
   margin: 0;
   font-size: 20px;
   font-weight: var(--font-weight-bold);
 }
 
-.habits-title-caret {
+/* The ⌄ beside 习惯: small and grey like the reference. */
+.habits-title-menu {
+  margin-left: -8px;
+}
+
+.habits-title-menu .ui-icon-button {
+  width: 20px;
   color: var(--color-text-secondary);
 }
 
@@ -133,8 +128,8 @@
   flex: 1;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding-bottom: 120px;
+  /* Reference: the drawing starts ~135px below the 7-day strip at both widths. */
+  padding-top: 128px;
   text-align: center;
 }
 

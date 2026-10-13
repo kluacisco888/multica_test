@@ -99,7 +99,8 @@ export function HabitsPane(props: HabitsPaneProps) {
       if (habit) {
         replace(await api.updateHabit(habit.id, draft));
       } else {
-        const created = await api.createHabit(draft);
+        // The habit starts on the day the user sees as today.
+        const created = await api.createHabit({ ...draft, startDate: today });
         if (!archived) setHabits((list) => [...(list ?? []), created]);
         props.onSelectHabit(created.id);
       }
@@ -129,18 +130,17 @@ export function HabitsPane(props: HabitsPaneProps) {
         <main className="habits-pane" aria-busy={habits === null}>
           <header className="habits-header">
             {isMobile && <IconButton icon="sidebar" label="展开侧栏" onClick={props.onToggleSidebar} className="habits-drawer-toggle" />}
+            <h1 className="habits-title">{archived ? '已归档' : '习惯'}</h1>
             <MenuButton
               label="习惯分类"
+              icon="chevronDown"
               align="start"
-              triggerClassName="habits-title-button"
+              className="habits-title-menu"
               items={[
                 { label: '坚持中', checked: !archived, onSelect: () => setArchived(false) },
                 { label: '已归档', checked: archived, onSelect: () => setArchived(true) },
               ]}
-            >
-              <h1 className="habits-title">{archived ? '已归档' : '习惯'}</h1>
-              <Icon name="chevronDown" size={14} className="habits-title-caret" />
-            </MenuButton>
+            />
             <span className="habits-header-actions">
               <IconButton icon="grid" label="切换视图" size={20} disabled />
               <IconButton icon="plus" label="添加习惯" size={20} onClick={() => setDialog({ kind: 'edit', habit: null })} />
@@ -526,6 +526,7 @@ function HabitDialog({ habit, onCancel, onSave }: { habit: Habit | null; onCance
                 min={1}
                 max={99999}
                 value={goal.target}
+                aria-label="每天目标数量"
                 onChange={(e) => setGoal({ ...goal, target: Math.max(1, Math.floor(Number(e.target.value) || 1)) })}
               />
               <label htmlFor={`${id}-unit`} className="visually-hidden">
