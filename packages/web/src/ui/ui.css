@@ -96,6 +96,46 @@
   border-color: var(--color-border-strong);
 }
 
+/* 优先级: outline and a light fill in the priority colour. */
+.ui-task-checkbox.ui-priority-high {
+  background: var(--color-priority-high-fill);
+  border-color: var(--color-priority-high);
+}
+
+.ui-task-checkbox.ui-priority-medium {
+  background: var(--color-priority-medium-fill);
+  border-color: var(--color-priority-medium);
+}
+
+.ui-task-checkbox.ui-priority-low {
+  background: var(--color-priority-low-fill);
+  border-color: var(--color-priority-low);
+}
+
+.ui-task-checkbox.ui-priority-high[aria-checked='true'],
+.ui-task-checkbox.ui-priority-medium[aria-checked='true'],
+.ui-task-checkbox.ui-priority-low[aria-checked='true'] {
+  background: var(--color-border-strong);
+  border-color: var(--color-border-strong);
+}
+
+/* Flag icons in priority menus and the detail header. */
+.ui-priority-high > svg {
+  color: var(--color-priority-high);
+}
+
+.ui-priority-medium > svg {
+  color: var(--color-priority-medium);
+}
+
+.ui-priority-low > svg {
+  color: var(--color-priority-low);
+}
+
+.ui-priority-none > svg {
+  color: var(--color-text-secondary);
+}
+
 /* Bigger touch target without changing the drawn size. */
 .ui-task-checkbox {
   position: relative;
@@ -196,6 +236,44 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Menu opened at the pointer (right click / ContextMenu key). */
+.ui-context-menu {
+  position: fixed;
+  top: 0;
+  min-width: 200px;
+  max-height: min(420px, calc(100vh - 16px));
+}
+
+.ui-context-section + .ui-context-section {
+  margin-top: var(--space-1);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--color-divider);
+}
+
+.ui-context-heading {
+  padding: var(--space-1) var(--space-3) 2px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.ui-context-row .ui-context-items {
+  display: flex;
+  gap: var(--space-1);
+  padding: 0 var(--space-2) var(--space-1);
+}
+
+.ui-context-row .ui-menu-item {
+  justify-content: center;
+  width: 36px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: var(--radius-md);
+}
+
+.ui-context-row .ui-menu-item[aria-checked='true'] {
+  background: var(--color-brand-soft);
 }
 
 .ui-menu-item-check {

@@ -5,23 +5,30 @@ import { useCallback, useEffect, useState } from 'react';
  *   /                              → 收件箱
  *   /lists/<listId>                → a 清单
  *   /lists/<listId>/tasks/<taskId> → a 清单 with a 任务 open in the detail pane
+ *   /tags/<tagId>                  → a 标签 (a parent 标签 includes its children)
+ *   /tags/<tagId>/tasks/<taskId>   → a 标签 with a 任务 open
  */
 
 export interface Route {
   listId: string | null;
+  tagId?: string | null;
   taskId: string | null;
 }
 
 export function parseRoute(pathname: string): Route {
-  const match = /^\/lists\/([^/]+)(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
-  if (!match) return { listId: null, taskId: null };
-  return { listId: decodeURIComponent(match[1] as string), taskId: match[2] ? decodeURIComponent(match[2]) : null };
+  const match = /^\/(lists|tags)\/([^/]+)(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
+  if (!match) return { listId: null, tagId: null, taskId: null };
+  const id = decodeURIComponent(match[2] as string);
+  const taskId = match[3] ? decodeURIComponent(match[3]) : null;
+  return match[1] === 'tags' ? { listId: null, tagId: id, taskId } : { listId: id, tagId: null, taskId };
 }
 
-export function routePath({ listId, taskId }: Route): string {
-  if (!listId) return '/';
-  const list = `/lists/${encodeURIComponent(listId)}`;
-  return taskId ? `${list}/tasks/${encodeURIComponent(taskId)}` : list;
+export function routePath({ listId, tagId, taskId }: Route): string {
+  let base: string;
+  if (tagId) base = `/tags/${encodeURIComponent(tagId)}`;
+  else if (listId) base = `/lists/${encodeURIComponent(listId)}`;
+  else return '/';
+  return taskId ? `${base}/tasks/${encodeURIComponent(taskId)}` : base;
 }
 
 export function useRoute(): [Route, (next: Route, options?: { replace?: boolean }) => void] {
@@ -39,7 +46,7 @@ export function useRoute(): [Route, (next: Route, options?: { replace?: boolean 
       if (options?.replace) window.history.replaceState(null, '', path);
       else window.history.pushState(null, '', path);
     }
-    setRoute(next);
+    setRoute({ tagId: null, ...next });
   }, []);
 
   return [route, navigate];

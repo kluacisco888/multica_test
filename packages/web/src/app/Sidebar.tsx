@@ -6,6 +6,7 @@ import {
   type SidebarItemRef,
   type SidebarOutlineEntry,
   type SidebarResponse,
+  type Tag,
   type TaskList,
 } from '@dida/shared';
 import { useState, type DragEvent, type ReactNode } from 'react';
@@ -14,7 +15,10 @@ import { Icon } from '../ui/Icon.js';
 
 interface SidebarProps {
   sidebar: SidebarResponse | null;
+  /** 标签 in display order (parents followed by their children). */
+  tags: Tag[];
   currentListId: string | null;
+  currentTagId: string | null;
   isDrawer: boolean;
   user: CurrentUser;
   onOpenAccount: () => void;
@@ -29,6 +33,10 @@ interface SidebarProps {
   onDeleteFolder: (folder: Folder) => void;
   onToggleFolder: (folder: Folder) => void;
   onMove: (dragged: SidebarItemRef, target: SidebarItemRef, position: DropPosition) => void;
+  onOpenTag: (tagId: string) => void;
+  onAddTag: (parentId: string | null) => void;
+  onEditTag: (tag: Tag) => void;
+  onDeleteTag: (tag: Tag) => void;
 }
 
 type DropHint = { key: string; position: DropPosition } | null;
@@ -43,6 +51,8 @@ export function Sidebar(props: SidebarProps) {
   const { sidebar, currentListId } = props;
   const [dragged, setDragged] = useState<SidebarItemRef | null>(null);
   const [hint, setHint] = useState<DropHint>(null);
+  /** Collapsed parent 标签 (kept for the session only). */
+  const [collapsedTags, setCollapsedTags] = useState<ReadonlySet<string>>(new Set());
 
   if (!sidebar) {
     return (
@@ -208,6 +218,70 @@ export function Sidebar(props: SidebarProps) {
 
   const topLevel = outline.filter((e) => e.kind === 'folder' || e.folderId === null);
 
+  function toggleTag(tagId: string) {
+    setCollapsedTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(tagId)) next.delete(tagId);
+      else next.add(tagId);
+      return next;
+    });
+  }
+
+  function tagRow(tag: Tag): ReactNode {
+    const active = tag.id === props.currentTagId;
+    const children = props.tags.filter((t) => t.parentId === tag.id);
+    const collapsed = collapsedTags.has(tag.id);
+    return (
+      <li key={tag.id}>
+        <div className={`sidebar-row ${tag.parentId ? 'sidebar-row-child' : ''}`}>
+          {children.length > 0 && (
+            <button
+              type="button"
+              className="sidebar-chevron sidebar-tag-chevron"
+              aria-expanded={!collapsed}
+              aria-label={`${collapsed ? '展开' : '收起'}子标签：${tag.name}`}
+              onClick={() => toggleTag(tag.id)}
+            >
+              <Icon name={collapsed ? 'chevronRight' : 'chevronDown'} size={12} />
+            </button>
+          )}
+          <a
+            href={`/tags/${tag.id}`}
+            className={`sidebar-item ${active ? 'sidebar-item-active' : ''}`}
+            aria-current={active ? 'page' : undefined}
+            onClick={(e) => {
+              e.preventDefault();
+              props.onOpenTag(tag.id);
+            }}
+          >
+            <span className="sidebar-item-icon">
+              <Icon name="tag" />
+            </span>
+            <span className="sidebar-item-name">{tag.name}</span>
+            {tag.color && <span className="sidebar-color-dot" style={{ background: tag.color }} aria-hidden="true" />}
+          </a>
+          <MenuButton
+            className="sidebar-row-menu"
+            label={`标签操作：${tag.name}`}
+            items={[
+              ...(tag.parentId === null ? [{ label: '添加子标签', icon: 'plus' as const, onSelect: () => props.onAddTag(tag.id) }] : []),
+              { label: '编辑', icon: 'edit', onSelect: () => props.onEditTag(tag) },
+              { label: '删除', icon: 'trash', danger: true, onSelect: () => props.onDeleteTag(tag) },
+            ]}
+          />
+        </div>
+        {children.length > 0 && !collapsed && (
+          <ul className="sidebar-tree" aria-label={`${tag.name}的子标签`}>
+            {children.map(tagRow)}
+          </ul>
+        )}
+      </li>
+    );
+  }
+
+  const tagIds = new Set(props.tags.map((t) => t.id));
+  const topTags = props.tags.filter((t) => t.parentId === null || !tagIds.has(t.parentId));
+
   return (
     <nav className={`sidebar ${props.isDrawer ? 'sidebar-drawer' : ''}`} aria-label="侧栏">
       {props.isDrawer && (
@@ -269,6 +343,20 @@ export function Sidebar(props: SidebarProps) {
             const list = listsById.get(entry.id);
             return list ? listRow(list, entry) : null;
           })}
+        </ul>
+      )}
+      <hr className="sidebar-divider" />
+      <div className="sidebar-section-head">
+        <h2 className="sidebar-section-title">标签</h2>
+        <div className="sidebar-section-actions">
+          <IconButton icon="plus" label="添加标签" size={16} onClick={() => props.onAddTag(null)} />
+        </div>
+      </div>
+      {topTags.length === 0 ? (
+        <p className="sidebar-hint">用标签给任务做跨清单的分类，点击上方 + 新建一个标签</p>
+      ) : (
+        <ul className="sidebar-tree" aria-label="标签">
+          {topTags.map(tagRow)}
         </ul>
       )}
     </nav>

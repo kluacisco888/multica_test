@@ -14,6 +14,8 @@ import {
   meResponseSchema,
   settingsSchema,
   sidebarResponseSchema,
+  tagSchema,
+  tagsResponseSchema,
   taskSchema,
   tasksResponseSchema,
   type ChangePasswordRequest,
@@ -21,6 +23,7 @@ import {
   type CreateChecklistItemRequest,
   type CreateFolderRequest,
   type CreateListRequest,
+  type CreateTagRequest,
   type CreateTaskRequest,
   type CurrentUser,
   type Folder,
@@ -29,12 +32,15 @@ import {
   type LoginRequest,
   type Settings,
   type SidebarResponse,
+  type Tag,
+  type TasksQuery,
   type Task,
   type TaskList,
   type UpdateChecklistItemRequest,
   type UpdateFolderRequest,
   type UpdateListRequest,
   type UpdateSettingsRequest,
+  type UpdateTagRequest,
   type UpdateTaskRequest,
 } from '@dida/shared';
 
@@ -115,8 +121,9 @@ export async function deleteFolder(id: string): Promise<void> {
   await call('DELETE', `/api/folders/${encodeURIComponent(id)}`);
 }
 
-export async function fetchTasks(listId: string): Promise<Task[]> {
-  const res = await call('GET', `/api/tasks?listId=${encodeURIComponent(listId)}`);
+/** Tasks of one 清单 or one 标签 (a parent 标签 includes its children's tasks). */
+export async function fetchTasks(query: TasksQuery): Promise<Task[]> {
+  const res = await call('GET', `/api/tasks?${new URLSearchParams(query).toString()}`);
   return tasksResponseSchema.parse(await res.json()).tasks;
 }
 
@@ -182,6 +189,22 @@ export async function updateChecklistItem(id: string, patch: UpdateChecklistItem
 
 export async function deleteChecklistItem(id: string): Promise<void> {
   await call('DELETE', `/api/checklist-items/${encodeURIComponent(id)}`);
+}
+
+export async function fetchTags(): Promise<Tag[]> {
+  return tagsResponseSchema.parse(await (await call('GET', '/api/tags')).json()).tags;
+}
+
+export async function createTag(request: CreateTagRequest): Promise<Tag> {
+  return tagSchema.parse(await (await call('POST', '/api/tags', request)).json());
+}
+
+export async function updateTag(id: string, patch: UpdateTagRequest): Promise<Tag> {
+  return tagSchema.parse(await (await call('PATCH', `/api/tags/${encodeURIComponent(id)}`, patch)).json());
+}
+
+export async function deleteTag(id: string): Promise<void> {
+  await call('DELETE', `/api/tags/${encodeURIComponent(id)}`);
 }
 
 export function errorMessage(error: unknown): string {

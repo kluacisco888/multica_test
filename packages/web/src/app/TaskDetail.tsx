@@ -1,8 +1,10 @@
 import {
   compareSortKeys,
   INBOX_NAME,
+  PRIORITY_LABELS,
   planIndent,
   planOutdent,
+  type Tag,
   type Task,
   type TaskList,
   type UpdateTaskRequest,
@@ -13,12 +15,15 @@ import { IconButton, MenuButton, TaskCheckbox } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { Markdown } from '../ui/Markdown.js';
 import { ChecklistEditor } from './ChecklistEditor.js';
+import { chipStyle, priorityItems, tagItems, tagsOf } from './taskMeta.js';
 
 interface TaskDetailProps {
   task: Task | null;
   /** All tasks of the current 清单 (for the parent link and the 子任务 list). */
   tasks: Task[];
   lists: TaskList[];
+  /** Every 标签 in display order. */
+  tags: Tag[];
   isMobile: boolean;
   timeZone: string;
   now: Date;
@@ -27,14 +32,17 @@ interface TaskDetailProps {
   onSelectTask: (taskId: string) => void;
   onAddSubtask: (parent: Task, title: string) => Promise<boolean>;
   onIndent: (task: Task, outdent: boolean) => boolean;
+  /** False in a 标签 view, where 缩进 is not offered. */
+  indentable: boolean;
   onError: (error: unknown) => void;
 }
 
-/** Right-hand pane (desktop) or full page (mobile) for one 任务 (spec 用户故事 21、23–27、31、35–37). */
+/** Right-hand pane (desktop) or full page (mobile) for one 任务 (spec 用户故事 18、21、22、23–27、31、35–37). */
 export function TaskDetail({
   task,
   tasks,
   lists,
+  tags,
   isMobile,
   timeZone,
   now,
@@ -43,6 +51,7 @@ export function TaskDetail({
   onSelectTask,
   onAddSubtask,
   onIndent,
+  indentable,
   onError,
 }: TaskDetailProps) {
   const addSubtaskRef = useRef<HTMLInputElement>(null);
@@ -60,9 +69,11 @@ export function TaskDetail({
   const children = tasks
     .filter((t) => t.parentId === task.id)
     .sort((a, b) => compareSortKeys(a.sortOrder, b.sortOrder) || compareSortKeys(a.id, b.id));
-  const canIndent = !done && planIndent(tasks, task.id, (t) => t.status !== 'completed').kind !== 'none';
-  const canOutdent = !done && planOutdent(tasks, task.id).kind !== 'none';
+  const canIndent = indentable && !done && planIndent(tasks, task.id, (t) => t.status !== 'completed').kind !== 'none';
+  const canOutdent = indentable && !done && planOutdent(tasks, task.id).kind !== 'none';
   const checklist = task.kind === 'checklist';
+  const change = (patch: UpdateTaskRequest) => void onChange(task, patch);
+  const taskTags = tagsOf(task, tags);
 
   return (
     <aside className="detail" aria-label="任务详情">
@@ -71,7 +82,8 @@ export function TaskDetail({
         <TaskCheckbox
           checked={done}
           label={task.title}
-          onChange={() => void onChange(task, { status: done ? 'open' : 'completed' })}
+          priority={task.priority}
+          onChange={() => change({ status: done ? 'open' : 'completed' })}
         />
         <span className="detail-header-divider" aria-hidden="true" />
         <TaskDateButton
@@ -82,6 +94,13 @@ export function TaskDetail({
           onSave={(dates) => void onChange(task, { dates })}
         />
         <span className="detail-status">{done ? '已完成' : ''}</span>
+        <MenuButton
+          label={`优先级：${PRIORITY_LABELS[task.priority]}`}
+          icon="flag"
+          className="detail-priority"
+          triggerClassName={`ui-priority-${task.priority}`}
+          items={priorityItems(task, change)}
+        />
       </header>
       <div className="detail-body">
         {parent && (
@@ -91,6 +110,32 @@ export function TaskDetail({
           </button>
         )}
         <TitleEditor task={task} onSave={(title) => onChange(task, { title })} />
+        <div className="detail-tags">
+          {taskTags.length > 0 && (
+            <ul className="detail-tag-list" aria-label="标签">
+              {taskTags.map((tag) => (
+                <li key={tag.id} className="tag-chip" style={chipStyle(tag)}>
+                  <span>{tag.name}</span>
+                  <button
+                    type="button"
+                    className="tag-chip-remove"
+                    aria-label={`移除标签：${tag.name}`}
+                    title="移除标签"
+                    onClick={() => change({ tagIds: task.tagIds.filter((id) => id !== tag.id) })}
+                  >
+                    <Icon name="close" size={10} strokeWidth={2.5} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {tags.length > 0 && (
+            <MenuButton label="设置标签" align="start" className="detail-tag-add" multiple items={tagItems(task, tags, change)}>
+              <Icon name="tag" size={14} />
+              {taskTags.length === 0 && <span>标签</span>}
+            </MenuButton>
+          )}
+        </div>
         {checklist ? (
           <ChecklistEditor key={`${task.id}-${task.kind}`} taskId={task.id} onError={onError} />
         ) : (

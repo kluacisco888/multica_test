@@ -49,6 +49,22 @@
   --color-segment-bg: #f2f3f5; /* 日期 / 时间段 segmented tabs */
   --color-success: #1a7f37;
 
+  /* ---- Colour: 优先级 (checkbox outline, flag) ----
+   * Reference: high #e03131 (the reference's red), medium #faa80c, low
+   * #4772fa (brand), none = the plain checkbox outline. Medium is darkened
+   * to #c27c0e for outlines and icons (3:1 against white); its fill keeps
+   * the reference colour as a light tint. */
+  --color-priority-high: #e03131;
+  --color-priority-medium: #c27c0e;
+  --color-priority-low: #4772fa;
+  --color-priority-none: var(--color-border-strong);
+  --color-priority-high-fill: rgb(224 49 49 / 0.1);
+  --color-priority-medium-fill: rgb(250 168 12 / 0.12);
+  --color-priority-low-fill: rgb(71 114 250 / 0.1);
+
+  /* ---- Colour: 标签 chips (tag colour is mixed in per chip) ---- */
+  --color-tag-default: #4772fa;
+
   /* ---- Colour: lines ---- */
   --color-divider: #f2f3f3;
   --color-divider-strong: #e8ebf2;

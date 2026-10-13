@@ -19,6 +19,7 @@ import { holidayRoutes } from './routes/holidays.js';
 import { checklistRoutes } from './routes/checklist.js';
 import { listRoutes } from './routes/lists.js';
 import { settingsRoutes } from './routes/settings.js';
+import { tagRoutes } from './routes/tags.js';
 import { taskRoutes } from './routes/tasks.js';
 import { createSessionStore, type SessionStore } from './sessions.js';
 import type { SyncEntity } from './sync/columns.js';
@@ -107,6 +108,7 @@ export async function buildApp(deps: AppDeps) {
   holidayRoutes(app);
   channelRoutes(app, { cipher });
   checklistRoutes(app);
+  tagRoutes(app);
   deps.routes?.(app);
 
   if (config.webDistDir) {

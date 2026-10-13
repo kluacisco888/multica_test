@@ -1,7 +1,8 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, arrayOverlaps, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import {
   createTaskRequestSchema,
+  tagWithChildren,
   tasksQuerySchema,
   updateTaskRequestSchema,
   type TaskDatesInput,
@@ -9,6 +10,7 @@ import {
 } from '@dida/shared';
 import { sessionUser } from '../auth.js';
 import type { Executor } from '../db/client.js';
+import { tags } from '../db/schema/tags.js';
 import { lists, tasks } from '../db/schema/tasks.js';
 import { sendValidationError } from '../http-errors.js';
 import { compareTasks, ensureInbox, taskDateColumns, taskToApi, topOfList, type TaskRow } from '../organize.js';
@@ -24,7 +26,8 @@ import {
   liveTasksOfList,
   lockTaskTrees,
 } from '../task-tree.js';
-import { checklistMode, depthExceeded, invalidList, invalidParent, notFound, Rejection, respond } from './respond.js';
+import { checklistMode, depthExceeded, invalidList, invalidParent, invalidTags, notFound, Rejection, respond } from './respond.js';
+import { liveTags } from './tags.js';
 
 type Params = { Params: { id: string } };
 
@@ -34,21 +37,37 @@ async function dateColumns(tx: Executor, userId: string, dates: TaskDatesInput |
   return taskDateColumns(dates, timeZone);
 }
 
+/** Throws a 400 rejection unless every id is a live 标签 of the user. */
+async function checkTags(db: Executor, userId: string, tagIds: string[] | undefined): Promise<void> {
+  if (!tagIds || tagIds.length === 0) return;
+  const live = new Set((await liveTags(db, userId)).map((t) => t.id));
+  if (!tagIds.every((id) => live.has(id))) throw new Rejection(invalidTags);
+}
+
 /**
  * 任务: quick add, edit, Markdown 描述, complete, move, dates (spec 用户故事 20、21、23–27、31、40),
- * 子任务 trees and 检查清单 mode (用户故事 35–37).
+ * 子任务 trees and 检查清单 mode (用户故事 35–37), 优先级 (22) and 标签 (18).
  */
 export function taskRoutes(app: FastifyInstance) {
   app.get('/api/tasks', async (request, reply) => {
     const query = tasksQuerySchema.safeParse(request.query);
     if (!query.success) return sendValidationError(reply, query.error);
     const userId = sessionUser(request).id;
-    const list = await findOwned(app.db, lists, userId, query.data.listId);
-    if (!list) return notFound(reply);
+    let scope;
+    if ('listId' in query.data) {
+      const list = await findOwned(app.db, lists, userId, query.data.listId);
+      if (!list) return notFound(reply);
+      scope = eq(tasks.listId, list.id);
+    } else {
+      const tag = await findOwned(app.db, tags, userId, query.data.tagId);
+      if (!tag) return notFound(reply);
+      // A parent 标签 shows its children's tasks too.
+      scope = arrayOverlaps(tasks.tagIds, tagWithChildren(await liveTags(app.db, userId), tag.id));
+    }
     const rows = await app.db
       .select()
       .from(tasks)
-      .where(and(eq(tasks.userId, userId), eq(tasks.listId, list.id), isNull(tasks.deletedAt)));
+      .where(and(eq(tasks.userId, userId), scope, isNull(tasks.deletedAt)));
     const response: TasksResponse = { tasks: rows.sort(compareTasks).map(taskToApi) };
     return response;
   });
@@ -63,7 +82,7 @@ export function taskRoutes(app: FastifyInstance) {
     const body = createTaskRequestSchema.safeParse(request.body);
     if (!body.success) return sendValidationError(reply, body.error);
     const userId = sessionUser(request).id;
-    const { id, listId, parentId, title, description = '', sortOrder, dates = null } = body.data;
+    const { id, listId, parentId, title, description = '', sortOrder, dates = null, priority = 'none', tagIds = [] } = body.data;
 
     if (parentId) {
       // A 子任务 goes into its parent's 清单.
@@ -72,6 +91,7 @@ export function taskRoutes(app: FastifyInstance) {
         () =>
           app.sync.transaction(userId, async (ops, tx) => {
             await lockTaskTrees(tx, userId);
+            await checkTags(tx, userId, tagIds);
             const parent = await findOwned(tx, tasks, userId, parentId);
             if (!parent || (listId && listId !== parent.listId)) throw new Rejection(invalidParent);
             const siblings = await liveTasksOfList(tx, userId, parent.listId);
@@ -86,6 +106,8 @@ export function taskRoutes(app: FastifyInstance) {
               description,
               status: 'open',
               completedAt: null,
+              priority,
+              tagIds,
               sortOrder: sortOrder ?? endOfChildren(siblings, parent.id),
             });
           }),
@@ -99,8 +121,9 @@ export function taskRoutes(app: FastifyInstance) {
     return respond(
       reply,
       () =>
-        app.sync.transaction(userId, async (ops, tx) =>
-          ops.insert(tasks, {
+        app.sync.transaction(userId, async (ops, tx) => {
+          await checkTags(tx, userId, tagIds);
+          return ops.insert(tasks, {
             ...(id ? { id } : {}),
             ...(await dateColumns(tx, userId, dates)),
             listId: list.id,
@@ -110,9 +133,11 @@ export function taskRoutes(app: FastifyInstance) {
             description,
             status: 'open',
             completedAt: null,
+            priority,
+            tagIds,
             sortOrder: sortOrder ?? (await topOfList(tx, userId, list.id)),
-          }),
-        ),
+          });
+        }),
       (row) => reply.code(201).send(taskToApi(row)),
     );
   });
@@ -134,6 +159,7 @@ export function taskRoutes(app: FastifyInstance) {
           // Re-read under the lock: the row may have moved since the check above.
           const task = await findOwned(tx, tasks, userId, found.id);
           if (!task) throw new Rejection(notFound);
+          await checkTags(tx, userId, fields.tagIds);
           const listRows = reshapes ? await liveTasksOfList(tx, userId, task.listId) : [];
           const subtree = reshapes ? descendantsOf(listRows, task.id) : [];
 

@@ -1,11 +1,29 @@
-import { buildTaskTree, describeTaskDates, planIndent, type Task, type TaskList, type TaskNode } from '@dida/shared';
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from 'react';
-import { IconButton, MenuButton, TaskCheckbox } from '../ui/controls.js';
+import {
+  buildTaskTree,
+  describeTaskDates,
+  planIndent,
+  PRIORITY_LABELS,
+  type Tag,
+  type Task,
+  type TaskList,
+  type TaskNode,
+  type UpdateTaskRequest,
+} from '@dida/shared';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react';
+import { ContextMenu, IconButton, MenuButton, TaskCheckbox } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
+import { chipStyle, tagsOf, taskContextSections } from './taskMeta.js';
+
+/** What the middle column shows: one 清单, or one 标签 across 清单. */
+export type ListPaneView = { kind: 'list'; list: TaskList } | { kind: 'tag'; tag: Tag; inbox: TaskList | null };
 
 interface TaskListPaneProps {
-  list: TaskList | null;
+  view: ListPaneView | null;
   tasks: Task[] | null;
+  /** Every 标签 in display order. */
+  tags: Tag[];
+  /** Every 清单 (the 标签 view names each task's 清单). */
+  lists: TaskList[];
   selectedTaskId: string | null;
   sidebarVisible: boolean;
   timeZone: string;
@@ -19,24 +37,33 @@ interface TaskListPaneProps {
    * happen, so the key keeps its default meaning (move focus).
    */
   onIndent: (task: Task, outdent: boolean) => boolean;
+  onChangeTask: (task: Task, patch: UpdateTaskRequest) => void;
   onEditList: (() => void) | null;
 }
+
+type MenuState = { task: Task; x: number; y: number; opener: HTMLElement | null } | null;
 
 const isOpen = (t: Task) => t.status !== 'completed';
 
 /**
  * The middle column: list title, quick add, the open 任务 tree, then the 已完成
- * section (spec 用户故事 20、23–27、35、36、40、65). 子任务 are nested lists;
- * Tab / Shift+Tab on the selected task indents / outdents it.
+ * section (spec 用户故事 18、20、22、23–27、35、36、40、65). 子任务 are nested
+ * lists; Tab / Shift+Tab on the selected task indents / outdents it; right-click
+ * (or the ContextMenu key / Shift+F10) opens the task menu.
  */
 export function TaskListPane(props: TaskListPaneProps) {
-  const { list, tasks } = props;
+  const { view, tasks } = props;
   const [showCompleted, setShowCompleted] = useState(true);
+  const [menu, setMenu] = useState<MenuState>(null);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const focusAfterMove = useRef<string | null>(null);
   const paneRef = useRef<HTMLElement>(null);
   const open = tasks?.filter(isOpen) ?? [];
   const completed = tasks?.filter((t) => !isOpen(t)) ?? [];
+  const title = view ? (view.kind === 'list' ? view.list.name : view.tag.name) : '';
+  // Tasks added in a 标签 view go to the 收件箱 with that 标签.
+  const addTarget = view ? (view.kind === 'list' ? view.list.name : (view.inbox?.name ?? '')) : '';
+  const listName = (task: Task) => (view?.kind === 'tag' ? props.lists.find((l) => l.id === task.listId)?.name : undefined);
 
   // A moved row is re-mounted under its new parent: give it focus back.
   useEffect(() => {
@@ -78,8 +105,12 @@ export function TaskListPane(props: TaskListPaneProps) {
     onSelectTask: props.onSelectTask,
     onToggleTask: props.onToggleTask,
     onIndent: indent,
+    indentable: view?.kind === 'list',
     timeZone: props.timeZone,
     now: props.now,
+    tags: props.tags,
+    listName,
+    onOpenMenu: (task: Task, x: number, y: number, opener: HTMLElement | null) => setMenu({ task, x, y, opener }),
   };
 
   return (
@@ -92,13 +123,15 @@ export function TaskListPane(props: TaskListPaneProps) {
           onClick={props.onToggleSidebar}
           className="list-pane-sidebar-toggle"
         />
-        <h1 className="list-pane-title">{list?.name ?? ''}</h1>
+        <h1 className="list-pane-title">{title}</h1>
         {props.onEditList && (
           <MenuButton label="清单更多操作" items={[{ label: '编辑清单', icon: 'edit', onSelect: props.onEditList }]} />
         )}
       </header>
 
-      {list && <QuickAdd key={list.id} listName={list.name} onAdd={props.onAddTask} />}
+      {view && (
+        <QuickAdd key={view.kind === 'list' ? view.list.id : view.tag.id} target={addTarget} onAdd={props.onAddTask} />
+      )}
 
       {tasks === null ? (
         <p className="list-pane-status" role="status">
@@ -143,11 +176,25 @@ export function TaskListPane(props: TaskListPaneProps) {
           )}
         </>
       )}
+
+      {menu && (
+        <ContextMenu
+          label={`任务操作：${menu.task.title}`}
+          x={menu.x}
+          y={menu.y}
+          returnFocus={menu.opener}
+          // Read the task fresh: it may have changed since the menu opened.
+          sections={taskContextSections(tasks?.find((t) => t.id === menu.task.id) ?? menu.task, props.tags, (patch) =>
+            props.onChangeTask(menu.task, patch),
+          )}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </main>
   );
 }
 
-function QuickAdd({ listName, onAdd }: { listName: string; onAdd: (title: string) => Promise<boolean> }) {
+function QuickAdd({ target, onAdd }: { target: string; onAdd: (title: string) => Promise<boolean> }) {
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -169,7 +216,7 @@ function QuickAdd({ listName, onAdd }: { listName: string; onAdd: (title: string
       <input
         className="quick-add-input"
         aria-label="添加任务"
-        placeholder={`添加任务至"${listName}"，回车即可保存`}
+        placeholder={`添加任务至"${target}"，回车即可保存`}
         value={title}
         maxLength={512}
         onChange={(e) => setTitle(e.target.value)}
@@ -187,8 +234,14 @@ interface TaskRowsProps {
   onSelectTask: (taskId: string) => void;
   onToggleTask: (task: Task) => void;
   onIndent: (task: Task, outdent: boolean) => boolean;
+  /** False in a 标签 view: Tab / Shift+Tab don't indent there. */
+  indentable: boolean;
   timeZone: string;
   now: Date;
+  tags: Tag[];
+  /** The task's 清单 name, shown in a 标签 view. */
+  listName: (task: Task) => string | undefined;
+  onOpenMenu: (task: Task, x: number, y: number, opener: HTMLElement | null) => void;
 }
 
 function TaskRows({ nodes, ...rest }: TaskRowsProps) {
@@ -197,7 +250,23 @@ function TaskRows({ nodes, ...rest }: TaskRowsProps) {
 
 function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskNode<Task> }) {
   const { task, depth, children } = node;
-  const { selectedTaskId, collapsed, onToggleCollapsed, onSelectTask, onToggleTask, onIndent, timeZone, now } = rest;
+  const {
+    selectedTaskId,
+    collapsed,
+    onToggleCollapsed,
+    onSelectTask,
+    onToggleTask,
+    onIndent,
+    indentable,
+    timeZone,
+    now,
+    tags,
+    listName,
+    onOpenMenu,
+  } = rest;
+  const titleRef = useRef<HTMLButtonElement>(null);
+  const taskTags = tagsOf(task, tags);
+  const list = listName(task);
   const selected = task.id === selectedTaskId;
   const done = task.status === 'completed';
   const date = task.dates ? describeTaskDates(task.dates, { now, timeZone }) : null;
@@ -206,7 +275,19 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
   const isCollapsed = collapsed.has(task.id);
   const childListId = `subtasks-${task.id}`;
 
+  function onContextMenu(event: MouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    onOpenMenu(task, event.clientX, event.clientY, titleRef.current);
+  }
+
   function onKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+    // Keyboard access to the right-click menu: the ContextMenu key or Shift+F10.
+    if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
+      e.preventDefault();
+      const rect = e.currentTarget.getBoundingClientRect();
+      onOpenMenu(task, rect.left + 24, rect.bottom, e.currentTarget);
+      return;
+    }
     // Only the selected task takes Tab, so Tab still moves focus everywhere else.
     if (e.key !== 'Tab' || !selected || e.altKey || e.ctrlKey || e.metaKey) return;
     if (onIndent(task, e.shiftKey)) e.preventDefault();
@@ -217,6 +298,7 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
       <div
         className={`task-row ${selected ? 'task-row-selected' : ''} ${done ? 'task-row-done' : ''}`}
         style={{ '--task-depth': depth - 1 } as CSSProperties}
+        onContextMenu={onContextMenu}
       >
         {children.length > 0 ? (
           <button
@@ -232,18 +314,30 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
         ) : (
           <span className="task-row-expand" aria-hidden="true" />
         )}
-        <TaskCheckbox checked={done} label={task.title} onChange={() => onToggleTask(task)} />
+        <TaskCheckbox checked={done} label={task.title} priority={task.priority} onChange={() => onToggleTask(task)} />
         <button
+          ref={titleRef}
           type="button"
           className="task-row-title"
           data-task-id={task.id}
           aria-current={selected ? 'true' : undefined}
-          aria-keyshortcuts={selected && !done ? 'Tab Shift+Tab' : undefined}
+          aria-description={task.priority !== 'none' ? PRIORITY_LABELS[task.priority] : undefined}
+          aria-keyshortcuts={selected && !done && indentable ? 'Tab Shift+Tab' : undefined}
           onClick={() => onSelectTask(task.id)}
           onKeyDown={onKeyDown}
         >
           {task.title}
         </button>
+        {taskTags.length > 0 && (
+          <ul className="task-row-tags" aria-label="标签">
+            {taskTags.map((tag) => (
+              <li key={tag.id} className="tag-chip" style={chipStyle(tag)}>
+                {tag.name}
+              </li>
+            ))}
+          </ul>
+        )}
+        {list && <span className="task-row-list">{list}</span>}
         {task.kind === 'checklist' ? (
           <span className="task-row-meta" title="检查清单">
             <Icon name="checklist" size={14} />

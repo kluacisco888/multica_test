@@ -4,8 +4,8 @@ import { taskDatesInputSchema, taskDatesSchema } from './task-dates.js';
 
 /*
  * 任务 basics (spec 用户故事 20、21、27、31、40), dates (23–26, see
- * `task-dates.ts`) and 子任务 and 检查清单 mode (用户故事 35–37). Priority and
- * tags come with later tasks. `abandoned` (放弃) is reserved in the status
+ * `task-dates.ts`), 子任务 and 检查清单 mode (用户故事 35–37), 优先级 and 标签
+ * (22、18). `abandoned` (放弃) is reserved in the status
  * enum; this version only moves between `open` and `completed`.
  *
  * 子任务 rules (see task-tree.ts): a 子任务 lives in its parent's 清单, trees
@@ -16,6 +16,20 @@ import { taskDatesInputSchema, taskDatesSchema } from './task-dates.js';
 
 export const TASK_TITLE_MAX_LENGTH = 512;
 export const TASK_DESCRIPTION_MAX_LENGTH = 100_000;
+
+/** 优先级 (spec 用户故事 22). */
+export const PRIORITIES = ['high', 'medium', 'low', 'none'] as const;
+export const prioritySchema = z.enum(PRIORITIES);
+export type Priority = z.infer<typeof prioritySchema>;
+export const PRIORITY_LABELS: Record<Priority, string> = { high: '高优先级', medium: '中优先级', low: '低优先级', none: '无优先级' };
+
+/** A 任务's 标签 ids: distinct, at most 50. */
+export const TASK_MAX_TAGS = 50;
+const tagIdsSchema = z
+  .array(z.uuid())
+  .max(TASK_MAX_TAGS, `最多 ${TASK_MAX_TAGS} 个标签`)
+  // Lower-case like PostgreSQL prints uuids, so duplicates differing in case collapse too.
+  .transform((ids) => [...new Set(ids.map((id) => id.toLowerCase()))]);
 
 export const taskStatusSchema = z.enum(['open', 'completed', 'abandoned']);
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
@@ -41,6 +55,9 @@ export const taskSchema = z.object({
   sortOrder: z.string(),
   /** null: no date. */
   dates: taskDatesSchema.nullable(),
+  priority: prioritySchema,
+  /** 标签 ids, in the order they were added. */
+  tagIds: z.array(z.uuid()),
 });
 export type Task = z.infer<typeof taskSchema>;
 
@@ -59,6 +76,8 @@ export const createTaskRequestSchema = z.object({
   dates: taskDatesInputSchema.nullable().optional(),
   /** Defaults to the top of the 清单 (new tasks appear first), or after the last sibling for a 子任务. */
   sortOrder: sortKeySchema.optional(),
+  priority: prioritySchema.optional(),
+  tagIds: tagIdsSchema.optional(),
 });
 export type CreateTaskRequest = z.input<typeof createTaskRequestSchema>;
 
@@ -83,12 +102,20 @@ export const updateTaskRequestSchema = z
     sortOrder: sortKeySchema,
     /** Replace the dates; null clears them. */
     dates: taskDatesInputSchema.nullable(),
+    priority: prioritySchema,
+    /** Replaces the 任务's 标签. */
+    tagIds: tagIdsSchema,
   })
   .partial()
   .strict();
 export type UpdateTaskRequest = z.input<typeof updateTaskRequestSchema>;
 
-export const tasksQuerySchema = z.object({ listId: z.uuid() });
+/** Either one 清单, or one 标签 across 清单 (a parent 标签 includes its children's tasks). */
+export const tasksQuerySchema = z.union([
+  z.object({ listId: z.uuid() }).strict(),
+  z.object({ tagId: z.uuid() }).strict(),
+]);
+export type TasksQuery = z.infer<typeof tasksQuerySchema>;
 
 /** `GET /api/tasks?listId=`: open tasks in list order, then completed ones, newest completion first. */
 export const tasksResponseSchema = z.object({ tasks: z.array(taskSchema) });
