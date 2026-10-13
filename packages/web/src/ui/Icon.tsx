@@ -290,6 +290,13 @@ const paths = {
       <path d="M14 18h6" />
     </>
   ),
+  /** 番茄专注: a target, like the reference rail icon. */
+  focus: (
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="3" fill="currentColor" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof paths;

@@ -196,6 +196,22 @@
   --matrix-detail-width: 400px;
   --color-matrix-row-line: #f2f2f3;
 
+  /* ---- 番茄专注 (EURO-24) ----
+   * Measured from the reference 专注 page (ADR-0007 screenshots, 1440×900 and 390×844). */
+  --color-focus-bg: #f9faff; /* both columns */
+  --color-focus-card: #f1f3f8; /* 概览 cards */
+  --color-focus-line: #eceef3; /* column divider */
+  --color-focus-ring: #e2e3e8; /* ring track */
+  --color-focus-ring-break: #2bbf9a; /* ring while 休息 */
+  --color-focus-segment: #ebedf2; /* 番茄计时 / 正计时 */
+  --focus-side-width: 555px; /* right column */
+  --focus-ring-size: 360px; /* reference: 360px ring, 7px stroke */
+  --focus-ring-size-mobile: 260px;
+  --focus-time-size: 60px;
+  --focus-time-size-mobile: 44px;
+  --focus-button-width: 170px;
+  --focus-button-height: 48px;
+
   --kanban-column-width: 258px; /* reference 看板 column (314→572 at 1440) */
   --kanban-column-gap: 20px; /* column → next column / “+ 新分组” */
   --kanban-header-height: 28px;
@@ -388,6 +404,13 @@
   --color-calendar-festival: #3fd3a6;
   --color-calendar-bar-text: #f1f2f5;
   --color-calendar-bar-done-text: #b4b6bc;
+
+  /* 番茄专注 (EURO-24) */
+  --color-focus-bg: color-mix(in srgb, var(--accent) 3%, #1c1c1e);
+  --color-focus-card: #252528;
+  --color-focus-line: #2c2c2f;
+  --color-focus-ring: #333337;
+  --color-focus-segment: #2a2a2d;
 
   --shadow-popover: 0 4px 16px rgb(0 0 0 / 0.5), 0 0 1px rgb(255 255 255 / 0.25);
   --shadow-card: 0 2px 12px rgb(0 0 0 / 0.3);

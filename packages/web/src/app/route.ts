@@ -15,7 +15,8 @@ import { useCallback, useEffect, useState } from 'react';
  *   /calendar                      → 日历 (last used view, today)
  *   /calendar/<mode>/<YYYY-MM-DD>  → 日历 in 月 / 周 / 日 / 多日 (`month` / `week` / `day` / `multiDay`) around a date
  *   /matrix                        → 四象限
- * Each but /trash takes `/tasks/<taskId>` for an open 任务.
+ *   /focus                         → 番茄专注
+ * Each but /trash and /focus takes `/tasks/<taskId>` for an open 任务.
  */
 
 /** 日历 route: null mode / date mean "last used view" / "today". */
@@ -40,7 +41,7 @@ export interface Route {
   matrix?: boolean;
 }
 
-const EMPTY: Required<Route> = { listId: null, tagId: null, smartId: null, filterId: null, search: null, taskId: null, trash: false, calendar: null, matrix: false };
+const EMPTY: Required<Route> = { listId: null, tagId: null, smartId: null, filterId: null, search: null, taskId: null, trash: false, calendar: null, matrix: false, focus: false };
 
 export function parseRoute(pathname: string): Route {
   if (/^\/trash\/?$/.test(pathname)) return { ...EMPTY, trash: true };
@@ -89,7 +90,7 @@ function safeDecode(value: string): string | null {
   }
 }
 
-export function routePath({ listId, tagId, smartId, filterId, search, taskId, trash, calendar, matrix }: Route): string {
+export function routePath({ listId, tagId, smartId, filterId, search, taskId, trash, calendar, matrix, focus }: Route): string {
   if (trash) return '/trash';
   let base: string;
   if (matrix) base = '/matrix';

@@ -31,3 +31,4 @@ export * from './kanban.js';
 export * from './task-selection.js';
 export * from './list-drag.js';
 export * from './matrix.js';
+export * from './focus.js';

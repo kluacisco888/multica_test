@@ -3,6 +3,8 @@ import {
   DEFAULT_SETTINGS,
   mergeViewOptions,
   storedQuadrants,
+  pomodoroSettingsSchema,
+  type PomodoroSettings,
   smartListIdSchema,
   themeColorSchema,
   themeModeSchema,
@@ -41,6 +43,8 @@ function toSettings(row: SettingsRow | undefined): Settings {
     themeColor: themeColorSchema.catch(DEFAULT_SETTINGS.themeColor).parse(row.themeColor),
     // Unchanged (null) or unreadable quadrants are the default ones.
     matrixQuadrants: storedQuadrants(row.matrixQuadrants),
+    // Missing lengths take their defaults; a broken value falls back to all defaults.
+    pomodoro: pomodoroSettingsSchema.catch(DEFAULT_SETTINGS.pomodoro).parse(row.pomodoro),
   };
 }
 
@@ -54,6 +58,8 @@ export interface SettingsPatch {
   allDayReminderTime?: string;
   /** All four 四象限 quadrants; null goes back to the defaults. */
   matrixQuadrants?: Quadrant[] | null;
+  /** Merged: only the given lengths change. */
+  pomodoro?: Partial<PomodoroSettings>;
 }
 
 export async function readSettings(db: Executor, userId: string): Promise<Settings> {
@@ -65,10 +71,11 @@ export async function readSettings(db: Executor, userId: string): Promise<Settin
 export async function writeSettings(ops: SyncOps, tx: Tx, userId: string, patch: SettingsPatch): Promise<Settings> {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(${SETTINGS_LOCK}, hashtext(${userId}))`);
   const [existing] = await tx.select().from(userSettings).where(liveSettingsWhere(userId));
-  const { viewOptions, ...rest } = patch;
+  const { viewOptions, pomodoro, ...rest } = patch;
   const columns = {
     ...rest,
     ...(viewOptions ? { viewOptions: mergeViewOptions(existing?.viewOptions ?? {}, viewOptions) } : {}),
+    ...(pomodoro ? { pomodoro: { ...toSettings(existing).pomodoro, ...pomodoro } } : {}),
   };
   if (!existing) return toSettings(await ops.insert(userSettings, { ...DEFAULT_SETTINGS, matrixQuadrants: null, ...columns }));
   return toSettings((await ops.update(userSettings, existing.id, columns)) ?? undefined);

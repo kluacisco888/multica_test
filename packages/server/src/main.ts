@@ -56,6 +56,7 @@ jobs = await startBackgroundJobs({
   holidays: app.holidays,
   trash: app.trash,
   reminders: app.reminders,
+  focus: app.focus,
   timezone: config.defaultTimezone,
   log: app.log,
 });

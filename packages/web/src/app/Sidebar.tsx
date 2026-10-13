@@ -434,6 +434,7 @@ export function Sidebar(props: SidebarProps) {
           </button>
           <span className="sidebar-drawer-actions">
             <IconButton icon="calendar" label="日历" onClick={props.onOpenCalendar} />
+            <IconButton icon="focus" label="番茄专注" onClick={props.onOpenFocus} />
             <IconButton icon="matrix" label="四象限" onClick={props.onOpenMatrix} />
             <IconButton icon="search" label="搜索" onClick={props.onOpenSearch} />
             <IconButton icon="settings" label="设置" onClick={props.onOpenSettings} />

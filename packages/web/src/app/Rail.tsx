@@ -2,7 +2,7 @@ import type { CurrentUser } from '@dida/shared';
 import { Icon, type IconName } from '../ui/Icon.js';
 
 /** Module shown in the main area, highlighted in the rail. */
-export type RailModule = 'tasks' | 'calendar' | 'matrix' | 'search';
+export type RailModule = 'tasks' | 'calendar' | 'matrix' | 'focus' | 'search';
 
 /**
  * The narrow blue bar on the far left (desktop only): account at the top,
@@ -15,6 +15,7 @@ export function Rail({
   onHome,
   onCalendar,
   onMatrix,
+  onFocus,
   onSearch,
   active,
 }: {
@@ -26,6 +27,8 @@ export function Rail({
   onCalendar: () => void;
   /** 四象限 (spec 用户故事 72). */
   onMatrix: () => void;
+  /** 番茄专注 (spec 用户故事 86). */
+  onFocus: () => void;
   /** 全局搜索 (spec 用户故事 63). */
   onSearch: () => void;
   active: RailModule;
@@ -34,6 +37,7 @@ export function Rail({
     { module: 'tasks', href: '/', label: '任务', icon: 'task', onOpen: onHome },
     { module: 'calendar', href: '/calendar', label: '日历', icon: 'calendar', onOpen: onCalendar },
     { module: 'matrix', href: '/matrix', label: '四象限', icon: 'matrix', onOpen: onMatrix },
+    { module: 'focus', href: '/focus', label: '番茄专注', icon: 'focus', onOpen: onFocus },
     { module: 'search', href: '/search', label: '搜索', icon: 'search', onOpen: onSearch },
   ];
   return (

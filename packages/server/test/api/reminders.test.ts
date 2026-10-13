@@ -294,6 +294,7 @@ describe('reminders: scheduling and delivery', () => {
         holidays: t.app.holidays,
         trash: t.app.trash,
         reminders: t.app.reminders,
+        focus: t.app.focus,
         timezone: 'Asia/Shanghai',
         log: t.app.log,
       });

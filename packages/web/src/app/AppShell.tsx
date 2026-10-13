@@ -2,6 +2,7 @@ import {
   calendarDays,
   calendarModeSchema,
   DEFAULT_ALL_DAY_REMINDER_TIME,
+  DEFAULT_SETTINGS,
   DEFAULT_TIME_ZONE,
   datesAsStored,
   DEFAULT_QUADRANTS,
@@ -56,6 +57,8 @@ import {
   type TagDraft,
 } from './dialogs.js';
 import { CalendarPane } from './CalendarPane.js';
+import { FocusPane } from './FocusPane.js';
+import { useFocusTimer } from './focusTimer.js';
 import { MatrixPane } from './MatrixPane.js';
 import { Rail } from './Rail.js';
 import { ReminderAlerts } from './ReminderAlerts.js';
@@ -520,6 +523,12 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     // In the 日历 the URL names the view and date, so the task stays on the same page.
     const calendar = calendarMode && calendarAnchor ? { mode: calendarMode, date: calendarAnchor } : null;
     navigate({ ...route, calendar, taskId });
+  }
+
+  /** 番茄专注 (spec 用户故事 86). */
+  function openFocus() {
+    navigate({ listId: null, focus: true, taskId: null });
+    setDrawerOpen(false);
   }
 
   /** 日历 (spec 用户故事 69): `mode` and `date` default to the last used view and today. */
@@ -1005,12 +1014,13 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const board = boardMode && !route.trash;
   // The 日历 takes the whole width too; its task opens beside it.
   const showDetail = route.calendar || route.matrix ? selectedTask !== null : (!isMobile && !timeline && !board) || selectedTask !== null;
-  const sidebarVisible = isMobile ? drawerOpen : sidebarOpen && !route.calendar && !route.matrix;
+  const sidebarVisible = isMobile ? drawerOpen : sidebarOpen && !route.calendar && !route.matrix && !route.focus;
 
   return (
     <div
       className={`shell ${sidebarVisible ? 'shell-sidebar-open' : 'shell-sidebar-closed'} ${selectedTask ? 'shell-has-task' : ''} ${
-        route.calendar ? 'shell-calendar' : ''
+        route.calendar ? 'shell-calendar' : ''}
+      } ${route.focus ? 'shell-focus' : ''
       } ${route.matrix ? 'shell-matrix' : ''} ${board ? 'shell-kanban' : ''}`}
     >
       {!isMobile && (
@@ -1021,8 +1031,9 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onHome={() => navigate({ listId: null, taskId: null })}
           onCalendar={() => openCalendar()}
           onMatrix={openMatrix}
+          onFocus={openFocus}
           onSearch={() => openSearch()}
-          active={route.calendar ? 'calendar' : route.matrix ? 'matrix' : view?.kind === 'search' ? 'search' : 'tasks'}
+          active={route.calendar ? 'calendar' : route.matrix ? 'matrix' : route.focus ? 'focus' : view?.kind === 'search' ? 'search' : 'tasks'}
         />
       )}
       {isMobile && drawerOpen && <div className="shell-scrim" aria-hidden="true" onClick={() => setDrawerOpen(false)} />}
@@ -1219,6 +1230,11 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onError={fail}
         />
       )}
+
+      {/* 专注结束 is announced wherever the user is (the 提示音 plays too). */}
+      <p className="visually-hidden" role="status" aria-live="polite">
+        {focusTimer.announcement}
+      </p>
 
       <ReminderAlerts
         timeZone={timeZone}

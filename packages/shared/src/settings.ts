@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { defaultQuadrants, matrixQuadrantsSchema, quadrantSchema } from './matrix.js';
 import { DEFAULT_ALL_DAY_REMINDER_TIME, timeOfDaySchema } from './reminders.js';
+import { DEFAULT_POMODORO_SETTINGS, pomodoroSettingsPatchSchema, pomodoroSettingsSchema } from './focus.js';
 import { hiddenSmartListsSchema, smartListIdSchema } from './smart-lists.js';
 import { DEFAULT_TIME_ZONE, timeZoneSchema } from './task-dates.js';
 import { DEFAULT_THEME_COLOR, DEFAULT_THEME_MODE, themeColorSchema, themeModeSchema } from './theme.js';
@@ -9,7 +10,7 @@ import { MAX_VIEW_OPTIONS, viewKeySchema, viewOptionsSchema, type ViewOptions } 
 /**
  * Per-user preferences (设置): the time zone (spec 用户故事 26), hidden
  * 智能清单 (60), each view's 排序 / 分组 (64), the 主题 (104) and the
- * 四象限 rules (72).
+ * 四象限 rules (72) and the 番茄设置 (86).
  */
 
 export const settingsSchema = z.object({
@@ -27,6 +28,8 @@ export const settingsSchema = z.object({
   themeColor: themeColorSchema,
   /** 四象限: the four quadrants' names and rules (see `matrix.ts`). */
   matrixQuadrants: z.array(quadrantSchema),
+  /** 番茄设置 (spec 用户故事 86). */
+  pomodoro: pomodoroSettingsSchema,
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -38,6 +41,7 @@ export const DEFAULT_SETTINGS: Settings = {
   themeMode: DEFAULT_THEME_MODE,
   themeColor: DEFAULT_THEME_COLOR,
   matrixQuadrants: defaultQuadrants(),
+  pomodoro: { ...DEFAULT_POMODORO_SETTINGS },
 };
 
 /**
@@ -56,6 +60,8 @@ export const updateSettingsRequestSchema = z
     themeMode: themeModeSchema,
     themeColor: themeColorSchema,
     matrixQuadrants: matrixQuadrantsSchema.nullable(),
+    /** Merged: only the given lengths change. */
+    pomodoro: pomodoroSettingsPatchSchema,
   })
   .partial()
   .strict();

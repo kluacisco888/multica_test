@@ -42,6 +42,7 @@ describe('background jobs: daily holiday refresh and 回收站 cleanup', () => {
       holidays: t.app.holidays,
       trash: t.app.trash,
       reminders: t.app.reminders,
+      focus: t.app.focus,
       timezone: 'Asia/Shanghai',
       log: t.app.log,
     });
@@ -92,6 +93,7 @@ describe('background jobs: daily holiday refresh and 回收站 cleanup', () => {
       holidays: t.app.holidays,
       trash: t.app.trash,
       reminders: t.app.reminders,
+      focus: t.app.focus,
       timezone: 'Asia/Shanghai',
       log: t.app.log,
     });
