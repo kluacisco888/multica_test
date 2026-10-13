@@ -170,3 +170,109 @@ test('--script refuses to click a control that changes data, or an input', { ski
     }
   }
 });
+
+// ---- 修饰键点击和右键（EURO-22）：新开的标签页/窗口和右键菜单里的写请求也要拦住 ----
+
+const POPUP_PAGE = `<!doctype html><title>popup-probe</title>
+<script>
+  fetch('/popup-post', { method: 'POST', body: 'x' }).catch(() => {});
+  navigator.sendBeacon('/popup-beacon', 'x');
+  try { new WebSocket('ws://' + location.host + '/popup-ws'); } catch (e) {}
+</script>`;
+
+const MULTI_PAGE = `<!doctype html><title>multi-probe</title>
+<ul>
+  <li><a id="l1" href="/popup">一</a></li>
+  <li><a id="l2" href="/popup?shift">二</a></li>
+  <li id="row">四</li>
+</ul>
+<main id="view">空</main>
+<script>
+  for (const a of document.querySelectorAll('a')) a.addEventListener('click', (e) => {
+    fetch('/click-post?' + a.id + (e.ctrlKey ? '-ctrl' : '') + (e.shiftKey ? '-shift' : ''), { method: 'POST', body: 'x' }).catch(() => {});
+  });
+  document.getElementById('row').addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    document.getElementById('view').textContent = '右键菜单';
+    fetch('/contextmenu-post', { method: 'POST', body: 'x' }).catch(() => {});
+    fetch('/contextmenu-delete', { method: 'DELETE' }).catch(() => {});
+  });
+</script>`;
+
+test('--script modifier clicks and right clicks: new tabs and context menus still cannot write', { skip: !hasChromium && 'Chromium 未安装' }, async () => {
+  const seen = [];
+  const server = createServer((req, res) => {
+    seen.push(`${req.method} ${req.url}`);
+    if (req.url === '/') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(MULTI_PAGE);
+    } else if (req.url.startsWith('/popup')) {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(POPUP_PAGE);
+    } else {
+      res.writeHead(204);
+      res.end();
+    }
+  });
+  server.on('upgrade', (req, socket) => {
+    seen.push(`UPGRADE ${req.url}`);
+    socket.destroy();
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const home = mkdtempSync(path.join(tmpdir(), 'ref-env-it-'));
+  mkdirSync(path.join(home, 'profile'), { mode: 0o700 });
+  try {
+    const script = path.join(home, 'multi.json');
+    writeFileSync(
+      script,
+      JSON.stringify([
+        { click: '#l1', modifiers: ['Control'] }, // new background tab
+        { click: '#l2', modifiers: ['Shift'] }, // new window
+        { click: '#view', modifiers: ['Meta'] }, // on Linux Meta+click on a link navigates in place, so click plain text
+        { click: '#row', button: 'right' },
+        { waitFor: 'text=右键菜单' },
+        { wait: 1500 },
+      ]),
+    );
+    const shot = path.join(home, 'final.png');
+    const r = await run([`http://127.0.0.1:${server.address().port}/`, '-o', shot, '--wait', '200', '--script', script], { DIDA_REF_HOME: home });
+    assert.equal(r.code, 0, r.err);
+    const out = JSON.parse(r.out);
+    // The new tabs did open (their GET reached the server) …
+    assert.ok(seen.some((s) => s.startsWith('GET /popup')), `a new tab was opened: ${seen}`);
+    // … but nothing from them, from the click handlers or from the context menu wrote anything.
+    assert.deepEqual(seen.filter((s) => !/^(GET|HEAD|OPTIONS) /.test(s)), []);
+    assert.ok(out.blockedRequests.some((b) => /^POST .*\/contextmenu-post$/.test(b)), `context menu POST recorded: ${out.blockedRequests}`);
+    assert.ok(out.blockedRequests.some((b) => /^POST .*\/popup-post$/.test(b)), `new tab POST recorded: ${out.blockedRequests}`);
+    assert.ok(out.blockedRequests.some((b) => /^WS .*\/popup-ws$/.test(b)), `new tab websocket recorded: ${out.blockedRequests}`);
+  } finally {
+    server.close();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('--script refuses a right click or a modifier click on a control that changes data', { skip: !hasChromium && 'Chromium 未安装' }, async () => {
+  for (const step of [
+    { click: 'text=删除', button: 'right' },
+    { click: 'text=删除', modifiers: ['Shift'] },
+    { click: '#q', modifiers: ['Control'] },
+  ]) {
+    const seen = [];
+    const server = await navServer(seen);
+    const home = mkdtempSync(path.join(tmpdir(), 'ref-env-it-'));
+    mkdirSync(path.join(home, 'profile'), { mode: 0o700 });
+    try {
+      const script = path.join(home, 'nav.json');
+      writeFileSync(script, JSON.stringify([step]));
+      const r = await run([`http://127.0.0.1:${server.address().port}/`, '-o', path.join(home, 'x.png'), '--wait', '0', '--script', script], {
+        DIDA_REF_HOME: home,
+      });
+      assert.notEqual(r.code, 0, `${JSON.stringify(step)} should be refused`);
+      assert.match(r.err, /拒绝/);
+      assert.ok(!seen.includes('GET /delete-get-probe'), 'the handler never ran');
+    } finally {
+      server.close();
+      rmSync(home, { recursive: true, force: true });
+    }
+  }
+});
