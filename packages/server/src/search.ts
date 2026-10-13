@@ -1,16 +1,14 @@
 import { and, eq, ilike, inArray, isNull, or } from 'drizzle-orm';
 import { SEARCH_RESULT_LIMIT, type SearchMatchField, type SearchResponse } from '@dida/shared';
 import type { Executor } from './db/client.js';
+import { comments } from './db/schema/attachments.js';
 import { checklistItems, tasks } from './db/schema/tasks.js';
 import { compareTasks, taskToApi } from './organize.js';
 
 /*
  * 全局搜索 (spec 用户故事 63). Each place a task's text lives is a
  * `SearchSource`; the search runs every registered source, so adding a field
- * is one more entry in `searchSources` and nothing else changes:
- *
- *   - 评论 (EURO-16) registers a source over its comments table with
- *     `field: 'comment'` returning the commented task ids.
+ * is one more entry in `searchSources` and nothing else changes.
  *
  * No source filters by 清单: tasks of 清单 with 不进智能清单 on, and of 归档
  * 清单 (EURO-15), are found like any other. Only deleted tasks (回收站) are
@@ -61,8 +59,19 @@ const checklistSource: SearchSource = {
   },
 };
 
-/** Every place searched. 评论 (EURO-16) adds its source here. */
-export const searchSources: SearchSource[] = [titleSource, descriptionSource, checklistSource];
+const commentSource: SearchSource = {
+  field: 'comment',
+  async matchingTaskIds(db, userId, pattern) {
+    const rows = await db
+      .selectDistinct({ id: comments.taskId })
+      .from(comments)
+      .where(and(eq(comments.userId, userId), isNull(comments.deletedAt), ilike(comments.content, pattern)));
+    return rows.map((r) => r.id);
+  },
+};
+
+/** Every place searched. */
+export const searchSources: SearchSource[] = [titleSource, descriptionSource, checklistSource, commentSource];
 
 /** Live tasks matching `query` in any source: open ones first, at most `SEARCH_RESULT_LIMIT`. */
 export async function searchTasks(

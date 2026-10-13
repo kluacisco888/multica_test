@@ -39,7 +39,7 @@ async function liveTaskRows(db: Executor, userId: string): Promise<TaskRow[]> {
 /** Ids of the user's live 清单 that take part in 智能清单 (see `listInSmartLists`). */
 async function smartListScope(db: Executor, userId: string): Promise<Set<string>> {
   const rows = await db
-    .select({ id: lists.id, excludeFromSmartLists: lists.excludeFromSmartLists })
+    .select({ id: lists.id, excludeFromSmartLists: lists.excludeFromSmartLists, archivedAt: lists.archivedAt })
     .from(lists)
     .where(and(eq(lists.userId, userId), isNull(lists.deletedAt)));
   return new Set(rows.filter(listInSmartLists).map((r) => r.id));

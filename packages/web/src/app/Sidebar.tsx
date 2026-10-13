@@ -461,6 +461,23 @@ export function Sidebar(props: SidebarProps) {
           </li>
         )}
         {SMART_AFTER_INBOX.map(smartRow)}
+        {/* 回收站 sits with the 智能清单, after 已完成 / 不重要的. */}
+        <li className="sidebar-row">
+          <a
+            href="/trash"
+            className={`sidebar-item ${props.trashActive ? 'sidebar-item-active' : ''}`}
+            aria-current={props.trashActive ? 'page' : undefined}
+            onClick={(e) => {
+              e.preventDefault();
+              props.onOpenTrash();
+            }}
+          >
+            <span className="sidebar-item-icon">
+              <Icon name="trash" />
+            </span>
+            <span className="sidebar-item-name">回收站</span>
+          </a>
+        </li>
       </ul>
       <hr className="sidebar-divider" />
       <div className="sidebar-section-head">
@@ -537,25 +554,6 @@ export function Sidebar(props: SidebarProps) {
           {topTags.map(tagRow)}
         </ul>
       )}
-      <hr className="sidebar-divider" />
-      <ul className="sidebar-tree sidebar-smart" aria-label="智能清单">
-        <li className="sidebar-row">
-          <a
-            href="/trash"
-            className={`sidebar-item ${props.trashActive ? 'sidebar-item-active' : ''}`}
-            aria-current={props.trashActive ? 'page' : undefined}
-            onClick={(e) => {
-              e.preventDefault();
-              props.onOpenTrash();
-            }}
-          >
-            <span className="sidebar-item-icon">
-              <Icon name="trash" />
-            </span>
-            <span className="sidebar-item-name">回收站</span>
-          </a>
-        </li>
-      </ul>
     </nav>
   );
 }

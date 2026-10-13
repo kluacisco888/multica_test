@@ -5,33 +5,19 @@ import {
   sidebarResponseSchema,
   taskSchema,
   tasksResponseSchema,
+  todayIn,
   trashResponseSchema,
   type Task,
 } from '@dida/shared';
 import { eq, inArray } from 'drizzle-orm';
-import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { sessionUser } from '../../src/auth.js';
 import { fixedClock } from '../../src/clock.js';
 import { checklistItems, tasks } from '../../src/db/schema/tasks.js';
-import { smartListCandidates } from '../../src/smart-lists.js';
 import { createTestApp, type TestApp, type TestUser } from '../support/test-app.js';
 
 /* 放弃、回收站与 30 天清理、清单归档 (EURO-15, spec 用户故事 16、28–30; ADR-0004 tombstones). */
 
 const DAY = 24 * 60 * 60 * 1000;
-
-/**
- * The 智能清单 endpoints come with EURO-13; they all start from
- * `smartListCandidates`. This fixture route exposes it so the 归档 rule is
- * tested through HTTP like the real smart lists will be.
- */
-function smartFixture(app: FastifyInstance) {
-  app.get('/api/test/smart-candidates', async (request) => {
-    const rows = await smartListCandidates(app.db, sessionUser(request).id);
-    return { ids: rows.map((r) => r.id) };
-  });
-}
 
 describe('放弃、回收站与清单归档', () => {
   const clock = fixedClock('2026-10-13T02:00:00.000Z');
@@ -41,7 +27,7 @@ describe('放弃、回收站与清单归档', () => {
   let inboxId: string;
 
   beforeAll(async () => {
-    t = await createTestApp({ clock, routes: smartFixture });
+    t = await createTestApp({ clock });
     alice = await t.createUser('alice');
     bob = await t.createUser('bob');
     inboxId = sidebarResponseSchema.parse((await api(alice, 'GET', '/api/lists')).json()).lists.find((l) => l.isInbox)!.id;
@@ -109,11 +95,14 @@ describe('放弃、回收站与清单归档', () => {
     return t.database.db.select().from(tasks).where(inArray(tasks.id, ids));
   }
 
+  /** Ids in the real 今天 smart list (EURO-13). */
   async function smartIds(user: TestUser): Promise<string[]> {
-    const res = await api(user, 'GET', '/api/test/smart-candidates');
+    const res = await api(user, 'GET', '/api/tasks?smart=today');
     expect(res.statusCode, res.body).toBe(200);
-    return res.json().ids as string[];
+    return tasksResponseSchema.parse(res.json()).tasks.map((x) => x.id);
   }
+  /** Due today by the test clock, so the task is in 今天 when its 清单 takes part. */
+  const today = () => ({ allDay: true, dueDate: todayIn(clock.now(), 'Asia/Shanghai') });
 
   describe('放弃', () => {
     it('keeps the task with its own timestamp, never as completed, and out of the open count', async () => {
@@ -351,17 +340,17 @@ describe('放弃、回收站与清单归档', () => {
     it('keeps the tasks of an archived 清单 out of the 智能清单 until it is unarchived', async () => {
       const dave = await t.createUser('dave');
       const listId = await newList(dave, '项目');
-      const inList = await createTask(dave, { title: '项目里的', listId });
-      const sub = await createTask(dave, { title: '项目里的子任务', parentId: inList.id });
-      const inInbox = await createTask(dave, { title: '收件箱里的' });
-      const deleted = await createTask(dave, { title: '删掉的' });
+      const inList = await createTask(dave, { title: '项目里的', listId, dates: today() });
+      const sub = await createTask(dave, { title: '项目里的子任务', parentId: inList.id, dates: today() });
+      const inInbox = await createTask(dave, { title: '收件箱里的', dates: today() });
+      const deleted = await createTask(dave, { title: '删掉的', dates: today() });
       await deleteTask(dave, deleted.id);
       expect((await smartIds(dave)).sort()).toEqual([inList.id, sub.id, inInbox.id].sort());
 
       await api(dave, 'PATCH', `/api/lists/${listId}`, { archived: true });
       expect(await smartIds(dave)).toEqual([inInbox.id]);
       // A task created in (or moved into) an archived 清单 stays out too.
-      const later = await createTask(dave, { title: '归档后新建的', listId });
+      const later = await createTask(dave, { title: '归档后新建的', listId, dates: today() });
       expect(await smartIds(dave)).toEqual([inInbox.id]);
 
       await api(dave, 'PATCH', `/api/lists/${listId}`, { archived: false });

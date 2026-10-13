@@ -1,9 +1,6 @@
-import { changesResponseSchema, taskSchema, trashResponseSchema, type Task } from '@dida/shared';
-import type { FastifyInstance } from 'fastify';
+import { changesResponseSchema, taskSchema, tasksResponseSchema, todayIn, trashResponseSchema, type Task } from '@dida/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { sessionUser } from '../../src/auth.js';
 import { fixedClock } from '../../src/clock.js';
-import { smartListCandidates } from '../../src/smart-lists.js';
 import { createTestApp, type TestApp, type TestUser } from '../support/test-app.js';
 
 /*
@@ -12,20 +9,13 @@ import { createTestApp, type TestApp, type TestUser } from '../support/test-app.
  * archived 清单, and the sync feed after 彻底删除.
  */
 
-function smartFixture(app: FastifyInstance) {
-  app.get('/api/test/smart-candidates', async (request) => {
-    const rows = await smartListCandidates(app.db, sessionUser(request).id);
-    return { ids: rows.map((r) => r.id) };
-  });
-}
-
 describe('EURO-15 review: 回收站 and 归档 edge cases', () => {
   const clock = fixedClock('2026-10-13T02:00:00.000Z');
   let t: TestApp;
   let erin: TestUser;
 
   beforeAll(async () => {
-    t = await createTestApp({ clock, routes: smartFixture });
+    t = await createTestApp({ clock });
     erin = await t.createUser('erin');
   });
   afterAll(() => t.close());
@@ -46,8 +36,9 @@ describe('EURO-15 review: 回收站 and 归档 edge cases', () => {
   async function trashIds() {
     return trashResponseSchema.parse((await api('GET', '/api/trash')).json()).tasks.map((x) => x.id);
   }
+  /** Ids in the real 今天 smart list (EURO-13). */
   async function smartIds(): Promise<string[]> {
-    return (await api('GET', '/api/test/smart-candidates')).json().ids as string[];
+    return tasksResponseSchema.parse((await api('GET', '/api/tasks?smart=today')).json()).tasks.map((x) => x.id);
   }
 
   it('requires a session for every 回收站 route', async () => {
@@ -168,7 +159,7 @@ describe('EURO-15 review: 回收站 and 归档 edge cases', () => {
   it('a task moved into an archived 清单 leaves the 智能清单 scope', async () => {
     const listId = await newList('归档目标');
     await api('PATCH', `/api/lists/${listId}`, { archived: true });
-    const task = await createTask({ title: '待移入' });
+    const task = await createTask({ title: '待移入', dates: { allDay: true, dueDate: todayIn(clock.now(), 'Asia/Shanghai') } });
     expect(await smartIds()).toContain(task.id);
     expect((await api('PATCH', `/api/tasks/${task.id}`, { listId })).statusCode).toBe(200);
     expect(await smartIds()).not.toContain(task.id);

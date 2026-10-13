@@ -19,9 +19,9 @@ import type { Priority, TaskStatus } from './tasks.js';
  * task with only a due date reaches its due day. Timed dates count in the
  * user's current time zone. 放弃 tasks never show.
  *
- * Which 清单 take part is decided by `listInSmartLists` alone: 清单 with
- * 不进智能清单 switched on are left out (用户故事 17). 归档 (EURO-15) adds its
- * condition there.
+ * Which 清单 take part is decided by `listInSmartLists` alone, on the server
+ * and in the client: 清单 with 不进智能清单 switched on (用户故事 17) and 归档
+ * 清单 (用户故事 16) are left out.
  */
 
 export const SMART_LIST_IDS = ['today', 'tomorrow', 'week', 'completed', 'notImportant'] as const;
@@ -60,9 +60,9 @@ export function taskDaySpan(dates: TaskDates | null, timeZone: string): { start:
   return { start: dates.startAt ? zonedDateTime(dates.startAt, timeZone).date : due, due };
 }
 
-/** Does a 清单 take part in 智能清单? */
-export function listInSmartLists(list: { excludeFromSmartLists: boolean }): boolean {
-  return !list.excludeFromSmartLists;
+/** Does a 清单 take part in 智能清单? Not when 不进智能清单 is on, nor while 归档. */
+export function listInSmartLists(list: { excludeFromSmartLists: boolean; archivedAt: string | Date | null }): boolean {
+  return !list.excludeFromSmartLists && list.archivedAt === null;
 }
 
 function window(id: 'today' | 'tomorrow' | 'week', today: string): { from: string; to: string; overdue: boolean } {

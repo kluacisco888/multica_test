@@ -184,7 +184,63 @@ describe('智能清单, 过滤器 and 搜索 API', () => {
       expect((await api(user, 'PATCH', `/api/lists/${inbox?.id}`, { excludeFromSmartLists: true })).statusCode).toBe(400);
     });
 
-    it.todo('归档 清单 (EURO-15): their tasks are out of smart lists but found by search');
+  });
+
+  describe('归档 清单 (EURO-15)', () => {
+    let user: TestUser;
+    let project: { id: string };
+    const archive = (archived: boolean) => ok(user, 'PATCH', `/api/lists/${project.id}`, { archived }, (v) => listSchema.parse(v));
+    const counts = () => ok(user, 'GET', '/api/smart-lists', undefined, (v) => smartListCountsResponseSchema.parse(v).counts);
+    const ALL = { today: ['收件箱今天'], tomorrow: [] as string[], week: ['收件箱今天'], completed: [] as string[], notImportant: [] as string[] };
+    const WITH_PROJECT = {
+      today: ['收件箱今天', '项目今天 归档词', '项目今天的子任务', '项目已完成'].sort(),
+      tomorrow: ['项目明天'],
+      week: ['收件箱今天', '项目今天 归档词', '项目今天的子任务', '项目已完成', '项目明天'].sort(),
+      completed: ['项目已完成'],
+      notImportant: ['项目今天 归档词'],
+    };
+
+    beforeAll(async () => {
+      user = await t.createUser('archived');
+      project = await createList(user, { name: '项目' });
+      await createTask(user, { title: '收件箱今天', dates: day('2026-10-13') });
+      const parent = await createTask(user, { title: '项目今天 归档词', listId: project.id, dates: day('2026-10-13'), priority: 'low' });
+      await createTask(user, { title: '项目今天的子任务', parentId: parent.id, dates: day('2026-10-13') });
+      await createTask(user, { title: '项目明天', listId: project.id, dates: day('2026-10-14') });
+      const done = await createTask(user, { title: '项目已完成', listId: project.id, dates: day('2026-10-13') });
+      await patchTask(user, done.id, { status: 'completed' });
+    });
+
+    it('takes the 清单 out of every smart list and the counts while archived, and back when unarchived', async () => {
+      const lists = async () =>
+        Object.fromEntries(await Promise.all(Object.keys(ALL).map(async (id) => [id, titles(await smart(user, id))])));
+      expect(await lists()).toEqual(WITH_PROJECT);
+      expect(await counts()).toEqual({ today: 3, tomorrow: 1, week: 4 });
+
+      await archive(true);
+      expect(await lists()).toEqual(ALL);
+      expect(await counts()).toEqual({ today: 1, tomorrow: 0, week: 1 });
+      // A task created in the archived 清单 stays out too.
+      await createTask(user, { title: '归档后新建', listId: project.id, dates: day('2026-10-13') });
+      expect(titles(await smart(user, 'today'))).toEqual(['收件箱今天']);
+
+      await archive(false);
+      expect((await lists()).today).toEqual([...WITH_PROJECT.today, '归档后新建'].sort());
+      expect(await counts()).toEqual({ today: 4, tomorrow: 1, week: 5 });
+    });
+
+    it('its tasks are still found by search and selected by filters, and its own view still lists them', async () => {
+      await archive(true);
+      try {
+        const found = await ok(user, 'GET', `/api/search?q=${encodeURIComponent('归档词')}`, undefined, (v) => searchResponseSchema.parse(v));
+        expect(titles(found.tasks)).toEqual(['项目今天 归档词']);
+        const filter = await ok(user, 'POST', '/api/filters', { name: '项目', rules: { listIds: [project.id] } }, (v) => filterSchema.parse(v));
+        expect(titles(await view(user, `filterId=${filter.id}`))).toContain('项目明天');
+        expect(titles(await view(user, `listId=${project.id}`))).toContain('项目明天');
+      } finally {
+        await archive(false);
+      }
+    });
   });
 
   describe('过滤器', () => {
@@ -437,8 +493,41 @@ describe('智能清单, 过滤器 and 搜索 API', () => {
       expect((await api(user, 'GET', '/api/search')).statusCode).toBe(400);
     });
 
-    it.todo('评论 (EURO-16): a task is found by the text of its comments, `matches` says `comment`');
-    it.todo('归档 清单 (EURO-15): tasks of an archived 清单 are found');
+    it('finds a task by its 评论 (EURO-16), `matches` says `comment`; edited and deleted 评论 count as they are now', async () => {
+      const task = await createTask(user, { title: '装修' });
+      const comment = await ok(user, 'POST', `/api/tasks/${task.id}/comments`, { content: '和师傅约了周六看瓷砖' }, (v) => v as { id: string });
+      const tiles = await search(user, '瓷砖');
+      expect(titles(tiles.tasks)).toEqual(['装修']);
+      expect(tiles.matches[task.id]).toEqual(['comment']);
+      // Several matching 评论 report the field once; title and 评论 both report.
+      await ok(user, 'POST', `/api/tasks/${task.id}/comments`, { content: '瓷砖要防滑的' }, (v) => v);
+      await ok(user, 'POST', `/api/tasks/${task.id}/comments`, { content: '装修预算' }, (v) => v);
+      expect((await search(user, '瓷砖')).matches[task.id]).toEqual(['comment']);
+      expect((await search(user, '装修')).matches[task.id]).toEqual(['title', 'comment']);
+
+      await ok(user, 'PATCH', `/api/comments/${comment.id}`, { content: '和师傅约了周六' }, (v) => v);
+      expect(titles((await search(user, '看瓷砖')).tasks)).toEqual([]);
+      const all = (await api(user, 'GET', `/api/tasks/${task.id}/comments`)).json() as { comments: { id: string; content: string }[] };
+      for (const c of all.comments.filter((x) => x.content.includes('瓷砖'))) {
+        expect((await api(user, 'DELETE', `/api/comments/${c.id}`)).statusCode).toBe(204);
+      }
+      expect((await search(user, '瓷砖')).tasks).toEqual([]);
+      // Other users' 评论 are never searched.
+      const theirs = await createTask(bob, { title: 'bob 的任务' });
+      await ok(bob, 'POST', `/api/tasks/${theirs.id}/comments`, { content: '只有 bob 知道的词' }, (v) => v);
+      expect((await search(user, '只有 bob')).tasks).toEqual([]);
+      expect(titles((await search(bob, '只有 bob')).tasks)).toEqual(['bob 的任务']);
+    });
+
+    it('finds tasks of an 归档 清单 (EURO-15) but not of a deleted one', async () => {
+      const archived = await createList(user, { name: '旧项目' });
+      await createTask(user, { title: '旧项目的 遗留事项', listId: archived.id });
+      await ok(user, 'PATCH', `/api/lists/${archived.id}`, { archived: true }, (v) => v);
+      expect(titles((await search(user, '遗留事项')).tasks)).toEqual(['旧项目的 遗留事项']);
+      // Deleting the 清单 moves its tasks to the 回收站, which is not searched.
+      expect((await api(user, 'DELETE', `/api/lists/${archived.id}`)).statusCode).toBe(204);
+      expect((await search(user, '遗留事项')).tasks).toEqual([]);
+    });
   });
 
   describe('设置: hidden smart lists and view options', () => {
