@@ -151,9 +151,115 @@
   box-sizing: border-box;
 }
 
+/* ---- 用户管理 (UserAdmin.tsx): same card and row metrics as 通知渠道 ---- */
+
+.admin-users {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.admin-users .settings-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.admin-users-add {
+  white-space: nowrap;
+}
+
+.admin-users-notice:empty {
+  display: none;
+}
+
+.admin-users-list {
+  margin: 0;
+  padding: var(--space-1) 18px;
+  list-style: none;
+  background: var(--color-bg-card);
+  border-radius: var(--radius-card);
+}
+
+.admin-user + .admin-user {
+  border-top: 1px solid var(--color-divider-strong);
+}
+
+.admin-user .settings-row {
+  min-height: var(--settings-row-height);
+  padding: var(--space-2) 0;
+}
+
+.admin-user-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-user-title {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.admin-user-name {
+  overflow: hidden;
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-user-disabled .admin-user-name {
+  color: var(--color-text-secondary);
+}
+
+.admin-user .settings-row-actions {
+  flex: none;
+}
+
+.admin-user-error {
+  padding-bottom: var(--space-3);
+  overflow-wrap: anywhere;
+}
+
+.admin-user-dialog {
+  width: min(400px, calc(100vw - 2 * var(--space-4)));
+}
+
 /* ================= Mobile ================= */
 
 @media (max-width: 767px) {
+  .admin-users .settings-section-head {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .admin-users-list {
+    padding: var(--space-1) var(--space-4);
+  }
+
+  /* Keep the actions beside the name; long names and badges wrap instead. */
+  .admin-user .settings-row {
+    flex-wrap: nowrap;
+  }
+
+  .admin-user-title {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  .admin-user-title .badge:first-of-type {
+    margin-left: 0;
+  }
+
+  .admin-user-name {
+    flex-basis: 100%;
+  }
+
+  .admin-user-dialog {
+    width: calc(100vw - 2 * var(--space-4));
+  }
+
   .channels .settings-section-head {
     flex-direction: column;
     gap: var(--space-2);

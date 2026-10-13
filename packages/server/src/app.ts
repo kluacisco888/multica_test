@@ -10,6 +10,7 @@ import type { Db } from './db/client.js';
 import { sendError } from './http-errors.js';
 import { createCredentialCipher } from './notify/credentials.js';
 import { createNotifier, type Notifier } from './notify/notifier.js';
+import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
 import { channelRoutes } from './routes/channels.js';
 import { changesRoutes } from './routes/changes.js';
@@ -101,6 +102,7 @@ export async function buildApp(deps: AppDeps) {
 
   healthRoutes(app, { db, config });
   authRoutes(app, { accounts, sessions, config });
+  adminRoutes(app, { accounts });
   changesRoutes(app, { db, syncEntities: deps.syncEntities ?? registeredSyncEntities });
   listRoutes(app);
   taskRoutes(app);
