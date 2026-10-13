@@ -2,9 +2,26 @@
  * Design tokens. Values are measured from the reference screenshots
  * (ADR-0007, desktop 1440×900): see packages/web/src/ui/README.md.
  * Components use only these variables — never raw colours or pixel sizes for
- * anything listed here — so later themes (spec 用户故事 104) swap one block.
+ * anything listed here — so the 主题 (spec 用户故事 104, below) swap them.
+ *
+ * 主题: `<html data-theme="light|dark" data-theme-color="<id>">`, set by
+ * src/app/theme.ts. This first block is 浅色 + 晴蓝 (the reference's default);
+ * the 颜色系列 blocks set only the --accent-* inputs, and the derived blocks
+ * after them turn those into the brand tokens for 浅色 and 深色.
  */
 :root {
+  color-scheme: light;
+
+  /* ---- 颜色系列 inputs (晴蓝 here; see the blocks below) ----
+   * --accent: the swatch colour (rail, selected fills).
+   * --accent-strong: text / filled buttons on light surfaces, ≥ 4.5:1 on white.
+   * --accent-on-dark: text on 深色 surfaces, ≥ 4.5:1 on --color-bg there. */
+  --accent: #4772fa;
+  --accent-strong: #2f5ae0;
+  --accent-on-dark: #8aa6ff;
+  --accent-rail-top: #4772fa;
+  --accent-rail-bottom: #6d91ff;
+
   /* ---- Colour: brand ---- */
   --color-brand: #4772fa;
   --color-brand-hover: #3c66ec;
@@ -19,6 +36,8 @@
   --color-on-brand: #ffffff;
   --gradient-rail: linear-gradient(180deg, #4772fa 0%, #6d91ff 100%);
   --color-rail-hover: rgb(255 255 255 / 0.12); /* hovered rail button */
+  --color-rail-active: rgb(255 255 255 / 0.18); /* current rail button */
+  --color-on-rail-muted: rgb(255 255 255 / 0.75); /* idle rail icons */
 
   /* ---- Colour: surfaces ---- */
   --color-bg: #ffffff;
@@ -34,6 +53,8 @@
   --color-illustration: #d5d8e0;
   --color-bg-card: #f8f8f9; /* grouped rows in 设置 */
   --color-switch-off: #8a8b8d;
+  --color-icon-hover: rgb(0 0 0 / 0.05); /* small icon buttons on hover */
+  --color-kbd-bg: #ffffff; /* key caps in the 快捷键 panel */
 
   /* ---- Colour: text ---- */
   --color-text: #191919;
@@ -48,6 +69,20 @@
   --color-date-range: #ecf0fe; /* days inside a selected 时间段 */
   --color-segment-bg: #f2f3f5; /* 日期 / 时间段 segmented tabs */
   --color-success: #1a7f37;
+
+  /* ---- Colour: 颜色系列 swatches in 设置 → 外观 (fixed, whatever the theme) ----
+   * Measured from the reference swatches (top → bottom of the gradient). */
+  --swatch-blue: linear-gradient(180deg, #6d91ff, #4772fa);
+  --swatch-turquoise: linear-gradient(180deg, #74dcc5, #2bbf9a);
+  --swatch-cyan: linear-gradient(180deg, #8fd3d6, #4fb0bd);
+  --swatch-reed: linear-gradient(180deg, #c2d0b8, #8fa97c);
+  --swatch-apricot: linear-gradient(180deg, #fdcf86, #f7a94a);
+  --swatch-peach: linear-gradient(180deg, #ffb0b3, #ff7f96);
+  --swatch-lavender: linear-gradient(180deg, #cdbadf, #9f97da);
+  --swatch-agarwood: linear-gradient(180deg, #c6a896, #a67d5f);
+  --theme-preview-light: linear-gradient(90deg, #f5f7ff 0 35%, #ffffff 35%);
+  --theme-preview-dark: linear-gradient(90deg, #232326 0 35%, #1c1c1e 35%);
+  --theme-preview-system: linear-gradient(135deg, #ffffff 0 50%, #1c1c1e 50%);
 
   /* ---- Colour: 优先级 (checkbox outline, flag) ----
    * Reference: high #e03131 (the reference's red), medium #faa80c, low
@@ -164,6 +199,178 @@
 
   /* ---- Breakpoint (mirrored in useMediaQuery calls) ---- */
   /* mobile: max-width 767px */
+}
+
+/* ================= 颜色系列 (spec 用户故事 104) =================
+ * Swatches measured from the reference's 设置 → 外观 (ADR-0007). The
+ * reference's light pastels are kept as --accent; --accent-strong is darkened
+ * until white text on it, and it as text on white, reach 4.5:1. */
+
+:root[data-theme-color='turquoise'] {
+  --accent: #2bbf9a; /* 松石 */
+  --accent-strong: #0b7a5f;
+  --accent-on-dark: #4fd6b3;
+  --accent-rail-top: #1fa583;
+  --accent-rail-bottom: #3cc9a4;
+}
+
+:root[data-theme-color='cyan'] {
+  --accent: #4fb0bd; /* 秘青 */
+  --accent-strong: #1a727e;
+  --accent-on-dark: #6cc6d2;
+  --accent-rail-top: #3796a3;
+  --accent-rail-bottom: #55b3bf;
+}
+
+:root[data-theme-color='reed'] {
+  --accent: #8fa97c; /* 蒹葭 */
+  --accent-strong: #4c6a39;
+  --accent-on-dark: #a9c296;
+  --accent-rail-top: #6f8c5b;
+  --accent-rail-bottom: #8ca879;
+}
+
+:root[data-theme-color='apricot'] {
+  --accent: #f7a94a; /* 杏黄 */
+  --accent-strong: #9a5a00;
+  --accent-on-dark: #f6b25e;
+  --accent-rail-top: #c27a1a;
+  --accent-rail-bottom: #e0973a;
+}
+
+:root[data-theme-color='peach'] {
+  --accent: #ff7f96; /* 桃夭 */
+  --accent-strong: #c0304c;
+  --accent-on-dark: #ff8fa3;
+  --accent-rail-top: #d9506b;
+  --accent-rail-bottom: #f0738a;
+}
+
+:root[data-theme-color='lavender'] {
+  --accent: #9f97da; /* 暮山紫 */
+  --accent-strong: #574cad;
+  --accent-on-dark: #aea7e4;
+  --accent-rail-top: #7a71c4;
+  --accent-rail-bottom: #958de0;
+}
+
+:root[data-theme-color='agarwood'] {
+  --accent: #a67d5f; /* 沉香 */
+  --accent-strong: #7a5338;
+  --accent-on-dark: #c49e83;
+  --accent-rail-top: #8c6447;
+  --accent-rail-bottom: #a67d5f;
+}
+
+/* Brand tokens from the accent, for every 颜色系列 except 晴蓝 (whose
+ * measured values are the first block). `:where` keeps this at the
+ * specificity of `:root`, so 深色 below still wins. */
+:root:where([data-theme-color]:not([data-theme-color='blue'])) {
+  --color-brand: var(--accent);
+  --color-brand-hover: color-mix(in srgb, var(--accent) 88%, black);
+  --color-button-primary: var(--accent-strong);
+  --color-button-primary-hover: color-mix(in srgb, var(--accent-strong) 85%, black);
+  --color-button-primary-disabled: color-mix(in srgb, var(--accent) 45%, white);
+  --color-brand-text: var(--accent-strong);
+  --color-brand-soft: color-mix(in srgb, var(--accent) 22%, white);
+  --color-brand-softer: color-mix(in srgb, var(--accent) 12%, white);
+  --gradient-rail: linear-gradient(180deg, var(--accent-rail-top) 0%, var(--accent-rail-bottom) 100%);
+  --color-bg-sidebar: color-mix(in srgb, var(--accent) 6%, white);
+  --color-bg-selected: color-mix(in srgb, var(--accent) 10%, white);
+  --color-date: var(--accent-strong);
+  --color-date-range: color-mix(in srgb, var(--accent) 12%, white);
+  --color-focus: var(--accent-strong);
+  --color-toast-action: color-mix(in srgb, var(--accent) 55%, white);
+  --color-bg-hint: color-mix(in srgb, var(--accent) 9%, #f2f3f5);
+  /* 时间线 and 日历 (EURO-20 / EURO-19) follow the 颜色系列 too. */
+  --color-timeline-bar: var(--accent);
+  --color-calendar-bg: color-mix(in srgb, var(--accent) 3%, white);
+  --color-calendar-outside: color-mix(in srgb, var(--accent) 5%, #f7f7f7);
+  --color-calendar-cell-hover: color-mix(in srgb, var(--accent) 8%, white);
+}
+
+/* ================= 深色 =================
+ * Surfaces, text and lines for the dark mode; brand colours follow the
+ * 颜色系列 through the --accent-* inputs. Text colours keep 4.5:1 on
+ * --color-bg, --color-bg-sidebar and --color-bg-input. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-brand: var(--accent);
+  --color-brand-hover: color-mix(in srgb, var(--accent) 85%, white);
+  --color-button-primary: var(--accent-strong);
+  --color-button-primary-hover: color-mix(in srgb, var(--accent-strong) 85%, white);
+  --color-button-primary-disabled: color-mix(in srgb, var(--accent-strong) 45%, var(--color-bg));
+  --color-brand-text: var(--accent-on-dark);
+  --color-brand-soft: color-mix(in srgb, var(--accent) 30%, var(--color-bg));
+  --color-brand-softer: color-mix(in srgb, var(--accent) 16%, var(--color-bg));
+  --gradient-rail: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent-rail-top) 45%, #141416) 0%,
+    color-mix(in srgb, var(--accent-rail-bottom) 35%, #141416) 100%
+  );
+
+  --color-bg: #1c1c1e;
+  --color-bg-sidebar: color-mix(in srgb, var(--accent) 4%, #232326);
+  --color-bg-input: #2a2a2d;
+  --color-bg-hover: #2a2a2d;
+  --color-bg-selected: color-mix(in srgb, var(--accent) 14%, #1c1c1e);
+  --color-bg-page: #141416;
+  --color-bg-overlay: rgb(0 0 0 / 0.6);
+  --color-bg-hint: #2a2a2d;
+  --color-bg-toast: #3a3a3d;
+  --color-toast-action: var(--accent-on-dark);
+  --color-illustration: #3a3b40;
+  --color-bg-card: #252528;
+  --color-switch-off: #6e6f73;
+  --color-icon-hover: rgb(255 255 255 / 0.08);
+  --color-kbd-bg: #2a2a2d;
+
+  --color-text: #e6e6e8;
+  --color-text-secondary: #a5a6aa;
+  --color-text-placeholder: #96979b;
+  --color-text-section: #9a9ba0;
+  --color-text-done: #96979b;
+  --color-danger: #ff6b6b;
+  --color-date: var(--accent-on-dark);
+  --color-date-range: color-mix(in srgb, var(--accent) 22%, var(--color-bg));
+  --color-segment-bg: #2a2a2d;
+  --color-success: #4cc26b;
+
+  --color-priority-high: #ff6b6b;
+  --color-priority-medium: #f0a429;
+  --color-priority-low: #6f93ff;
+  --color-priority-high-fill: rgb(255 107 107 / 0.16);
+  --color-priority-medium-fill: rgb(240 164 41 / 0.16);
+  --color-priority-low-fill: rgb(111 147 255 / 0.16);
+  --color-tag-default: #6f93ff;
+
+  --color-divider: #2c2c2f;
+  --color-divider-strong: #333337;
+  --color-border: #3a3a3e;
+  --color-border-strong: #8a8b8f;
+  --color-focus: var(--accent-on-dark);
+
+  /* 时间线 (EURO-20) */
+  --color-timeline-track: #232326;
+  --color-timeline-weekend: #27272b;
+  --color-timeline-row-line: #2c2c2f;
+  --color-timeline-today: rgb(255 107 107 / 0.35);
+  --color-timeline-bar: var(--accent);
+  --color-timeline-day-dim: #9a9ba0;
+
+  /* 日历 (EURO-19); text keeps 4.5:1 on --color-calendar-bg and on the bars. The 休 / 班
+   * marks keep their 浅色 fills: white text on them already reads in 深色. */
+  --color-calendar-bg: color-mix(in srgb, var(--accent) 3%, #1c1c1e);
+  --color-calendar-outside: #18181a;
+  --color-calendar-line: #2c2c2f;
+  --color-calendar-cell-hover: color-mix(in srgb, var(--accent) 10%, #1c1c1e);
+  --color-calendar-festival: #3fd3a6;
+  --color-calendar-bar-text: #f1f2f5;
+  --color-calendar-bar-done-text: #b4b6bc;
+
+  --shadow-popover: 0 4px 16px rgb(0 0 0 / 0.5), 0 0 1px rgb(255 255 255 / 0.25);
+  --shadow-card: 0 2px 12px rgb(0 0 0 / 0.3);
 }
 
 @media (prefers-reduced-motion: reduce) {

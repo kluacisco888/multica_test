@@ -316,3 +316,209 @@
   color: var(--color-danger);
   overflow-wrap: anywhere;
 }
+
+/* ---- 外观 (SettingsDialog AppearancePanel): 主题模式 + 颜色系列 ----
+ * Swatches 48px with 12px corners and the name under them, eight in a row
+ * like the reference's 颜色系列 (ADR-0007 screenshot). */
+
+.theme-modes,
+.theme-colors {
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  border: 0;
+}
+
+.theme-legend {
+  margin-bottom: var(--space-3);
+  padding: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+}
+
+.theme-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.theme-mode,
+.theme-swatch {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+/* The radio stays in the accessibility tree and takes focus; the preview shows its state. */
+.theme-mode input,
+.theme-swatch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  z-index: 1;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.theme-mode-preview {
+  width: 96px;
+  height: 60px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.theme-mode-preview-light {
+  background: var(--theme-preview-light);
+}
+
+.theme-mode-preview-dark {
+  background: var(--theme-preview-dark);
+}
+
+.theme-mode-preview-system {
+  background: var(--theme-preview-system);
+}
+
+.theme-mode input:checked ~ .theme-mode-preview,
+.theme-swatch input:checked ~ .theme-swatch-chip {
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-brand-text);
+}
+
+.theme-mode input:checked ~ span:last-child,
+.theme-swatch input:checked ~ .theme-swatch-name {
+  color: var(--color-text);
+}
+
+.theme-mode input:focus-visible ~ .theme-mode-preview,
+.theme-swatch input:focus-visible ~ .theme-swatch-chip {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 5px;
+}
+
+.theme-swatches {
+  display: grid;
+  grid-template-columns: repeat(8, 48px);
+  justify-content: space-between;
+  row-gap: var(--space-4);
+}
+
+.theme-swatch-chip {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-card);
+}
+
+.theme-swatch-chip svg {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  display: none;
+  padding: 2px;
+  color: var(--color-on-brand);
+  background: var(--color-button-primary);
+  border: 2px solid var(--color-bg);
+  border-radius: 50%;
+  box-sizing: content-box;
+}
+
+.theme-swatch input:checked ~ .theme-swatch-chip svg {
+  display: block;
+}
+
+.theme-swatch-chip[data-swatch='blue'] { background: var(--swatch-blue); }
+.theme-swatch-chip[data-swatch='turquoise'] { background: var(--swatch-turquoise); }
+.theme-swatch-chip[data-swatch='cyan'] { background: var(--swatch-cyan); }
+.theme-swatch-chip[data-swatch='reed'] { background: var(--swatch-reed); }
+.theme-swatch-chip[data-swatch='apricot'] { background: var(--swatch-apricot); }
+.theme-swatch-chip[data-swatch='peach'] { background: var(--swatch-peach); }
+.theme-swatch-chip[data-swatch='lavender'] { background: var(--swatch-lavender); }
+.theme-swatch-chip[data-swatch='agarwood'] { background: var(--swatch-agarwood); }
+
+/* ---- 快捷键 (ShortcutsPanel.tsx): grouped 40px rows, key caps on the right ---- */
+
+.shortcuts-dialog {
+  width: min(520px, calc(100vw - 2 * var(--space-4)));
+}
+
+.shortcuts-dialog .ui-dialog-body {
+  max-height: calc(100vh - 2 * var(--space-8));
+  overflow-y: auto;
+}
+
+.shortcut-groups {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.shortcut-group-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+}
+
+.shortcut-card {
+  margin: 0;
+  padding: var(--space-1) 18px;
+  background: var(--color-bg-card);
+  border-radius: var(--radius-card);
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: var(--settings-row-height);
+  font-size: var(--font-size-md);
+}
+
+.shortcut-row dt,
+.shortcut-row dd {
+  margin: 0;
+}
+
+.shortcut-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.shortcut-keys kbd {
+  display: inline-block;
+  min-width: 24px;
+  padding: 1px var(--space-2);
+  font-family: inherit;
+  line-height: 18px;
+  text-align: center;
+  color: var(--color-text);
+  background: var(--color-kbd-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.shortcut-note {
+  margin-top: var(--space-4);
+}
+
+@media (max-width: 767px) {
+  .theme-swatches {
+    grid-template-columns: repeat(4, 48px);
+  }
+
+  .shortcut-card {
+    padding: var(--space-1) var(--space-4);
+  }
+
+  .shortcuts-dialog {
+    width: calc(100vw - 2 * var(--space-4));
+  }
+}

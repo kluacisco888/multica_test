@@ -247,6 +247,8 @@ export function CalendarPane(props: CalendarPaneProps) {
           <button
             type="button"
             className="calendar-header-button calendar-add"
+            // The N shortcut (AppShell) presses this button in the 日历.
+            data-shortcut="add-task"
             aria-label="添加任务"
             title="添加任务"
             onClick={(e) => openQuickAdd(e, visibleDays.includes(today) ? today : anchor, null)}

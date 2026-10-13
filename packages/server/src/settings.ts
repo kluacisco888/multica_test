@@ -1,5 +1,13 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { DEFAULT_SETTINGS, mergeViewOptions, smartListIdSchema, type Settings, type ViewOptions } from '@dida/shared';
+import {
+  DEFAULT_SETTINGS,
+  mergeViewOptions,
+  smartListIdSchema,
+  themeColorSchema,
+  themeModeSchema,
+  type Settings,
+  type ViewOptions,
+} from '@dida/shared';
 import type { Executor, Tx } from './db/client.js';
 import { userSettings } from './db/schema/settings.js';
 import type { SyncOps } from './sync/sync.js';
@@ -26,12 +34,17 @@ function toSettings(row: SettingsRow | undefined): Settings {
     }),
     viewOptions: row.viewOptions,
     allDayReminderTime: row.allDayReminderTime,
+    // A mode / colour a later version dropped falls back to the default.
+    themeMode: themeModeSchema.catch(DEFAULT_SETTINGS.themeMode).parse(row.themeMode),
+    themeColor: themeColorSchema.catch(DEFAULT_SETTINGS.themeColor).parse(row.themeColor),
   };
 }
 
 export interface SettingsPatch {
   timeZone?: string;
   hiddenSmartLists?: Settings['hiddenSmartLists'];
+  themeMode?: Settings['themeMode'];
+  themeColor?: Settings['themeColor'];
   /** Merged per view; null resets a view to its default layout. */
   viewOptions?: Record<string, ViewOptions | null>;
   allDayReminderTime?: string;

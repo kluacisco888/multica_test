@@ -2,11 +2,12 @@ import { z } from 'zod';
 import { DEFAULT_ALL_DAY_REMINDER_TIME, timeOfDaySchema } from './reminders.js';
 import { hiddenSmartListsSchema, smartListIdSchema } from './smart-lists.js';
 import { DEFAULT_TIME_ZONE, timeZoneSchema } from './task-dates.js';
+import { DEFAULT_THEME_COLOR, DEFAULT_THEME_MODE, themeColorSchema, themeModeSchema } from './theme.js';
 import { MAX_VIEW_OPTIONS, viewKeySchema, viewOptionsSchema, type ViewOptions } from './task-view.js';
 
 /**
  * Per-user preferences (设置): the time zone (spec 用户故事 26), hidden
- * 智能清单 (60) and each view's 排序 / 分组 (64).
+ * 智能清单 (60), each view's 排序 / 分组 (64) and the 主题 (104).
  */
 
 export const settingsSchema = z.object({
@@ -18,10 +19,21 @@ export const settingsSchema = z.object({
   viewOptions: z.record(z.string(), viewOptionsSchema),
   /** 全天提醒时间: when reminders of 全天 tasks fire, `HH:mm` (spec 用户故事 80). */
   allDayReminderTime: z.string(),
+  /** 浅色 / 深色 / 跟随系统. */
+  themeMode: themeModeSchema,
+  /** 颜色系列. */
+  themeColor: themeColorSchema,
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
-export const DEFAULT_SETTINGS: Settings = { timeZone: DEFAULT_TIME_ZONE, hiddenSmartLists: [], viewOptions: {}, allDayReminderTime: DEFAULT_ALL_DAY_REMINDER_TIME };
+export const DEFAULT_SETTINGS: Settings = {
+  timeZone: DEFAULT_TIME_ZONE,
+  hiddenSmartLists: [],
+  viewOptions: {},
+  allDayReminderTime: DEFAULT_ALL_DAY_REMINDER_TIME,
+  themeMode: DEFAULT_THEME_MODE,
+  themeColor: DEFAULT_THEME_COLOR,
+};
 
 /**
  * `PATCH /api/settings`. `viewOptions` is merged per view: a view set to
@@ -35,6 +47,8 @@ export const updateSettingsRequestSchema = z
       .record(viewKeySchema, viewOptionsSchema.nullable())
       .refine((r) => Object.keys(r).length <= MAX_VIEW_OPTIONS, '视图太多'),
     allDayReminderTime: timeOfDaySchema,
+    themeMode: themeModeSchema,
+    themeColor: themeColorSchema,
   })
   .partial()
   .strict();

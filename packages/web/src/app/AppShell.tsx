@@ -55,6 +55,9 @@ import { TaskDetail } from './TaskDetail.js';
 import { TaskListPane } from './TaskListPane.js';
 import { TimelinePane } from './TimelinePane.js';
 import { TrashPane } from './TrashPane.js';
+import { matchShortcut } from './shortcuts.js';
+import { ShortcutsDialog } from './ShortcutsPanel.js';
+import { useTheme } from './theme.js';
 import { belongsToView, quickAddTarget, scopeKey, tasksQuery, viewOptionsFor, viewKey, type ListPaneView } from './views.js';
 
 type DialogState =
@@ -69,7 +72,8 @@ type DialogState =
   | { kind: 'purge-task'; task: TrashedTask }
   | { kind: 'empty-trash' }
   | { kind: 'filter'; filter: Filter | null }
-  | { kind: 'delete-filter'; filter: Filter };
+  | { kind: 'delete-filter'; filter: Filter }
+  | { kind: 'shortcuts' };
 
 const CALENDAR_MODE_KEY = 'dida.calendar.mode';
 
@@ -197,11 +201,19 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     };
   }, []);
 
+  useTheme(settings ? { mode: settings.themeMode, color: settings.themeColor } : null);
+
   async function saveSettings(patch: UpdateSettingsRequest) {
+    // 主题 changes show at once; a failed save puts the old theme back.
+    const previous = settings;
+    if (settings && (patch.themeMode || patch.themeColor)) {
+      setSettings({ ...settings, ...(patch.themeMode ? { themeMode: patch.themeMode } : {}), ...(patch.themeColor ? { themeColor: patch.themeColor } : {}) });
+    }
     try {
       setSettings(await api.updateSettings(patch));
       return true;
     } catch (e) {
+      if (previous && (patch.themeMode || patch.themeColor)) setSettings(previous);
       fail(e);
       return false;
     }
@@ -698,6 +710,45 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     await reloadSidebar();
   }
 
+  // 快捷键 (spec 用户故事 105–106). The handler is re-bound each render so it sees the current task and view.
+  useEffect(() => {
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      const action = matchShortcut(event);
+      if (!action) return;
+      switch (action.kind) {
+        case 'search': {
+          event.preventDefault();
+          if (view?.kind === 'search') document.querySelector<HTMLInputElement>('.search-box-input')?.focus();
+          else openSearch();
+          return;
+        }
+        case 'help':
+          event.preventDefault();
+          setDialog({ kind: 'shortcuts' });
+          return;
+        case 'addTask': {
+          const input = document.querySelector<HTMLInputElement>('.quick-add-input');
+          // Views without a quick-add box (日历) mark their own 添加任务 control.
+          const button = input ? null : document.querySelector<HTMLButtonElement>('[data-shortcut="add-task"]');
+          if (!input && !button) return;
+          // Keep the "n" out of the box it focuses.
+          event.preventDefault();
+          if (input) input.focus();
+          else button?.click();
+          return;
+        }
+        case 'priority': {
+          if (!selectedTask || selectedTask.priority === action.priority) return;
+          event.preventDefault();
+          void changeTask(selectedTask, { priority: action.priority });
+          return;
+        }
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  });
+
   // 时间线 (spec 用户故事 68) uses the whole width until a task is opened, like the reference.
   const timeline = view !== null && view.kind !== 'search' && view.kind !== 'calendar' && viewOptions?.layout === 'timeline';
   // The 日历 takes the whole width too; its task opens beside it.
@@ -888,6 +939,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
         </div>
       )}
 
+      {dialog.kind === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog({ kind: 'none' })} />}
       {dialog.kind === 'settings' && (
         <SettingsDialog
           user={user}

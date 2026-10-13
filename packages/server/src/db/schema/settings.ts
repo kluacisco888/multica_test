@@ -19,6 +19,14 @@ export const userSettings = pgTable(
     viewOptions: jsonb().$type<Record<string, ViewOptions>>().notNull().default({}),
     /** 全天提醒时间, `HH:mm` (spec 用户故事 80). */
     allDayReminderTime: text().notNull().default('09:00'),
+    /*
+     * 主题 (spec 用户故事 104): mode light / dark / system and the 颜色系列 id.
+     * Plain text so a later mode or colour needs no migration. The defaults
+     * repeat DEFAULT_THEME_MODE / DEFAULT_THEME_COLOR: drizzle-kit loads this
+     * file without @dida/shared's runtime values.
+     */
+    themeMode: text().notNull().default('light'),
+    themeColor: text().notNull().default('blue'),
   },
   (t) => [
     syncIndex('user_settings', t),

@@ -2,6 +2,10 @@ import {
   PASSWORD_MIN_LENGTH,
   SMART_LIST_IDS,
   SMART_LIST_NAMES,
+  THEME_COLOR_LABELS,
+  THEME_COLORS,
+  THEME_MODE_LABELS,
+  THEME_MODES,
   type CurrentUser,
   type SmartListId,
   type Settings,
@@ -13,15 +17,18 @@ import { Button, Dialog } from '../ui/controls.js';
 import { Icon, type IconName } from '../ui/Icon.js';
 import { HolidaySettings } from './HolidaySettings.js';
 import { NotificationSettings } from './settings/NotificationSettings.js';
+import { ShortcutList } from './ShortcutsPanel.js';
 import { UserAdmin } from './settings/UserAdmin.js';
 
-export type SettingsTab = 'account' | 'smart' | 'datetime' | 'notifications' | 'users';
+export type SettingsTab = 'account' | 'smart' | 'datetime' | 'notifications' | 'appearance' | 'shortcuts' | 'users';
 
 const TABS: { id: SettingsTab; label: string; icon: IconName }[] = [
   { id: 'account', label: '账户与安全', icon: 'user' },
   { id: 'datetime', label: '日期与时间', icon: 'clock' },
   { id: 'notifications', label: '提醒与通知', icon: 'bell' },
   { id: 'smart', label: '智能清单', icon: 'today' },
+  { id: 'appearance', label: '外观', icon: 'palette' },
+  { id: 'shortcuts', label: '快捷键', icon: 'keyboard' },
 ];
 /** The 后台, last in the list and only for 管理员 (others never see the entry). */
 const ADMIN_TAB: (typeof TABS)[number] = { id: 'users', label: '用户管理', icon: 'users' };
@@ -31,6 +38,7 @@ const ADMIN_TAB: (typeof TABS)[number] = { id: 'users', label: '用户管理', i
  * panel on the right. 账户与安全: who is signed in, change password, log out
  * (spec 用户故事 7、8). 智能清单: show / hide each one in the sidebar (60). 日期与时间: the time zone (用户故事 26) and the
  * 节假日数据 card (用户故事 114). 提醒与通知: 全天提醒时间, 通知渠道 and failed 提醒 (用户故事 74–77、80、83、85).
+ * 外观: 主题 mode and 颜色系列 (用户故事 104). 快捷键: the fixed list (105–106).
  * 用户管理 (管理员 only): the 后台 (用户故事 9).
  */
 export function SettingsDialog({
@@ -94,6 +102,8 @@ export function SettingsDialog({
           {tab === 'smart' && <SmartListsPanel settings={settings} onSave={onSaveSettings} />}
           {tab === 'datetime' && <DateTimePanel settings={settings} onSave={onSaveSettings} />}
           {tab === 'notifications' && <NotificationsPanel settings={settings} onSave={onSaveSettings} />}
+          {tab === 'appearance' && <AppearancePanel settings={settings} onSave={onSaveSettings} />}
+          {tab === 'shortcuts' && <ShortcutsSettingsPanel />}
           {tab === 'users' && user.isAdmin && <UsersPanel user={user} />}
         </div>
       </div>
@@ -176,6 +186,77 @@ function SmartListsPanel({
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/**
+ * 外观 (spec 用户故事 104): 主题 mode as a radio group, then the 颜色系列
+ * swatches (also radios). Changes apply at once; a failed save reverts them.
+ */
+function AppearancePanel({ settings, onSave }: { settings: Settings | null; onSave: (patch: UpdateSettingsRequest) => Promise<boolean> }) {
+  const id = useId();
+  if (!settings) {
+    return (
+      <p className="list-pane-status" role="status">
+        正在加载…
+      </p>
+    );
+  }
+  return (
+    <section className="account-section" aria-labelledby={`${id}-title`}>
+      <h3 id={`${id}-title`} className="account-section-title">
+        外观
+      </h3>
+      <fieldset className="theme-modes">
+        <legend className="theme-legend">主题模式</legend>
+        {THEME_MODES.map((mode) => (
+          <label key={mode} className="theme-mode">
+            <input
+              type="radio"
+              name={`${id}-mode`}
+              value={mode}
+              checked={settings.themeMode === mode}
+              onChange={() => void onSave({ themeMode: mode })}
+            />
+            <span className={`theme-mode-preview theme-mode-preview-${mode}`} aria-hidden="true" />
+            <span>{THEME_MODE_LABELS[mode]}</span>
+          </label>
+        ))}
+      </fieldset>
+      <fieldset className="theme-colors">
+        <legend className="theme-legend">颜色系列</legend>
+        <div className="theme-swatches">
+          {THEME_COLORS.map((color) => (
+            <label key={color} className="theme-swatch">
+              <input
+                type="radio"
+                name={`${id}-color`}
+                value={color}
+                checked={settings.themeColor === color}
+                onChange={() => void onSave({ themeColor: color })}
+              />
+              <span className="theme-swatch-chip" data-swatch={color} aria-hidden="true">
+                <Icon name="check" size={14} />
+              </span>
+              <span className="theme-swatch-name">{THEME_COLOR_LABELS[color]}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+    </section>
+  );
+}
+
+function ShortcutsSettingsPanel() {
+  const id = useId();
+  return (
+    <section className="account-section" aria-labelledby={`${id}-title`}>
+      <h3 id={`${id}-title`} className="account-section-title">
+        快捷键
+      </h3>
+      <p className="field-hint">按 ? 随时打开这份速查表。快捷键不支持自定义。</p>
+      <ShortcutList />
     </section>
   );
 }
