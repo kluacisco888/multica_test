@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DEFAULT_ALL_DAY_REMINDER_TIME, timeOfDaySchema } from './reminders.js';
 import { hiddenSmartListsSchema, smartListIdSchema } from './smart-lists.js';
 import { DEFAULT_TIME_ZONE, timeZoneSchema } from './task-dates.js';
 import { MAX_VIEW_OPTIONS, viewKeySchema, viewOptionsSchema, type ViewOptions } from './task-view.js';
@@ -15,10 +16,12 @@ export const settingsSchema = z.object({
   hiddenSmartLists: z.array(smartListIdSchema),
   /** View key (see `viewKeySchema`) → its sort and grouping; views not listed use `defaultViewOptions`. */
   viewOptions: z.record(z.string(), viewOptionsSchema),
+  /** 全天提醒时间: when reminders of 全天 tasks fire, `HH:mm` (spec 用户故事 80). */
+  allDayReminderTime: z.string(),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
-export const DEFAULT_SETTINGS: Settings = { timeZone: DEFAULT_TIME_ZONE, hiddenSmartLists: [], viewOptions: {} };
+export const DEFAULT_SETTINGS: Settings = { timeZone: DEFAULT_TIME_ZONE, hiddenSmartLists: [], viewOptions: {}, allDayReminderTime: DEFAULT_ALL_DAY_REMINDER_TIME };
 
 /**
  * `PATCH /api/settings`. `viewOptions` is merged per view: a view set to
@@ -31,6 +34,7 @@ export const updateSettingsRequestSchema = z
     viewOptions: z
       .record(viewKeySchema, viewOptionsSchema.nullable())
       .refine((r) => Object.keys(r).length <= MAX_VIEW_OPTIONS, '视图太多'),
+    allDayReminderTime: timeOfDaySchema,
   })
   .partial()
   .strict();

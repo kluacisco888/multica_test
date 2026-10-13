@@ -19,6 +19,9 @@ export const invalidParent = (reply: FastifyReply) =>
 export const depthExceeded = (reply: FastifyReply) => sendError(reply, 400, 'depth_exceeded', DEPTH_EXCEEDED_MESSAGE);
 export const notChecklist = (reply: FastifyReply) => sendError(reply, 400, 'not_checklist', '任务不是检查清单模式');
 export const repeatNeedsDate = (reply: FastifyReply) => sendError(reply, 400, 'repeat_needs_date', '设置重复规则前需要先设置日期');
+export const invalidReminders = (reply: FastifyReply) =>
+  sendError(reply, 400, 'invalid_reminders', '提醒需要日期：带时间的任务用「提前 N 分钟」，全天任务用「提前 N 天」');
+export const invalidChannels = (reply: FastifyReply) => sendError(reply, 400, 'invalid_channels', '通知渠道不存在');
 export const checklistMode = (reply: FastifyReply) =>
   sendError(reply, 400, 'checklist_mode', '检查清单模式的任务没有描述，请先切换为描述模式');
 

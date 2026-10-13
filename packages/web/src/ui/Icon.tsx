@@ -133,6 +133,13 @@ const paths = {
       <path d="M10 20.5h4" />
     </>
   ),
+  /** 提醒: an alarm clock, like the reference's task rows. */
+  alarm: (
+    <>
+      <circle cx="12" cy="13" r="7" />
+      <path d="M12 9.5V13l2.25 1.5M4.5 5.5l2.5-2M19.5 5.5l-2.5-2" />
+    </>
+  ),
   send: <path d="M20 4 3.5 10.5l6.5 3 3 6.5Zm-10 9.5L20 4" />,
   mail: (
     <>

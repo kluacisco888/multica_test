@@ -4,6 +4,7 @@ import {
   PRIORITY_LABELS,
   planIndent,
   planOutdent,
+  type NotificationChannel,
   type Tag,
   type Task,
   type TaskList,
@@ -30,6 +31,10 @@ interface TaskDetailProps {
   userName: string;
   isMobile: boolean;
   timeZone: string;
+  /** 全天提醒时间 setting. */
+  allDayReminderTime: string;
+  /** The user's 通知渠道, for the 提醒 发送到 choice. */
+  channels: NotificationChannel[];
   now: Date;
   onBack: () => void;
   onChange: (task: Task, patch: UpdateTaskRequest) => Promise<Task | null>;
@@ -52,6 +57,8 @@ export function TaskDetail({
   userName,
   isMobile,
   timeZone,
+  allDayReminderTime,
+  channels,
   now,
   onBack,
   onChange,
@@ -109,10 +116,13 @@ export function TaskDetail({
         <TaskDateButton
           dates={task.dates}
           repeat={task.repeat}
+          reminders={{ reminders: task.reminders, reminderChannelIds: task.reminderChannelIds }}
+          allDayTime={allDayReminderTime}
+          channels={channels}
           timeZone={timeZone}
           now={now}
           isMobile={isMobile}
-          onSave={(dates, repeat) => void onChange(task, dates ? { dates, repeat } : { dates: null })}
+          onSave={(dates, repeat, extra) => void onChange(task, dates ? { dates, repeat, ...extra } : { dates: null })}
         />
         <span className="detail-status">{abandoned ? '已放弃' : done ? '已完成' : ''}</span>
         <MenuButton

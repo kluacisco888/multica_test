@@ -25,6 +25,7 @@ function toSettings(row: SettingsRow | undefined): Settings {
       return parsed.success ? [parsed.data] : [];
     }),
     viewOptions: row.viewOptions,
+    allDayReminderTime: row.allDayReminderTime,
   };
 }
 
@@ -33,6 +34,7 @@ export interface SettingsPatch {
   hiddenSmartLists?: Settings['hiddenSmartLists'];
   /** Merged per view; null resets a view to its default layout. */
   viewOptions?: Record<string, ViewOptions | null>;
+  allDayReminderTime?: string;
 }
 
 export async function readSettings(db: Executor, userId: string): Promise<Settings> {

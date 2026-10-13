@@ -32,9 +32,19 @@ export interface SyncOps {
   updateTombstone<T extends SyncTable>(table: T, id: string, patch: SyncPatch<T>): Promise<Row<T> | null>;
 }
 
+/**
+ * Runs at the end of a transaction that wrote rows of the table it was
+ * registered for, before commit, in the same transaction. `ids` are the rows
+ * written (inserted, updated, deleted, restored). Writes the hook makes to
+ * other tables do not trigger their hooks again.
+ */
+export type WriteHook = (ctx: { ops: SyncOps; tx: Tx; userId: string; ids: string[] }) => Promise<void>;
+
 export interface SyncWriter {
   /** Run `fn` in one transaction whose writes are attributed to `userId`. */
   transaction<R>(userId: string, fn: (ops: SyncOps, tx: Tx) => Promise<R>): Promise<R>;
+  /** Keep derived data in step with a table (e.g. 提醒投递记录 with 任务), whatever route wrote it. */
+  onWrite(table: SyncTable, hook: WriteHook): void;
 }
 
 /** Bump and return the user's revision. Holds the counter row lock until commit. */
@@ -59,7 +69,28 @@ function tombstoneRecord(table: SyncTable, userId: string, id: string) {
   return and(eq(table.id, id), eq(table.userId, userId), isNotNull(table.deletedAt));
 }
 
-function createOps(tx: Tx, userId: string, clock: Clock): SyncOps {
+type Touched = Map<SyncTable, Set<string>>;
+
+function createOps(tx: Tx, userId: string, clock: Clock, touched?: Touched): SyncOps {
+  const touch = <T>(table: SyncTable, row: T): T => {
+    if (touched && row) {
+      let ids = touched.get(table);
+      if (!ids) touched.set(table, (ids = new Set()));
+      ids.add((row as unknown as { id: string }).id);
+    }
+    return row;
+  };
+  const ops = createRawOps(tx, userId, clock);
+  return {
+    insert: async (table, values) => touch(table, await ops.insert(table, values)),
+    update: async (table, id, patch) => touch(table, await ops.update(table, id, patch)),
+    softDelete: async (table, id, patch) => touch(table, await ops.softDelete(table, id, patch)),
+    restore: async (table, id, patch) => touch(table, await ops.restore(table, id, patch)),
+    updateTombstone: async (table, id, patch) => touch(table, await ops.updateTombstone(table, id, patch)),
+  };
+}
+
+function createRawOps(tx: Tx, userId: string, clock: Clock): SyncOps {
   return {
     async insert(table, values) {
       const revision = await nextRevision(tx, userId);
@@ -129,9 +160,26 @@ export async function findOwned<T extends SyncTable>(
 }
 
 export function createSyncWriter(db: Db, clock: Clock): SyncWriter {
+  const hooks = new Map<SyncTable, WriteHook[]>();
   return {
     transaction(userId, fn) {
-      return db.transaction((tx) => fn(createOps(tx, userId, clock), tx));
+      return db.transaction(async (tx) => {
+        const touched: Touched = new Map();
+        const result = await fn(createOps(tx, userId, clock, touched), tx);
+        if (hooks.size > 0) {
+          // Hooks write through ops that do not record, so they never re-trigger.
+          const plain = createOps(tx, userId, clock);
+          for (const [table, list] of hooks) {
+            const ids = touched.get(table);
+            if (!ids || ids.size === 0) continue;
+            for (const hook of list) await hook({ ops: plain, tx, userId, ids: [...ids] });
+          }
+        }
+        return result;
+      });
+    },
+    onWrite(table, hook) {
+      hooks.set(table, [...(hooks.get(table) ?? []), hook]);
     },
   };
 }

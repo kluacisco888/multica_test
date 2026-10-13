@@ -30,7 +30,7 @@ const ADMIN_TAB: (typeof TABS)[number] = { id: 'users', label: '用户管理', i
  * 设置, laid out like 滴答's settings dialog: a tab list on the left, the
  * panel on the right. 账户与安全: who is signed in, change password, log out
  * (spec 用户故事 7、8). 智能清单: show / hide each one in the sidebar (60). 日期与时间: the time zone (用户故事 26) and the
- * 节假日数据 card (用户故事 114). 提醒与通知: 通知渠道 (用户故事 74–77、85).
+ * 节假日数据 card (用户故事 114). 提醒与通知: 全天提醒时间, 通知渠道 and failed 提醒 (用户故事 74–77、80、83、85).
  * 用户管理 (管理员 only): the 后台 (用户故事 9).
  */
 export function SettingsDialog({
@@ -93,7 +93,7 @@ export function SettingsDialog({
           {tab === 'account' && <AccountPanel user={user} onLoggedOut={onLoggedOut} />}
           {tab === 'smart' && <SmartListsPanel settings={settings} onSave={onSaveSettings} />}
           {tab === 'datetime' && <DateTimePanel settings={settings} onSave={onSaveSettings} />}
-          {tab === 'notifications' && <NotificationsPanel />}
+          {tab === 'notifications' && <NotificationsPanel settings={settings} onSave={onSaveSettings} />}
           {tab === 'users' && user.isAdmin && <UsersPanel user={user} />}
         </div>
       </div>
@@ -180,14 +180,20 @@ function SmartListsPanel({
   );
 }
 
-function NotificationsPanel() {
+function NotificationsPanel({
+  settings,
+  onSave,
+}: {
+  settings: Settings | null;
+  onSave: (patch: UpdateSettingsRequest) => Promise<boolean>;
+}) {
   const id = useId();
   return (
     <section className="account-section" aria-labelledby={`${id}-title`}>
       <h3 id={`${id}-title`} className="account-section-title">
         提醒与通知
       </h3>
-      <NotificationSettings />
+      <NotificationSettings settings={settings} onSaveSettings={onSave} />
     </section>
   );
 }

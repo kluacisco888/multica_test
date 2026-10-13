@@ -5,9 +5,11 @@ import {
   tagWithChildren,
   tasksQuerySchema,
   updateTaskRequestSchema,
+  type Reminder,
   type TaskDatesInput,
   type TasksResponse,
 } from '@dida/shared';
+import { liveChannels } from '../notify/notifier.js';
 import { sessionUser } from '../auth.js';
 import type { Executor } from '../db/client.js';
 import { filters } from '../db/schema/filters.js';
@@ -30,7 +32,7 @@ import {
   lockTaskTrees,
 } from '../task-tree.js';
 import { generateNextInstance } from '../repeat.js';
-import { checklistMode, depthExceeded, invalidList, invalidParent, invalidTags, notFound, Rejection, repeatNeedsDate, respond } from './respond.js';
+import { checklistMode, depthExceeded, invalidChannels, invalidList, invalidReminders, invalidParent, invalidTags, notFound, Rejection, repeatNeedsDate, respond } from './respond.js';
 import { liveTags } from './tags.js';
 
 type Params = { Params: { id: string } };
@@ -46,6 +48,16 @@ async function checkTags(db: Executor, userId: string, tagIds: string[] | undefi
   if (!tagIds || tagIds.length === 0) return;
   const live = new Set((await liveTags(db, userId)).map((t) => t.id));
   if (!tagIds.every((id) => live.has(id))) throw new Rejection(invalidTags);
+}
+
+/** Whether a 提醒 suits a task with `allDay` (null: no date): timed tasks take `before`, 全天 ones `day`. */
+const fitsDates = (r: Reminder, allDay: boolean | null) => allDay !== null && (allDay ? r.type === 'day' : r.type === 'before');
+
+/** Throws a 400 rejection unless every id is a live 通知渠道 of the user. */
+async function checkChannels(db: Executor, userId: string, ids: string[] | null | undefined): Promise<void> {
+  if (!ids || ids.length === 0) return;
+  const live = new Set((await liveChannels(db, userId)).map((c) => c.id));
+  if (!ids.every((id) => live.has(id))) throw new Rejection(invalidChannels);
 }
 
 /**
@@ -100,8 +112,22 @@ export function taskRoutes(app: FastifyInstance) {
     const body = createTaskRequestSchema.safeParse(request.body);
     if (!body.success) return sendValidationError(reply, body.error);
     const userId = sessionUser(request).id;
-    const { id, listId, parentId, title, description = '', sortOrder, dates = null, priority = 'none', tagIds = [], repeat = null } = body.data;
+    const {
+      id,
+      listId,
+      parentId,
+      title,
+      description = '',
+      sortOrder,
+      dates = null,
+      priority = 'none',
+      tagIds = [],
+      repeat = null,
+      reminders = [],
+      reminderChannelIds = null,
+    } = body.data;
     if (repeat && !dates) return repeatNeedsDate(reply);
+    if (!reminders.every((r) => fitsDates(r, dates?.allDay ?? null))) return invalidReminders(reply);
 
     if (parentId) {
       // A 子任务 goes into its parent's 清单.
@@ -111,6 +137,7 @@ export function taskRoutes(app: FastifyInstance) {
           app.sync.transaction(userId, async (ops, tx) => {
             await lockTaskTrees(tx, userId);
             await checkTags(tx, userId, tagIds);
+            await checkChannels(tx, userId, reminderChannelIds);
             const parent = await findOwned(tx, tasks, userId, parentId);
             if (!parent || (listId && listId !== parent.listId)) throw new Rejection(invalidParent);
             const siblings = await liveTasksOfList(tx, userId, parent.listId);
@@ -128,6 +155,8 @@ export function taskRoutes(app: FastifyInstance) {
               priority,
               tagIds,
               repeat,
+              reminders,
+              reminderChannelIds,
               sortOrder: sortOrder ?? endOfChildren(siblings, parent.id),
             });
           }),
@@ -143,6 +172,7 @@ export function taskRoutes(app: FastifyInstance) {
       () =>
         app.sync.transaction(userId, async (ops, tx) => {
           await checkTags(tx, userId, tagIds);
+          await checkChannels(tx, userId, reminderChannelIds);
           return ops.insert(tasks, {
             ...(id ? { id } : {}),
             ...(await dateColumns(tx, userId, dates)),
@@ -157,6 +187,8 @@ export function taskRoutes(app: FastifyInstance) {
             priority,
             tagIds,
             repeat,
+            reminders,
+            reminderChannelIds,
             sortOrder: sortOrder ?? (await topOfList(tx, userId, list.id)),
           });
         }),
@@ -170,11 +202,20 @@ export function taskRoutes(app: FastifyInstance) {
     if (!found) return notFound(reply);
     const body = updateTaskRequestSchema.safeParse(request.body);
     if (!body.success) return sendValidationError(reply, body.error);
-    const { status, listId, parentId, kind, sortOrder, description, dates, repeat, ...fields } = body.data;
+    const { status, listId, parentId, kind, sortOrder, description, dates, repeat, reminders, ...fields } = body.data;
     // A 重复规则 needs a date; clearing the dates stops the repeat too.
     const hasDate = dates !== undefined ? dates !== null : found.allDay !== null;
     if (repeat && !hasDate) return repeatNeedsDate(reply);
     const repeatPatch = dates === null ? { repeat: null } : repeat !== undefined ? { repeat } : {};
+    // 提醒 must fit the (new) dates; new dates drop the reminders that no longer fit.
+    const targetAllDay = dates !== undefined ? (dates?.allDay ?? null) : found.allDay;
+    if (reminders && !reminders.every((r) => fitsDates(r, targetAllDay))) return invalidReminders(reply);
+    const remindersPatch =
+      reminders !== undefined
+        ? { reminders }
+        : dates !== undefined
+          ? { reminders: found.reminders.filter((r) => fitsDates(r, targetAllDay)) }
+          : {};
     // Completing a 重复任务 generates the next instance, dated with the 工作日日历.
     const completing = status === 'completed' && found.status === 'open' && (repeatPatch.repeat ?? found.repeat) != null;
     const calendar = completing ? await app.holidays.calendar() : null;
@@ -189,6 +230,7 @@ export function taskRoutes(app: FastifyInstance) {
           const task = await findOwned(tx, tasks, userId, found.id);
           if (!task) throw new Rejection(notFound);
           await checkTags(tx, userId, fields.tagIds);
+          await checkChannels(tx, userId, fields.reminderChannelIds);
           const listRows = reshapes ? await liveTasksOfList(tx, userId, task.listId) : [];
           const subtree = reshapes ? descendantsOf(listRows, task.id) : [];
 
@@ -239,6 +281,7 @@ export function taskRoutes(app: FastifyInstance) {
           const row = await ops.update(tasks, task.id, {
             ...fields,
             ...repeatPatch,
+            ...remindersPatch,
             ...(dates !== undefined ? await dateColumns(tx, userId, dates) : {}),
             ...(newDescription !== undefined ? { description: newDescription } : {}),
             ...(kind !== undefined ? { kind } : {}),

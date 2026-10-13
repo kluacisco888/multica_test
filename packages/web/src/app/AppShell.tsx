@@ -1,11 +1,13 @@
 import {
   calendarDays,
   calendarModeSchema,
+  DEFAULT_ALL_DAY_REMINDER_TIME,
   DEFAULT_TIME_ZONE,
   datesAsStored,
   todayIn,
   type CalendarDay,
   type CalendarMode,
+  type NotificationChannel,
   type Filter,
   type SearchMatchField,
   type SmartListId,
@@ -45,6 +47,7 @@ import {
 } from './dialogs.js';
 import { CalendarPane } from './CalendarPane.js';
 import { Rail } from './Rail.js';
+import { ReminderAlerts } from './ReminderAlerts.js';
 import { SettingsDialog, type SettingsTab } from './SettingsDialog.js';
 import { MOBILE_QUERY, useMediaQuery, useRoute } from './route.js';
 import { activeSidebar, Sidebar } from './Sidebar.js';
@@ -102,6 +105,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [dialog, setDialog] = useState<DialogState>({ kind: 'none' });
   const [settings, setSettings] = useState<Settings | null>(null);
+  /** 通知渠道, for choosing where a task's 提醒 go; reloaded when 设置 closes. */
+  const [channels, setChannels] = useState<NotificationChannel[]>([]);
   /** The 回收站 while it is on screen. */
   const [trash, setTrash] = useState<TrashedTask[] | null>(null);
   const now = useNow();
@@ -170,6 +175,27 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       cancelled = true;
     };
   }, [fail]);
+
+  const reloadChannels = useCallback(async () => {
+    try {
+      setChannels(await api.fetchChannels());
+    } catch {
+      // Only the 发送到 choice needs them; the default channels still apply.
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .fetchChannels()
+      .then((list) => {
+        if (!cancelled) setChannels(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function saveSettings(patch: UpdateSettingsRequest) {
     try {
@@ -829,6 +855,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           userName={user.username}
           isMobile={isMobile}
           timeZone={timeZone}
+          allDayReminderTime={settings?.allDayReminderTime ?? DEFAULT_ALL_DAY_REMINDER_TIME}
+          channels={channels}
           now={now}
           onBack={() => selectTask(null)}
           onChange={changeTask}
@@ -840,6 +868,16 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onError={fail}
         />
       )}
+
+      <ReminderAlerts
+        timeZone={timeZone}
+        now={now}
+        onCompleted={() => {
+          void reloadTasks();
+          void reloadSidebar();
+        }}
+        onError={fail}
+      />
 
       {error && (
         <div className="toast" role="alert">
@@ -855,7 +893,10 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           user={user}
           initialTab={dialog.tab}
           settings={settings}
-          onClose={() => setDialog({ kind: 'none' })}
+          onClose={() => {
+            setDialog({ kind: 'none' });
+            void reloadChannels();
+          }}
           onLoggedOut={onLoggedOut}
           onSaveSettings={saveSettings}
         />

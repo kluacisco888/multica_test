@@ -38,6 +38,8 @@ function task(title: string, extra: Partial<Task> = {}): Task {
     priority: 'none',
     tagIds: [],
     repeat: null,
+    reminders: [],
+    reminderChannelIds: null,
     ...extra,
   };
 }

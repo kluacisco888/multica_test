@@ -17,6 +17,8 @@ export const userSettings = pgTable(
     hiddenSmartLists: text().array().notNull().default(sql`'{}'::text[]`),
     /** View key → 排序 / 分组 (spec 用户故事 64). */
     viewOptions: jsonb().$type<Record<string, ViewOptions>>().notNull().default({}),
+    /** 全天提醒时间, `HH:mm` (spec 用户故事 80). */
+    allDayReminderTime: text().notNull().default('09:00'),
   },
   (t) => [
     syncIndex('user_settings', t),
