@@ -1283,7 +1283,7 @@ body {
 }
 
 .rail-button:hover {
-  background: rgb(255 255 255 / 0.12);
+  background: var(--color-rail-hover);
 }
 
 .rail-button:focus-visible {
