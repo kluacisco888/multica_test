@@ -81,6 +81,7 @@ function desiredSchedule(task: TaskRow, settings: { timeZone: string; allDayRemi
 
 function stillMatches(row: DeliveryRow, task: TaskRow | undefined, settings: { timeZone: string; allDayReminderTime: string }): boolean {
   if (!task || !isLive(task)) return false;
+  // A 稍后提醒 was asked for explicitly: it stays while the task is open, whatever its dates.
   if (row.source === 'snooze') return true;
   return desiredSchedule(task, settings).some((d) => d.key === row.reminderKey && d.fireAt.getTime() === row.fireAt.getTime());
 }
@@ -220,8 +221,10 @@ export function createReminderService(deps: {
         return { row: fired, task: task as TaskRow, settings };
       }
 
-      // `delivering`: a retry is due.
-      if (!withinCatchUp(row.fireAt, now)) {
+      // `delivering`: a retry is due. Only a retry that itself came due more than
+      // 24 hours ago (the server was down) is given up; live retries of a
+      // reminder that fired late still run.
+      if (!withinCatchUp(row.nextAttemptAt, now)) {
         const channels = row.channels.map((c) =>
           c.status === 'pending' ? { ...c, status: 'failed' as const, nextAttemptAt: null, lastError: MISSED_ERROR, finishedAt: now.toISOString() } : c,
         );

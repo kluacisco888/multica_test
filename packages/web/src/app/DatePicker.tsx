@@ -489,7 +489,7 @@ function DatePickerPopover({
             )}
           </div>
           <div className="date-footer">
-            <Button onClick={() => onSave(null, null, { reminders: [], reminderChannelIds: draft.channelIds })}>清除</Button>
+            <Button onClick={() => onSave(null, null, { reminders: [], reminderChannelIds: null })}>清除</Button>
             <Button
               variant="primary"
               disabled={error !== null}

@@ -258,14 +258,18 @@ describe('reminders: scheduling and delivery', () => {
       expect(u.mails()).toHaveLength(2);
     });
 
-    it('a pending retry older than 24 hours is given up as failed', async () => {
+    it('a retry is given up only when it came due more than 24 hours ago', async () => {
       const u = await account();
       await createTask(u, { title: '重试时停机', dates: timed('2026-10-14T02:00:00.000Z'), reminders: [{ type: 'before', minutes: 0 }], reminderChannelIds: [u.feishuId] });
-      hook.replyNext({ status: 503 });
-      await tickAt('2026-10-14T02:00:00.000Z');
-      await tickAt('2026-10-15T02:00:01.000Z'); // down for a day; the 1-minute retry is now too late
+      const sent = () => hook.requests.filter((r) => r.path.endsWith(u.username)).length;
+      hook.replyNext({ status: 503 }, { status: 503 });
+      await tickAt('2026-10-14T02:00:00.000Z'); // fails; retry due 02:01 on the 14th
+      await tickAt('2026-10-15T02:01:00.000Z'); // down for exactly 24 hours: the retry still runs (and fails again)
+      expect(sent()).toBe(2);
+      await tickAt('2026-10-16T02:07:00.000Z'); // the next retry (due 02:06 on the 15th) is over 24 hours late
+      expect(sent()).toBe(2);
       const failures = reminderFailuresResponseSchema.parse((await api(u, 'GET', '/api/reminders/failures')).json()).failures;
-      expect(failures).toEqual([expect.objectContaining({ attempts: 1, error: '服务停机超过 24 小时，未能发送' })]);
+      expect(failures).toEqual([expect.objectContaining({ attempts: 2, error: '服务停机超过 24 小时，未能发送' })]);
     });
 
     it('the pg-boss jobs run a tick at startup and every minute', async () => {

@@ -66,7 +66,7 @@ export function ReminderAlerts({
   }
 
   return (
-    <section className="reminder-alerts" aria-label="提醒" aria-live="assertive">
+    <section className="reminder-alerts" aria-label="提醒" aria-live="polite">
       {alerts.map((alert) => (
         <AlertCard
           key={alert.id}
