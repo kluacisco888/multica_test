@@ -1,7 +1,7 @@
 import { userSettings } from '../db/schema/settings.js';
 import { notificationChannels } from '../db/schema/channels.js';
-import { folders, lists, tasks } from '../db/schema/tasks.js';
 import { channelToApi } from '../notify/notifier.js';
+import { checklistItems, folders, lists, tasks } from '../db/schema/tasks.js';
 import type { SyncEntity } from './columns.js';
 
 /**
@@ -15,4 +15,5 @@ export const syncEntities: readonly SyncEntity[] = [
   { type: 'settings', table: userSettings },
   // Credentials stay out of the sync feed: only the masked API form is sent.
   { type: 'notificationChannel', table: notificationChannels, serialize: channelToApi },
+  { type: 'checklistItem', table: checklistItems },
 ];

@@ -16,6 +16,7 @@ import { changesRoutes } from './routes/changes.js';
 import { createHolidayService, type HolidayService } from './holidays/service.js';
 import { healthRoutes } from './routes/health.js';
 import { holidayRoutes } from './routes/holidays.js';
+import { checklistRoutes } from './routes/checklist.js';
 import { listRoutes } from './routes/lists.js';
 import { settingsRoutes } from './routes/settings.js';
 import { taskRoutes } from './routes/tasks.js';
@@ -105,6 +106,7 @@ export async function buildApp(deps: AppDeps) {
   settingsRoutes(app);
   holidayRoutes(app);
   channelRoutes(app, { cipher });
+  checklistRoutes(app);
   deps.routes?.(app);
 
   if (config.webDistDir) {

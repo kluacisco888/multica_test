@@ -145,6 +145,11 @@ CI 定义在 `ci/github-actions.yml`：lint、类型检查、四层测试，再�
 | `POST/PATCH/DELETE /api/folders[/:id]` | 文件夹（只有一层）：名称、`collapsed`、`sortOrder`。删除文件夹时，其中的清单移到文件夹原来的位置 |
 | `GET /api/tasks?listId=` | 未完成任务按排序键，已完成任务在后、最近完成的在前 |
 | `GET/POST/PATCH /api/tasks[/:id]` | 不指定清单进收件箱；新建和移入的任务排在最前；`status` 在 `open` / `completed` 之间切换；`dates` 见下 |
+| `parentId`（POST / PATCH） | 子任务：跟父任务在同一个清单，新建时排在兄弟任务最后；最多 5 层（根任务算第 1 层），超过返回 400 `depth_exceeded`；父任务不存在、是别人的、是自己或自己的子任务返回 400 `invalid_parent`。移到别的清单时整棵子树一起走，子任务移走后变成顶层任务 |
+| 完成规则 | 完成任务会把下面所有未完成的子任务一起完成；取消完成父任务不动子任务；取消完成子任务会把已完成的上级一起取消完成 |
+| `kind`（PATCH） | `text` ⇄ `checklist`：描述每个非空行变成一个检查项（去掉 `- `、`1. `、`[x]` 等列表标记，`[x]` 记为已勾选），描述清空；切回时每个检查项变成一行描述（勾选状态不保留），检查项删除（墓碑） |
+| `GET/POST /api/tasks/:id/checklist-items` | 检查项列表 / 新建（只能加到检查清单模式的任务上，否则 400 `not_checklist`），默认排在最后 |
+| `PATCH/DELETE /api/checklist-items/:id` | 勾选、改文字、`sortOrder` 排序；删除是软删除。检查项在 `/api/changes` 里的实体类型是 `checklistItem` |
 | `GET/PATCH /api/settings` | 设置：`timeZone`（IANA 名称，默认 `Asia/Shanghai`）。第一次修改时才建行，同步类型 `settings` |
 
 任务的 `dates`（`packages/shared/src/task-dates.ts`）：`null` 是不设日期；全天是 `{ allDay: true, startDate, dueDate }`，按日历日期存，不随时区换算；带时间是 `{ allDay: false, startAt, dueAt, timeZone }`，存 UTC 时间点，`timeZone` 由服务端按用户当时的设置写入，显示时一律用用户**当前**时区。`startDate` / `startAt` 为 null 就是只有截止日期。列表上的「今天 / 明天 / 周几 / 已过期」由 `describeTaskDates()` 算。

@@ -505,13 +505,41 @@ body {
   list-style: none;
 }
 
+.task-item {
+  list-style: none;
+}
+
+/* 子任务 rows are indented one step per level (--task-depth: 0 at the root). */
 .task-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
   height: var(--task-row-height);
-  padding: 0 10px 0 16px;
+  padding: 0 10px 0 calc(16px + var(--task-depth, 0) * var(--subtask-indent));
   border-radius: var(--radius-md);
+}
+
+/* Expand / collapse arrow, in the gutter left of the checkbox. */
+.task-row-expand {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--task-depth, 0) * var(--subtask-indent));
+  z-index: 1; /* above the checkbox's enlarged hit area */
+  display: grid;
+  place-items: center;
+  width: 16px;
+  padding: 0;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+span.task-row-expand {
+  cursor: default;
 }
 
 .task-row:hover {
@@ -709,9 +737,180 @@ body {
   display: flex;
   flex: none;
   align-items: center;
+  gap: var(--space-1);
   height: 48px;
   padding: 0 var(--space-3);
   border-top: 1px solid var(--color-divider);
+}
+
+.detail-footer-spacer {
+  flex: 1;
+}
+
+.detail-footer .ui-icon-button {
+  color: var(--color-text-secondary);
+}
+
+/* Parent link above the title of a 子任务. */
+.detail-parent {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  margin: 0 0 var(--space-2);
+  padding: 2px var(--space-1);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.detail-parent:hover {
+  color: var(--color-brand-text);
+  background: var(--color-bg-hover);
+}
+
+.detail-parent-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- 子任务 in the detail pane ---- */
+
+.subtasks {
+  margin-top: var(--space-4);
+}
+
+.subtasks-heading {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.subtasks-count {
+  margin-left: var(--space-1);
+  font-weight: var(--font-weight-regular);
+}
+
+.subtasks-list,
+.checklist-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.subtask-row,
+.checklist-item,
+.subtask-add,
+.checklist-add {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--checklist-row-height);
+}
+
+.subtask-title {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  font: inherit;
+  font-size: var(--font-size-md);
+  color: var(--color-text);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.subtask-row-done .subtask-title,
+.checklist-item-done .checklist-title {
+  color: var(--color-text-done);
+  text-decoration: line-through;
+}
+
+.subtask-add-icon,
+.checklist-add-icon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  color: var(--color-text-secondary);
+}
+
+.subtask-add-input,
+.checklist-title {
+  flex: 1;
+  min-width: 0;
+  height: var(--checklist-row-height);
+  padding: 0;
+  font: inherit;
+  font-size: var(--font-size-md);
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  outline: none;
+}
+
+.subtask-add-input:focus,
+.checklist-title:focus {
+  border-bottom-color: var(--color-border);
+}
+
+.subtask-add-input::placeholder,
+.checklist-title::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+/* ---- 检查清单 ---- */
+
+.checklist-status {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.checklist-item {
+  position: relative;
+  margin-left: calc(-1 * (var(--checklist-grip-width) + var(--space-2))); /* the grip hangs in the left padding */
+}
+
+.checklist-item[data-drop='before'] {
+  box-shadow: inset 0 2px 0 var(--color-brand);
+}
+
+.checklist-item[data-drop='after'] {
+  box-shadow: inset 0 -2px 0 var(--color-brand);
+}
+
+.checklist-grip {
+  display: grid;
+  place-items: center;
+  width: var(--checklist-grip-width);
+  color: var(--color-text-secondary);
+  cursor: grab;
+  opacity: 0;
+}
+
+.checklist-item-menu,
+.checklist-item-delete {
+  color: var(--color-text-secondary);
+  opacity: 0;
+}
+
+.checklist-item:hover .checklist-grip,
+.checklist-item:hover .checklist-item-menu,
+.checklist-item:hover .checklist-item-delete,
+.checklist-item:focus-within .checklist-item-menu,
+.checklist-item:focus-within .checklist-item-delete {
+  opacity: 1;
 }
 
 /* ---- Account dialog ---- */
@@ -1242,6 +1441,20 @@ body {
 
   .detail {
     flex: 1 1 auto;
+  }
+
+  /* No hover on touch: 检查项 actions stay visible, no drag grip (use 上移 / 下移). */
+  .checklist-item {
+    margin-left: 0;
+  }
+
+  .checklist-grip {
+    display: none;
+  }
+
+  .checklist-item-menu,
+  .checklist-item-delete {
+    opacity: 1;
   }
 
   .detail-header {

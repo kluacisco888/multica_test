@@ -15,6 +15,7 @@ import { folders, lists, tasks } from '../db/schema/tasks.js';
 import { sendValidationError } from '../http-errors.js';
 import { endOfSidebarLevel, ensureInbox, folderToApi, listToApi, topLevelKeys, type FolderRow } from '../organize.js';
 import { findOwned } from '../sync/sync.js';
+import { deleteChecklistItemsOf } from '../task-tree.js';
 import { inboxProtected, invalidFolder, notFound, Rejection, respond } from './respond.js';
 
 type Params = { Params: { id: string } };
@@ -118,6 +119,7 @@ export function listRoutes(app: FastifyInstance) {
             .select({ id: tasks.id })
             .from(tasks)
             .where(and(eq(tasks.userId, userId), eq(tasks.listId, list.id), isNull(tasks.deletedAt)));
+          await deleteChecklistItemsOf(ops, tx, userId, owned.map((task) => task.id));
           for (const task of owned) await ops.softDelete(tasks, task.id);
           if (!(await ops.softDelete(lists, list.id))) throw new Rejection(notFound);
           return { id: list.id };

@@ -3,6 +3,7 @@ import {
   compareSortKeys,
   INBOX_NAME,
   keyBetween,
+  type ChecklistItem,
   type Folder,
   type Task,
   type TaskDates,
@@ -10,6 +11,7 @@ import {
   type TaskList,
 } from '@dida/shared';
 import type { Executor } from './db/client.js';
+import type { checklistItems } from './db/schema/tasks.js';
 import { folders, lists, tasks } from './db/schema/tasks.js';
 import type { SyncWriter } from './sync/sync.js';
 
@@ -21,6 +23,7 @@ import type { SyncWriter } from './sync/sync.js';
 export type ListRow = typeof lists.$inferSelect;
 export type FolderRow = typeof folders.$inferSelect;
 export type TaskRow = typeof tasks.$inferSelect;
+export type ChecklistItemRow = typeof checklistItems.$inferSelect;
 
 /** Advisory-lock namespace for creating a user's 收件箱 (second key: hash of the user id). */
 const INBOX_LOCK = 0x696e_6278; // "inbx"
@@ -114,7 +117,9 @@ export function taskToApi(row: TaskRow): Task {
   return {
     id: row.id,
     listId: row.listId,
+    parentId: row.parentId,
     title: row.title,
+    kind: row.kind,
     description: row.description,
     status: row.status,
     completedAt: row.completedAt ? iso(row.completedAt) : null,
@@ -164,4 +169,17 @@ export function compareTasks(a: TaskRow, b: TaskRow): number {
   if (doneA !== doneB) return doneA ? 1 : -1;
   if (doneA) return (b.completedAt?.getTime() ?? 0) - (a.completedAt?.getTime() ?? 0);
   return compareSortKeys(a.sortOrder, b.sortOrder) || compareSortKeys(a.id, b.id);
+}
+
+export function checklistItemToApi(row: ChecklistItemRow): ChecklistItem {
+  return {
+    id: row.id,
+    taskId: row.taskId,
+    title: row.title,
+    completed: row.completed,
+    sortOrder: row.sortOrder,
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt),
+    revision: row.revision,
+  };
 }

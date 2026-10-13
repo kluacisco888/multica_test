@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, date, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, date, index, pgTable, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { syncColumns, syncIndex } from '../../sync/columns.js';
 
 /** 文件夹: groups 清单, one level deep, never holds tasks directly. */
@@ -37,7 +37,7 @@ export const lists = pgTable(
 );
 
 /**
- * 任务. Priority, tags, subtasks etc. are added by later tasks.
+ * 任务, including 子任务 (`parent_id`). Priority, tags etc. are added by later tasks.
  *
  * Dates (spec 用户故事 23–26): `all_day` null means no date. All-day tasks use
  * the calendar-date columns (no time zone); timed tasks store UTC instants plus
@@ -51,8 +51,12 @@ export const tasks = pgTable(
     listId: uuid()
       .notNull()
       .references(() => lists.id),
+    /** Parent for a 子任务 (same 清单, at most 5 levels; enforced by the API). */
+    parentId: uuid().references((): AnyPgColumn => tasks.id),
     title: text().notNull(),
-    /** Markdown source. */
+    /** `text`: Markdown 描述; `checklist`: content is 检查项. */
+    kind: text({ enum: ['text', 'checklist'] }).notNull().default('text'),
+    /** Markdown source; empty in `checklist` mode. */
     description: text().notNull().default(''),
     status: text({ enum: ['open', 'completed', 'abandoned'] }).notNull().default('open'),
     completedAt: timestamp({ withTimezone: true }),
@@ -67,6 +71,7 @@ export const tasks = pgTable(
   (t) => [
     syncIndex('tasks', t),
     index('tasks_user_list_idx').on(t.userId, t.listId),
+    index('tasks_parent_idx').on(t.parentId),
     check('tasks_status_check', sql`${t.status} IN ('open', 'completed', 'abandoned')`),
     check(
       'tasks_dates_check',
@@ -76,5 +81,22 @@ export const tasks = pgTable(
         ELSE ${t.dueAt} IS NOT NULL AND ${t.timeZone} IS NOT NULL AND ${t.startDate} IS NULL AND ${t.dueDate} IS NULL AND (${t.startAt} IS NULL OR ${t.startAt} <= ${t.dueAt})
       END`,
     ),
+    check('tasks_kind_check', sql`${t.kind} IN ('text', 'checklist')`),
   ],
+);
+
+/** 检查项 of a 任务 in 检查清单 mode: only a title and a checked state. */
+export const checklistItems = pgTable(
+  'checklist_items',
+  {
+    ...syncColumns(),
+    taskId: uuid()
+      .notNull()
+      .references(() => tasks.id),
+    title: text().notNull(),
+    completed: boolean().notNull().default(false),
+    /** Fractional key among the 检查项 of the task. */
+    sortOrder: text().notNull(),
+  },
+  (t) => [syncIndex('checklist_items', t), index('checklist_items_task_idx').on(t.taskId)],
 );
