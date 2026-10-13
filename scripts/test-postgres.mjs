@@ -21,8 +21,11 @@ export function ensureTestPostgres() {
   return url;
 }
 
-/** Database the Playwright server (scripts/e2e-server.mjs) runs on. */
-export const E2E_DATABASE = 'dida_e2e';
+/**
+ * Database the Playwright server (scripts/e2e-server.mjs) runs on. Set
+ * E2E_DATABASE (with E2E_PORT) to run two e2e suites side by side.
+ */
+export const E2E_DATABASE = /^[a-z_][a-z0-9_]*$/.test(process.env.E2E_DATABASE ?? '') ? process.env.E2E_DATABASE : 'dida_e2e';
 
 /** Same server as `adminUrl`, different database name. */
 export function databaseUrl(adminUrl, database) {

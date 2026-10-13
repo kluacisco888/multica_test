@@ -36,6 +36,13 @@
       "when": 1791875595476,
       "tag": "0004_holidays",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791875865065,
+      "tag": "0005_notification_channels",
+      "breakpoints": true
     }
   ]
 }

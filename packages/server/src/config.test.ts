@@ -37,6 +37,18 @@ describe('loadConfig', () => {
     });
   });
 
+  it('decodes APP_ENCRYPTION_KEY, and leaves it unset when empty', () => {
+    const key = Buffer.alloc(32, 7).toString('base64');
+    expect(loadConfig({ ...base, APP_ENCRYPTION_KEY: key }).encryptionKey).toEqual(Buffer.alloc(32, 7));
+    expect(loadConfig({ ...base, APP_ENCRYPTION_KEY: '' }).encryptionKey).toBeUndefined();
+  });
+
+  it('refuses an APP_ENCRYPTION_KEY that is not 32 bytes', () => {
+    expect(() => loadConfig({ ...base, APP_ENCRYPTION_KEY: Buffer.alloc(16).toString('base64') })).toThrow(
+      /APP_ENCRYPTION_KEY/,
+    );
+  });
+
   it.each([
     ['true', true],
     ['false', false],

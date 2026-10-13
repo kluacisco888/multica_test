@@ -50,7 +50,7 @@ test('设置 is keyboard operable', async ({ page }) => {
   await logIn(page, user.username, user.password);
   const dialog = await openSettings(page);
   // Vertical tabs: ↓ moves from 账户与安全 to 日期与时间.
-  await dialog.getByRole('tab', { name: '账户与安全' }).focus();
+  await dialog.getByRole('tab', { name: '账户与安全' }).click();
   await page.keyboard.press('ArrowDown');
   await expect(dialog.getByRole('tab', { name: '日期与时间' })).toHaveAttribute('aria-selected', 'true');
   await dialog.getByRole('button', { name: '立即更新' }).focus();

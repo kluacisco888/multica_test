@@ -1,6 +1,7 @@
 export * from './api.js';
 export * from './auth.js';
 export * from './changes.js';
+export * from './channels.js';
 export * from './lists.js';
 export * from './sidebar-order.js';
 export * from './sort-key.js';

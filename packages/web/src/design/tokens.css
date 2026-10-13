@@ -32,6 +32,8 @@
   --color-bg-toast: #333333;
   --color-toast-action: #9db4ff;
   --color-illustration: #d5d8e0;
+  --color-bg-card: #f8f8f9; /* grouped rows in 设置 */
+  --color-switch-off: #8a8b8d;
 
   /* ---- Colour: text ---- */
   --color-text: #191919;
@@ -90,12 +92,14 @@
   --date-day-size-touch: 40px; /* mobile tap target */
   --settings-dialog-width: 800px;
   --settings-nav-width: 214px;
+  --settings-row-height: 40px;
 
   /* ---- Shape & elevation ---- */
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
   --radius-xl: 16px;
+  --radius-card: 12px;
   --shadow-popover: 0 4px 16px rgb(0 0 0 / 0.12), 0 0 1px rgb(0 0 0 / 0.2);
   --shadow-card: 0 2px 12px rgb(0 0 0 / 0.04);
 

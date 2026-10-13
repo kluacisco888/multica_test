@@ -17,7 +17,7 @@ import * as api from '../api.js';
 import { useNow } from './clock.js';
 import { ConfirmDialog, FolderDialog, ListDialog, type ListDraft } from './dialogs.js';
 import { Rail } from './Rail.js';
-import { SettingsDialog } from './SettingsDialog.js';
+import { SettingsDialog, type SettingsTab } from './SettingsDialog.js';
 import { MOBILE_QUERY, useMediaQuery, useRoute } from './route.js';
 import { Sidebar } from './Sidebar.js';
 import { TaskDetail } from './TaskDetail.js';
@@ -25,7 +25,7 @@ import { TaskListPane } from './TaskListPane.js';
 
 type DialogState =
   | { kind: 'none' }
-  | { kind: 'settings' }
+  | { kind: 'settings'; tab: SettingsTab }
   | { kind: 'list'; list: TaskList | null; folderId: string | null }
   | { kind: 'folder'; folder: Folder | null }
   | { kind: 'delete-list'; list: TaskList }
@@ -267,8 +267,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       {!isMobile && (
         <Rail
           user={user}
-          onOpenAccount={() => setDialog({ kind: 'settings' })}
-          onOpenSettings={() => setDialog({ kind: 'settings' })}
+          onOpenAccount={() => setDialog({ kind: 'settings', tab: 'account' })}
+          onOpenSettings={() => setDialog({ kind: 'settings', tab: 'notifications' })}
           onHome={() => navigate({ listId: null, taskId: null })}
         />
       )}
@@ -279,8 +279,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           currentListId={currentList?.id ?? null}
           isDrawer={isMobile}
           user={user}
-          onOpenAccount={() => setDialog({ kind: 'settings' })}
-          onOpenSettings={() => setDialog({ kind: 'settings' })}
+          onOpenAccount={() => setDialog({ kind: 'settings', tab: 'account' })}
+          onOpenSettings={() => setDialog({ kind: 'settings', tab: 'notifications' })}
           onClose={() => setDrawerOpen(false)}
           onOpenList={openList}
           onAddList={(folderId) => setDialog({ kind: 'list', list: null, folderId })}
@@ -333,6 +333,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       {dialog.kind === 'settings' && (
         <SettingsDialog
           user={user}
+          initialTab={dialog.tab}
           settings={settings}
           onClose={() => setDialog({ kind: 'none' })}
           onLoggedOut={onLoggedOut}

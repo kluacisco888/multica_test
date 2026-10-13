@@ -38,4 +38,9 @@ export interface SyncEntity {
   /** Key in the changes response, e.g. "list", "task". */
   type: string;
   table: SyncTable;
+  /**
+   * API representation of a live record. Defaults to every column except
+   * `userId`; entities with secrets (通知渠道) must hide them here.
+   */
+  serialize?: (row: never) => object;
 }

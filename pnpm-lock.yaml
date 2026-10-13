@@ -59,6 +59,9 @@ importers:
       fastify:
         specifier: 5.12.5
         version: 5.12.5
+      nodemailer:
+        specifier: 10.1.0
+        version: 10.1.0
       pg:
         specifier: 8.23.1
         version: 8.23.1
@@ -78,9 +81,6 @@ importers:
       drizzle-kit:
         specifier: 0.31.11
         version: 0.31.11
-      nodemailer:
-        specifier: 10.1.0
-        version: 10.1.0
 
   packages/shared:
     dependencies:

@@ -1,0 +1,169 @@
+/*
+ * 设置 →「提醒与通知」(NotificationSettings.tsx, ChannelDialog.tsx). The
+ * dialog shell (tabs, panel) is SettingsDialog.tsx + app.css; the rules
+ * here are scoped to the 通知渠道 content. Measured from the reference 设置
+ * screenshot at 1440×900: grouped rows of 40px on a light grey card with
+ * 12px corners. Tokens only.
+ */
+
+/* ---- Grouped rows ---- */
+
+.channels .settings-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.settings-section-title {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+}
+
+.settings-section-hint {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.channels .settings-card {
+  padding: var(--space-1) 18px;
+  background: var(--color-bg-card);
+  border-radius: var(--radius-card);
+}
+
+.channels .settings-empty p {
+  margin: var(--space-3) 0;
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+}
+
+.channels .settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: var(--settings-row-height);
+  font-size: var(--font-size-md);
+}
+
+.channels .settings-row > dt,
+.channels .settings-row > label {
+  flex: none;
+}
+
+.channels .settings-row-value {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-row-actions {
+  display: inline-flex;
+  gap: var(--space-4);
+}
+
+/* ---- 通知渠道 ---- */
+
+.channels {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.channels-add .ui-menu-trigger {
+  color: var(--color-brand-text);
+  font-size: var(--font-size-md);
+  white-space: nowrap;
+}
+
+.channels-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.channel-config {
+  margin: 0;
+}
+
+.channel-head {
+  border-bottom: 1px solid var(--color-divider-strong);
+}
+
+.channel-title {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.channel-name {
+  overflow: hidden;
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channel-test-result {
+  min-width: 0;
+  font-size: var(--font-size-sm);
+}
+
+.channel-error {
+  padding-bottom: var(--space-3);
+  overflow-wrap: anywhere;
+}
+
+/* ---- Channel form ---- */
+
+.channel-dialog {
+  width: min(440px, calc(100vw - 2 * var(--space-4)));
+}
+
+.channel-dialog .ui-dialog-body {
+  max-height: calc(100vh - 2 * var(--space-8));
+  overflow-y: auto;
+}
+
+.form-row {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.form-row-grow {
+  flex: 1;
+}
+
+.form-row-port {
+  flex: none;
+  width: 96px;
+}
+
+.form-row .field input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* ================= Mobile ================= */
+
+@media (max-width: 767px) {
+  .channels .settings-section-head {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .channels .settings-card {
+    padding: var(--space-1) var(--space-4);
+  }
+
+  .channel-dialog {
+    width: calc(100vw - 2 * var(--space-4));
+  }
+}

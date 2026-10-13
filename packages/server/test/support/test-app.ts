@@ -7,6 +7,8 @@ import { runMigrations } from '../../src/db/migrations.js';
 import type { SyncEntity } from '../../src/sync/columns.js';
 import { createTestDatabase, type TestDatabase } from './database.js';
 
+export const TEST_ENCRYPTION_KEY = Buffer.alloc(32, 'test-key').toString('base64');
+
 export interface TestUser {
   id: string;
   username: string;
@@ -50,7 +52,13 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
   const database = await createTestDatabase();
   await runMigrations(database.db);
   await options.prepare?.(database);
-  const config = loadConfig({ DATABASE_URL: database.url, LOG_LEVEL: 'silent', ...options.env });
+  const config = loadConfig({
+    DATABASE_URL: database.url,
+    LOG_LEVEL: 'silent',
+    // Fixed test key so 通知渠道 work; pass `APP_ENCRYPTION_KEY: ''` to test without one.
+    APP_ENCRYPTION_KEY: TEST_ENCRYPTION_KEY,
+    ...options.env,
+  });
   const app = await buildApp({
     config,
     db: database.db,

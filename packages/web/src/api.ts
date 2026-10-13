@@ -1,5 +1,10 @@
 import {
   apiErrorSchema,
+  channelsResponseSchema,
+  notificationChannelSchema,
+  type CreateChannelRequest,
+  type NotificationChannel,
+  type UpdateChannelRequest,
   folderSchema,
   holidayRefreshResponseSchema,
   holidayStatusSchema,
@@ -132,6 +137,28 @@ export async function fetchHolidayStatus(): Promise<HolidayStatus> {
 
 export async function refreshHolidays(): Promise<HolidayRefreshResponse> {
   return holidayRefreshResponseSchema.parse(await (await call('POST', '/api/holidays/refresh')).json());
+}
+
+export async function fetchChannels(): Promise<NotificationChannel[]> {
+  return channelsResponseSchema.parse(await (await call('GET', '/api/notification-channels')).json()).channels;
+}
+
+export async function createChannel(request: CreateChannelRequest): Promise<NotificationChannel> {
+  return notificationChannelSchema.parse(await (await call('POST', '/api/notification-channels', request)).json());
+}
+
+export async function updateChannel(id: string, patch: UpdateChannelRequest): Promise<NotificationChannel> {
+  const res = await call('PATCH', `/api/notification-channels/${encodeURIComponent(id)}`, patch);
+  return notificationChannelSchema.parse(await res.json());
+}
+
+export async function deleteChannel(id: string): Promise<void> {
+  await call('DELETE', `/api/notification-channels/${encodeURIComponent(id)}`);
+}
+
+/** 发送测试消息; rejects with the server's concrete reason when delivery fails. */
+export async function testChannel(id: string): Promise<void> {
+  await call('POST', `/api/notification-channels/${encodeURIComponent(id)}/test`);
 }
 
 export function errorMessage(error: unknown): string {
