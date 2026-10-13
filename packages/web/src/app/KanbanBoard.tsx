@@ -182,6 +182,8 @@ export function KanbanBoard(props: KanbanBoardProps) {
                       size={16}
                       label={`在「${column.title}」中添加任务`}
                       className="kanban-column-action"
+                      // The N shortcut (AppShell) presses the first column's +.
+                      data-shortcut={column.key === board.columns[0]?.key ? 'add-task' : undefined}
                       onClick={() => setAddingIn(column.key)}
                     />
                     <MenuButton label={`分组「${column.title}」更多操作`} items={columnMenu(column)} className="kanban-column-action" />
