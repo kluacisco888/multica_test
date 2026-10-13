@@ -9,7 +9,7 @@ import {
   type HolidayYear,
   type Task,
 } from '@dida/shared';
-import { solarToLunar } from '@dida/shared/lunar';
+import { solarFestivals, solarToLunar } from '@dida/shared/lunar';
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { fixedClock } from '../../src/clock.js';
@@ -179,7 +179,10 @@ describe('calendar API', () => {
       const october = await days('2026-09-28', '2026-11-08');
       expect(october).toHaveLength(42);
       const byDate = new Map(october.map((d) => [d.date, d]));
-      expect(byDate.get('2026-10-01')).toMatchObject({ mark: 'holiday', holidayName: '国庆节' });
+      // As in the reference: 10-01 国庆节 and 10-31 万圣夜 in the festival colour, 10-08 寒露 in grey.
+      expect(byDate.get('2026-10-01')).toMatchObject({ mark: 'holiday', holidayName: '国庆节', label: '国庆节', labelKind: 'festival' });
+      expect(byDate.get('2026-10-31')).toMatchObject({ festivals: ['万圣夜'], label: '万圣夜', labelKind: 'festival' });
+      expect(byDate.get('2026-10-08')).toMatchObject({ label: '寒露', labelKind: 'solarTerm' });
       expect(byDate.get('2026-10-10')).toMatchObject({ mark: 'makeup_workday', holidayName: '国庆节' });
       expect(byDate.get('2026-10-11')).toMatchObject({ mark: null, holidayName: null });
       // 2026-10-18 is 重阳节 (九月初九); 10-10 is 九月初一, labelled with the month.
@@ -199,7 +202,7 @@ describe('calendar API', () => {
         expect([day.lunarMonthName, day.lunarDayName, day.festivals, day.solarTerm], day.date).toEqual([
           lunar.monthName,
           lunar.dayName,
-          lunar.festivals,
+          [...lunar.festivals, ...solarFestivals(day.date)],
           lunar.solarTerm,
         ]);
       }

@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -82,5 +82,91 @@ test('screenshot.mjs lets no write request or websocket reach the server', { ski
   } finally {
     server.close();
     rmSync(home, { recursive: true, force: true });
+  }
+});
+
+// ---- 导航脚本（ADR-0008）----
+
+const NAV_PAGE = `<!doctype html><title>nav-probe</title>
+<nav><button id="month">月</button><button id="week">周</button><button id="del">删除</button><input id="q" aria-label="搜索"></nav>
+<main id="view">空</main>
+<script>
+  document.getElementById('month').onclick = () => {
+    document.getElementById('view').textContent = '月视图';
+    fetch('/track', { method: 'POST', body: 'click' }).catch(() => {});
+  };
+  document.getElementById('week').onclick = () => { document.getElementById('view').textContent = '周视图'; };
+  document.getElementById('del').onclick = () => { fetch('/delete-get-probe').catch(() => {}); };
+</script>`;
+
+async function navServer(seen) {
+  const server = createServer((req, res) => {
+    seen.push(`${req.method} ${req.url}`);
+    if (req.url === '/') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(NAV_PAGE);
+    } else {
+      res.writeHead(204);
+      res.end();
+    }
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  return server;
+}
+
+test('--script clicks navigation controls, takes the shots, still blocks writes', { skip: !hasChromium && 'Chromium 未安装' }, async () => {
+  const seen = [];
+  const server = await navServer(seen);
+  const home = mkdtempSync(path.join(tmpdir(), 'ref-env-it-'));
+  mkdirSync(path.join(home, 'profile'), { mode: 0o700 });
+  try {
+    const script = path.join(home, 'nav.json');
+    writeFileSync(
+      script,
+      JSON.stringify([
+        { click: 'text=月' },
+        { waitFor: 'text=月视图' },
+        { screenshot: 'month.png' },
+        { hover: '#week' },
+        { click: 'role=button[name="周"]' },
+        { waitFor: 'text=周视图' },
+      ]),
+    );
+    const shot = path.join(home, 'final.png');
+    const r = await run([`http://127.0.0.1:${server.address().port}/`, '-o', shot, '--wait', '200', '--script', script], { DIDA_REF_HOME: home });
+    assert.equal(r.code, 0, r.err);
+    const out = JSON.parse(r.out);
+    assert.ok(existsSync(path.join(home, 'month.png')), 'step screenshot written next to -o');
+    assert.ok(existsSync(shot), 'final screenshot written');
+    assert.deepEqual(out.screenshots, [path.join(home, 'month.png'), shot]);
+    assert.equal(out.steps.length, 6);
+    assert.ok(out.blockedRequests.some((b) => /^POST .*\/track$/.test(b)), `click's POST recorded: ${out.blockedRequests}`);
+    assert.deepEqual(seen.filter((s) => !/^(GET|HEAD|OPTIONS) /.test(s)), []);
+  } finally {
+    server.close();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('--script refuses to click a control that changes data, or an input', { skip: !hasChromium && 'Chromium 未安装' }, async () => {
+  for (const target of ['text=删除', '#q']) {
+    const seen = [];
+    const server = await navServer(seen);
+    const home = mkdtempSync(path.join(tmpdir(), 'ref-env-it-'));
+    mkdirSync(path.join(home, 'profile'), { mode: 0o700 });
+    try {
+      const script = path.join(home, 'nav.json');
+      writeFileSync(script, JSON.stringify([{ click: target }]));
+      const r = await run([`http://127.0.0.1:${server.address().port}/`, '-o', path.join(home, 'x.png'), '--wait', '0', '--script', script], {
+        DIDA_REF_HOME: home,
+      });
+      assert.notEqual(r.code, 0, `${target} should be refused`);
+      assert.match(r.err, /拒绝/);
+      assert.ok(!seen.includes('GET /delete-get-probe'), 'the handler never ran');
+      assert.ok(!existsSync(path.join(home, 'x.png')));
+    } finally {
+      server.close();
+      rmSync(home, { recursive: true, force: true });
+    }
   }
 });

@@ -1,11 +1,13 @@
 # 参照环境：服务器上的 Chromium + noVNC
 
-按 ADR-0007，用维护者的滴答小号做只读参照。服务器上跑一个 Chromium，通过 noVNC 给维护者登录；登录态保存在仓库外的浏览器配置目录里，`screenshot.mjs` 用 Playwright 加载这个目录对参照界面截图。
+按 ADR-0007（ADR-0008 修订），用维护者的滴答小号做只读参照。服务器上跑一个 Chromium，通过 noVNC 给维护者登录；登录态保存在仓库外的浏览器配置目录里，`screenshot.mjs` 用 Playwright 加载这个目录对参照界面截图。
 
 ## 只读规则
 
 - 只截图。不在参照账号里新建、修改或删除任何东西，包括任务、清单、标签、设置。需要看某个状态时，请维护者在小号里准备好，不要自己动手。
-- 截图工具只导航和截图，不点击、不输入，并且拦截所有非 GET/HEAD/OPTIONS 请求，以及全部 WebSocket 连接（WS 握手虽然是 GET，但连上后可以写数据）。输出里的 `blockedRequests` 会列出被拦截的请求，WebSocket 记为 `WS <地址>`。不要绕开这个工具去驱动已登录的浏览器。
+- 截图工具只导航和截图，不输入、不拖动，并且拦截所有非 GET/HEAD/OPTIONS 请求，以及全部 WebSocket 连接（WS 握手虽然是 GET，但连上后可以写数据）。输出里的 `blockedRequests` 会列出被拦截的请求，WebSocket 记为 `WS <地址>`。不要绕开这个工具去驱动已登录的浏览器。
+- 光打开网址截不出来的界面（例如日历的周、日、多日视图），可以用 `--script` 交给工具一个导航脚本，只做导航类的点击、悬停、滚动（ADR-0008），见下面「导航脚本」。PR 里附上用过的脚本和输出的 `blockedRequests`。
+- 如果页面一定要发出被拦截的写请求才能显示，就停下来，请维护者在 noVNC 里截图，不要放开拦截。
 - 不要在 noVNC 里的浏览器设置中开启「启动时继续浏览上次打开的网页」。截图工具在浏览器启动后才开始拦截，恢复出来的页面在这之前发出的请求拦不到。
 - 截图里有个人数据，登录态在配置目录里，这两样都不提交进仓库。截图工具拒绝把文件写进仓库；配置目录默认在 `~/.dida-reference`（权限 700）。
 - 全部验收结束后，运行 `./reference-env.sh purge --yes` 删除配置目录。
@@ -61,6 +63,43 @@ node screenshot.mjs https://dida365.com/webapp/ -o ~/reference-shots/inbox.png [
 ```
 
 输出路径必须在仓库外、以 `.png` 结尾。默认视口 1440x900、`zh-CN`、`Asia/Shanghai`。输出 JSON 里的 `finalUrl` 如果跳回了首页或登录页，说明登录态过期了。
+
+### 导航脚本（ADR-0008）
+
+```bash
+node screenshot.mjs 'https://dida365.com/webapp/#q/all/tasks' -o ~/reference-shots/x/week.png --script week.json
+```
+
+脚本是一个 JSON 数组，页面加载并等待 `--wait` 之后按顺序执行，最后再截 `-o` 那张图。每一步只能是下面之一（选择器是 Playwright 选择器：`text="周"` 精确匹配文字，`text=周` 是包含，`role=button[name="今天"]`，或 CSS）：
+
+| 步骤 | 作用 |
+| --- | --- |
+| `{ "click": "<选择器>" }` | 点击第一个匹配的可见元素 |
+| `{ "hover": "<选择器>" }` | 悬停（打开子菜单） |
+| `{ "scroll": "<选择器>", "by": 400 }` | 让元素竖向滚动若干像素 |
+| `{ "press": "Escape" }` | 只允许导航键：Escape、Tab、Shift+Tab、方向键、PageUp/PageDown、Home、End（不含 Enter 和空格） |
+| `{ "wait": 1000 }` | 等若干毫秒（最多 120000） |
+| `{ "waitFor": "<选择器>" }` | 等元素出现（15 秒超时） |
+| `{ "screenshot": "month.png", "fullPage": false }` | 中途截一张，相对路径相对于 `-o` 所在目录，同样不能在仓库内 |
+
+没有输入和拖动类的步骤；其他字段一律拒绝，整份脚本在启动浏览器之前就校验完。点击前工具会检查目标控件（离它最近的按钮 / 链接 / 菜单项）：输入框、下拉框、可编辑区域，以及文字里带「删除、新建、添加、完成、保存、确定、移动、归档、放弃、清空、退出、订阅、升级、编辑、上传」等字样的控件都拒绝点击，脚本报错退出、不截图。写请求的拦截不受脚本影响。
+
+输出 JSON 多了 `script`、`steps`（每一步执行完时已拦截的请求数 `blockedSoFar`）和 `screenshots`。
+
+例：日历周视图（先点左侧导航条的日历，再在视图下拉框里选「周」）：
+
+```json
+[
+  { "click": "a[href*='#c']" },
+  { "wait": 5000 },
+  { "click": "text=\"月\"" },
+  { "wait": 800 },
+  { "click": "text=\"周\"" },
+  { "wait": 5000 }
+]
+```
+
+切换视图时滴答会发 `PUT /api/v2/user/preferences/settings` 保存视图偏好，工具会拦掉它；页面照样切换，只是小号里的默认视图不变。
 
 ## 测试
 

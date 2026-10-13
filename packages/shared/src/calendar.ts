@@ -41,9 +41,9 @@ export const calendarRangeSchema = z
   .refine((r) => r.from > r.to || daysBetween(r.from, r.to) < CALENDAR_MAX_DAYS, { message: `最多 ${CALENDAR_MAX_DAYS} 天` });
 export type CalendarRange = z.infer<typeof calendarRangeSchema>;
 
-/** Monday of the week containing `date` (weeks start on Monday, as in China). */
+/** Sunday of the week containing `date` (weeks start on Sunday, like the reference 日历). */
 function weekStart(date: string): string {
-  return addDays(date, -((weekday(date) + 6) % 7));
+  return addDays(date, -weekday(date));
 }
 
 function firstOfMonth(date: string): string {
@@ -219,12 +219,14 @@ export const calendarDaySchema = z.object({
   /** 初一 … 三十 */
   lunarDayName: z.string(),
   lunarDay: z.number().int().min(1).max(30),
-  /** 传统节日 (春节, 中秋节, 清明节 …). */
+  /** 节日: 传统节日 (春节, 中秋节, 清明节 …) first, then 公历节日 (国庆节, 万圣夜 …). */
   festivals: z.array(z.string()),
   /** 节气 starting this day. */
   solarTerm: z.string().nullable(),
-  /** What the cell shows under the date (see `calendarDayLabel`). */
+  /** What the cell shows beside the date (see `calendarDayLabel`). */
   label: z.string(),
+  /** 节日 labels are drawn in the festival colour, the rest in grey. */
+  labelKind: z.enum(['festival', 'solarTerm', 'lunar']),
   /** 休 / 班 badge; null on ordinary days. */
   mark: calendarDayMarkSchema.nullable(),
   /** Holiday a 休 / 班 day belongs to, e.g. 国庆节. */
@@ -235,7 +237,12 @@ export type CalendarDay = z.infer<typeof calendarDaySchema>;
 export const calendarDaysResponseSchema = z.object({ days: z.array(calendarDaySchema) });
 export type CalendarDaysResponse = z.infer<typeof calendarDaysResponseSchema>;
 
-/** Label under the date: 传统节日, else 节气, else the 农历 month on 初一, else the 农历 day. */
-export function calendarDayLabel(day: Pick<CalendarDay, 'festivals' | 'solarTerm' | 'lunarDay' | 'lunarMonthName' | 'lunarDayName'>): string {
-  return day.festivals[0] ?? day.solarTerm ?? (day.lunarDay === 1 ? day.lunarMonthName : day.lunarDayName);
+/** Label beside the date: 节日, else 节气, else the 农历 month on 初一, else the 农历 day. */
+export function calendarDayLabel(
+  day: Pick<CalendarDay, 'festivals' | 'solarTerm' | 'lunarDay' | 'lunarMonthName' | 'lunarDayName'>,
+): Pick<CalendarDay, 'label' | 'labelKind'> {
+  const festival = day.festivals[0];
+  if (festival) return { label: festival, labelKind: 'festival' };
+  if (day.solarTerm) return { label: day.solarTerm, labelKind: 'solarTerm' };
+  return { label: day.lunarDay === 1 ? day.lunarMonthName : day.lunarDayName, labelKind: 'lunar' };
 }

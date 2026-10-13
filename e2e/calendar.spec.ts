@@ -38,6 +38,13 @@ async function taskByTitle(page: Page, title: string, from = '2026-09-28', to = 
   return task as ApiTask;
 }
 
+/** Pick a view from the 视图 menu (月 / 周 / 日 / 多日), like the reference's dropdown. */
+async function switchView(page: Page, label: '月' | '周' | '日' | '多日') {
+  await page.getByRole('button', { name: /^日历视图：/ }).click();
+  await page.getByRole('menuitemradio', { name: label, exact: true }).click();
+  await expect(page.getByRole('button', { name: `日历视图：${label}` })).toBeVisible();
+}
+
 async function quickAdd(page: Page, title: string) {
   const input = page.getByRole('textbox', { name: '新任务标题' });
   await expect(input).toBeFocused();
@@ -60,7 +67,7 @@ test('月视图: 农历 and 休 / 班, add on a day, drag a 日期区间 and a t
   await api(page, 'PATCH', '/api/settings', { timeZone: 'Asia/Shanghai' });
 
   await openCalendar(page);
-  await expect(page.getByRole('group', { name: '日历视图' }).getByRole('button', { name: '月', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: '日历视图：月' })).toBeVisible();
 
   // 农历, 传统节日, 法定假日 and 调休补班 (same data as the 工作日日历, EURO-10).
   await expect(cell(page, '10月1日')).toHaveAccessibleName(/国庆节休息/);
@@ -77,6 +84,13 @@ test('月视图: 农历 and 休 / 班, add on a day, drag a 日期区间 and a t
   expect((await taskByTitle(page, '交周报')).dates).toEqual({ allDay: true, startDate: null, dueDate: '2026-10-22' });
 
   await page.screenshot({ path: testInfo.outputPath(`calendar-month-${testInfo.project.name}.png`) });
+
+  // The + in the header adds a task for today (desktop only, like the reference).
+  if (!isMobile(page)) {
+    await page.getByRole('button', { name: '添加任务' }).click();
+    await quickAdd(page, '今天的事');
+    expect((await taskByTitle(page, '今天的事')).dates).toEqual({ allDay: true, startDate: null, dueDate: '2026-10-13' });
+  }
 
   // Drag and drop is a mouse gesture; touch users change dates in the detail.
   if (isMobile(page)) return;
@@ -107,8 +121,10 @@ test('周 / 日 / 多日: add at a time slot, drag to another time and onto the 
   });
   await openCalendar(page);
 
-  await page.getByRole('group', { name: '日历视图' }).getByRole('button', { name: '周' }).click();
+  await switchView(page, '周');
   await expect(page).toHaveURL(/\/calendar\/week\/2026-10-13$/);
+  // Weeks start on Sunday, like the reference.
+  await expect(page.getByRole('list', { name: '10月11日的任务' })).toBeVisible();
   await expect(page.getByRole('list', { name: '10月13日的任务' }).getByRole('button', { name: /评审会/ })).toHaveText(/09:00 - 10:30/);
 
   // Click an empty slot: a timed task at that hour.
@@ -119,17 +135,20 @@ test('周 / 日 / 多日: add at a time slot, drag to another time and onto the 
   await page.screenshot({ path: testInfo.outputPath(`calendar-week-${testInfo.project.name}.png`) });
 
   // 日 and 多日.
-  await page.getByRole('group', { name: '日历视图' }).getByRole('button', { name: '日', exact: true }).click();
+  await switchView(page, '日');
   await expect(page.getByRole('list', { name: '10月13日的任务' })).toBeVisible();
   await expect(page.getByRole('list', { name: '10月14日的任务' })).toHaveCount(0);
-  await page.getByRole('group', { name: '日历视图' }).getByRole('button', { name: '多日' }).click();
+  await page.screenshot({ path: testInfo.outputPath(`calendar-day-${testInfo.project.name}.png`) });
+  await switchView(page, '多日');
   await expect(page).toHaveURL(/\/calendar\/multiDay\/2026-10-13$/);
   await expect(page.getByRole('list', { name: '10月15日的任务' })).toBeVisible();
   await expect(page.getByRole('list', { name: '10月16日的任务' })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath(`calendar-multiday-${testInfo.project.name}.png`) });
   await page.getByRole('button', { name: '下一页' }).click();
   await expect(page).toHaveURL(/\/calendar\/multiDay\/2026-10-16$/);
   await page.getByRole('button', { name: '今天' }).click();
-  await page.getByRole('group', { name: '日历视图' }).getByRole('button', { name: '周' }).click();
+  await expect(page).toHaveURL(/\/calendar\/multiDay\/2026-10-13$/);
+  await switchView(page, '周');
 
   if (isMobile(page)) return;
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lunarToSolar, solarToLunar, traditionalFestivals } from './lunar.js';
+import { lunarToSolar, solarFestivals, solarToLunar, traditionalFestivals } from './lunar.js';
 
 /*
  * 农历 module (spec 用户故事 70、100). Expected values come from the published
@@ -87,5 +87,20 @@ describe('traditionalFestivals', () => {
 
   it('comes with solarToLunar too', () => {
     expect(solarToLunar('2026-09-25').festivals).toEqual(['中秋节']);
+  });
+});
+
+describe('solarFestivals', () => {
+  // The reference 日历 (2026-10, ADR-0008) labels 10-01 国庆节 and 10-31 万圣夜, but not 10-05 世界住房日.
+  it.each([
+    ['2026-10-01', ['国庆节']],
+    ['2026-10-31', ['万圣夜']],
+    ['2026-10-05', []],
+    ['2026-01-01', ['元旦']],
+    ['2026-12-25', ['圣诞节']],
+    ['2026-03-15', []],
+    ['2026-10-13', []],
+  ])('%s → %j', (date, expected) => {
+    expect(solarFestivals(date)).toEqual(expected);
   });
 });

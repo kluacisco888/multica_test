@@ -131,24 +131,24 @@
   --timeline-unscheduled-width: 240px; /* 待安排 panel */
 
   /* ---- 日历 (EURO-19) ----
-   * 休 / 班 badges and 节日 labels. Not measured from the reference: the
-   * reference 日历 page rendered blank in the read-only screenshot tool, so
-   * these follow the common Chinese calendar convention (休 red, 班 grey),
-   * all at least 4.5:1 against their background. */
-  --color-calendar-festival: #2f5ae0;
-  --color-calendar-holiday: #c62828;
-  --color-calendar-holiday-bg: #fdecea;
-  --color-calendar-workday: #5f6368;
-  --color-calendar-workday-bg: #eceef1;
-  --color-calendar-cell-hover: #fafbff;
-  --color-calendar-outside: #fcfcfd; /* days of the previous / next month */
-  --color-calendar-done: #f2f3f5;
+   * Measured from the reference 日历 (ADR-0008 screenshots, 1440×900). Text
+   * colours under 4.5:1 are darkened like the rest of the app; the reference
+   * value is in the comment. */
+  --color-calendar-bg: #f8faff; /* days of the month, header */
+  --color-calendar-outside: #f5f7fc; /* days of the previous / next month */
+  --color-calendar-line: #e9ebf0; /* reference #eceef3 rows, #e9eaef columns */
+  --color-calendar-cell-hover: #f0f3fd;
+  --color-calendar-festival: #087a5b; /* 国庆节, 重阳节, 万圣夜 (reference #0cce9f) */
+  --color-calendar-holiday: #0a8a63; /* 休 dot (reference #03ce90) */
+  --color-calendar-workday: #d6334a; /* 班 dot (reference #f57a82) */
+  --color-calendar-bar-text: #34394a;
+  --color-calendar-bar-done-text: #5f6470; /* reference #9096a7 */
   --calendar-detail-width: 400px;
-  --calendar-gutter: 56px; /* hour labels of the time grid */
-  --calendar-hour-height: 48px; /* CalendarPane HOUR_HEIGHT */
-  --calendar-lane-height: 22px; /* CalendarPane LANE_HEIGHT */
-  --calendar-cell-head: 28px; /* CalendarPane CELL_HEAD */
-  --calendar-cell-head-mobile: 38px; /* CalendarPane CELL_HEAD_MOBILE */
+  --calendar-gutter: 68px; /* hour labels of the time grid */
+  --calendar-hour-height: 60px; /* CalendarPane HOUR_HEIGHT */
+  --calendar-lane-height: 20px; /* CalendarPane LANE_HEIGHT */
+  --calendar-cell-head: 29px; /* CalendarPane CELL_HEAD */
+  --calendar-row-min: 96px; /* a 月 week row never gets shorter than this */
 
   /* ---- Shape & elevation ---- */
   --radius-sm: 4px;

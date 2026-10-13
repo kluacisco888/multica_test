@@ -1,6 +1,7 @@
 import {
   CALENDAR_MODE_LABELS,
   CALENDAR_MODES,
+  MULTI_DAY_COUNT,
   calendarDays,
   calendarTitle,
   daysBetween,
@@ -35,7 +36,8 @@ import {
   type MouseEvent,
   type RefObject,
 } from 'react';
-import { IconButton } from '../ui/controls.js';
+import { IconButton, MenuButton } from '../ui/controls.js';
+import { Icon } from '../ui/Icon.js';
 
 /*
  * 日历视图 (spec 用户故事 69–71): 月 / 周 / 日 / 多日. Tasks sit on the days
@@ -47,18 +49,19 @@ import { IconButton } from '../ui/controls.js';
  */
 
 /** Height of one hour in the time grid, px (kept in sync with --calendar-hour-height). */
-const HOUR_HEIGHT = 48;
+const HOUR_HEIGHT = 60;
 /** One 长条 lane in a day cell, px (--calendar-lane-height). */
-const LANE_HEIGHT = 22;
+const LANE_HEIGHT = 20;
 /** Day number line at the top of a 月 cell, px (--calendar-cell-head / --calendar-cell-head-mobile). */
-const CELL_HEAD = 28;
-const CELL_HEAD_MOBILE = 38;
+const CELL_HEAD = 29;
+const CELL_HEAD_MOBILE = 29;
 /** Drag snaps to this many minutes in the time grid. */
 const SNAP_MINUTES = 15;
 /** Shortest block drawn in the time grid (a timed point is drawn this long). */
 const MIN_BLOCK_MINUTES = 30;
 const DAY_MINUTES = 24 * 60;
-const SCROLL_TO_HOUR = 8;
+/** The time grid opens scrolled to this hour, like the reference. */
+const SCROLL_TO_HOUR = 9;
 
 export interface CalendarPaneProps {
   mode: CalendarMode;
@@ -119,7 +122,8 @@ export function dayLabel(date: string): string {
   return `${m}月${d}日`;
 }
 
-const SHORT_WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'] as const;
+/** Hour label of the time grid: 正午 at 12, like the reference. */
+const hourLabel = (h: number) => (h === 0 ? '' : h === 12 ? '正午' : `${pad(h)}:00`);
 const MARK_TEXT = { holiday: '休', makeup_workday: '班' } as const;
 const MARK_NAMES = { holiday: '休息', makeup_workday: '补班' } as const;
 
@@ -239,25 +243,40 @@ export function CalendarPane(props: CalendarPaneProps) {
           />
         )}
         <h1 className="calendar-title">{title}</h1>
-        <div className="calendar-modes" role="group" aria-label="日历视图">
-          {CALENDAR_MODES.map((m) => (
-            <button
-              key={m}
-              type="button"
-              className={`calendar-mode ${m === mode ? 'calendar-mode-active' : ''}`}
-              aria-pressed={m === mode}
-              onClick={() => props.onNavigate(m, m === 'month' ? anchor : visibleDays.includes(today) ? today : anchor)}
-            >
-              {CALENDAR_MODE_LABELS[m]}
-            </button>
-          ))}
-        </div>
-        <div className="calendar-nav">
-          <IconButton icon="chevronLeft" label="上一页" onClick={() => props.onNavigate(mode, stepCalendar(mode, anchor, -1))} />
-          <button type="button" className="calendar-today" onClick={() => props.onNavigate(mode, today)}>
-            今天
+        {!isMobile && (
+          <button
+            type="button"
+            className="calendar-header-button calendar-add"
+            aria-label="添加任务"
+            title="添加任务"
+            onClick={(e) => openQuickAdd(e, visibleDays.includes(today) ? today : anchor, null)}
+          >
+            <Icon name="plus" size={16} />
           </button>
-          <IconButton icon="chevronRight" label="下一页" onClick={() => props.onNavigate(mode, stepCalendar(mode, anchor, 1))} />
+        )}
+        <MenuButton
+          label={`日历视图：${CALENDAR_MODE_LABELS[mode]}`}
+          className="calendar-mode-menu"
+          triggerClassName="calendar-header-button calendar-mode-trigger"
+          items={CALENDAR_MODES.map((m) => ({
+            label: CALENDAR_MODE_LABELS[m],
+            checked: m === mode,
+            onSelect: () => props.onNavigate(m, m === 'month' ? anchor : visibleDays.includes(today) ? today : anchor),
+          }))}
+        >
+          {mode === 'multiDay' ? `${MULTI_DAY_COUNT}日` : CALENDAR_MODE_LABELS[mode]}
+          <Icon name="chevronDown" size={14} />
+        </MenuButton>
+        <div className="calendar-nav" role="group" aria-label="翻页">
+          <IconButton icon="chevronLeft" size={16} label="上一页" onClick={() => props.onNavigate(mode, stepCalendar(mode, anchor, -1))} />
+          {isMobile ? (
+            <IconButton icon="todayDot" size={16} label="今天" onClick={() => props.onNavigate(mode, today)} />
+          ) : (
+            <button type="button" className="calendar-today" onClick={() => props.onNavigate(mode, today)}>
+              今天
+            </button>
+          )}
+          <IconButton icon="chevronRight" size={16} label="下一页" onClick={() => props.onNavigate(mode, stepCalendar(mode, anchor, 1))} />
         </div>
       </header>
 
@@ -352,7 +371,7 @@ function MonthGrid(props: GridProps & { onDropDate: (date: string) => void }) {
     <div className="calendar-month">
       <div className="calendar-weekdays" aria-hidden="true">
         {visibleDays.slice(0, 7).map((date) => (
-          <span key={date}>{isMobile ? SHORT_WEEKDAYS[weekday(date)] : WEEKDAY_NAMES[weekday(date)]}</span>
+          <span key={date}>{WEEKDAY_NAMES[weekday(date)]}</span>
         ))}
       </div>
       <div className="calendar-weeks" ref={weeksRef}>
@@ -403,7 +422,7 @@ function MonthGrid(props: GridProps & { onDropDate: (date: string) => void }) {
                       aria-label={`${dayDescription(date, info)}，新建任务`}
                       onClick={(e) => props.onOpenQuickAdd(e, date, null)}
                     >
-                      <DayHead date={date} info={info} />
+                      <DayHead date={date} info={info} firstOfMonth={date.endsWith('-01')} />
                     </button>
                     {hiddenPerDay[col]! > 0 && (
                       <button
@@ -439,8 +458,7 @@ function MonthGrid(props: GridProps & { onDropDate: (date: string) => void }) {
                         span={span}
                         lists={props.lists}
                         selected={task.id === props.selectedTaskId}
-                        // A timed task on one day reads as a line with its time, like the reference.
-                        variant={!span.allDay && single ? 'dot' : 'bar'}
+                        showTime={!span.allDay && single}
                         continuesBefore={bar.continuesBefore}
                         continuesAfter={bar.continuesAfter}
                         onSelect={() => props.onSelectTask(task.id)}
@@ -462,17 +480,14 @@ function MonthGrid(props: GridProps & { onDropDate: (date: string) => void }) {
   );
 }
 
-function DayHead({ date, info }: { date: string; info: CalendarDay | undefined }) {
-  const festive = info ? info.festivals.length > 0 || info.solarTerm !== null : false;
+function DayHead({ date, info, firstOfMonth }: { date: string; info: CalendarDay | undefined; firstOfMonth?: boolean }) {
   return (
     <span className="calendar-day-head" aria-hidden="true">
-      <span className="calendar-day-number">{Number(date.slice(8))}</span>
-      {info && <span className={`calendar-lunar ${festive ? 'calendar-lunar-festival' : ''}`}>{info.label}</span>}
-      {info?.mark && (
-        <span className={`calendar-mark calendar-mark-${info.mark}`} title={`${info.holidayName ?? ''}${MARK_NAMES[info.mark]}`}>
-          {MARK_TEXT[info.mark]}
-        </span>
-      )}
+      <span className="calendar-day-number">
+        {firstOfMonth ? dayLabel(date) : Number(date.slice(8))}
+        {info?.mark && <span className={`calendar-mark calendar-mark-${info.mark}`}>{MARK_TEXT[info.mark]}</span>}
+      </span>
+      {info && <span className={`calendar-lunar calendar-lunar-${info.labelKind}`}>{info.label}</span>}
     </span>
   );
 }
@@ -482,7 +497,7 @@ function TaskBar({
   span,
   lists,
   selected,
-  variant,
+  showTime,
   continuesBefore,
   continuesAfter,
   onSelect,
@@ -493,7 +508,8 @@ function TaskBar({
   span: TaskSpan;
   lists: TaskList[];
   selected: boolean;
-  variant: 'bar' | 'dot';
+  /** Timed task on one day: its start time at the right end, like the reference. */
+  showTime: boolean;
   continuesBefore: boolean;
   continuesAfter: boolean;
   onSelect: () => void;
@@ -507,7 +523,7 @@ function TaskBar({
       draggable
       className={[
         'calendar-task',
-        `calendar-task-${variant}`,
+        'calendar-task-bar',
         done ? 'calendar-task-done' : '',
         selected ? 'calendar-task-selected' : '',
         continuesBefore ? 'calendar-task-cut-start' : '',
@@ -519,8 +535,11 @@ function TaskBar({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
-      {!span.allDay && variant === 'dot' && <span className="calendar-task-time">{span.startTime}</span>}
+      <span className="calendar-task-box" aria-hidden="true">
+        {done && <Icon name="check" size={9} />}
+      </span>
       <span className="calendar-task-title">{task.title}</span>
+      {showTime && !span.allDay && <span className="calendar-task-time">{span.startTime}</span>}
     </button>
   );
 }
@@ -578,7 +597,7 @@ function TimeGrid(
     onDropAtTime: (date: string, minutes: number) => void;
   },
 ) {
-  const { visibleDays, spans, today, tasks, timeZone, now, isMobile } = props;
+  const { visibleDays, spans, today, tasks, timeZone, now } = props;
   const scrollRef = useRef<HTMLDivElement>(null);
   const count = visibleDays.length;
   const dated = (tasks ?? []).filter((t) => spans.has(t.id));
@@ -605,15 +624,17 @@ function TimeGrid(
           const info = props.days.get(date);
           return (
             <div key={date} className={`calendar-tg-day ${date === today ? 'calendar-tg-day-today' : ''}`} aria-hidden="true">
-              <span className="calendar-tg-weekday">{isMobile ? SHORT_WEEKDAYS[weekday(date)] : WEEKDAY_NAMES[weekday(date)]}</span>
-              <DayHead date={date} info={info} />
+              <span className="calendar-tg-weekday">{WEEKDAY_NAMES[weekday(date)]}</span>
+              <DayHead date={date} info={info} firstOfMonth={date.endsWith('-01')} />
             </div>
           );
         })}
       </div>
 
       <div className="calendar-allday">
-        <span className="calendar-tg-gutter calendar-allday-label">全天</span>
+        <span className="calendar-tg-gutter calendar-allday-label">
+          <span className="visually-hidden">全天</span>
+        </span>
         <div
           className="calendar-allday-row"
           style={{ height: allDayLanes * LANE_HEIGHT + 6 }}
@@ -658,7 +679,7 @@ function TimeGrid(
                     span={spans.get(bar.id) as TaskSpan}
                     lists={props.lists}
                     selected={task.id === props.selectedTaskId}
-                    variant="bar"
+                    showTime={false}
                     continuesBefore={bar.continuesBefore}
                     continuesAfter={bar.continuesAfter}
                     onSelect={() => props.onSelectTask(task.id)}
@@ -680,7 +701,7 @@ function TimeGrid(
           <div className="calendar-tg-gutter calendar-tg-hours" aria-hidden="true">
             {Array.from({ length: 24 }, (_, h) => (
               <span key={h} className="calendar-tg-hour" style={{ top: h * HOUR_HEIGHT }}>
-                {h === 0 ? '' : `${pad(h)}:00`}
+                {hourLabel(h)}
               </span>
             ))}
           </div>

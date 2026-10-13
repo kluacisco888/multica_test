@@ -27,25 +27,27 @@ const allDay = (dueDate: string, startDate: string | null = null): TaskDates => 
 const timed = (dueAt: string, startAt: string | null = null, timeZone = SH): TaskDates => ({ allDay: false, startAt, dueAt, timeZone });
 
 describe('visible days', () => {
-  it('month: whole weeks (Monday first) covering the month', () => {
+  // Weeks start on Sunday, like the reference (ADR-0008 screenshots of 2026-10).
+  it('month: whole weeks (Sunday first) covering the month', () => {
     const days = calendarDays('month', '2026-10-13');
     // 2026-10-01 is a Thursday, 10-31 a Saturday.
-    expect(days[0]).toBe('2026-09-28');
-    expect(days.at(-1)).toBe('2026-11-01');
+    expect(days[0]).toBe('2026-09-27');
+    expect(days.at(-1)).toBe('2026-10-31');
     expect(days).toHaveLength(35);
   });
 
-  it('month: a month starting on Monday starts on its first day', () => {
-    // 2026-06-01 is a Monday, 06-30 a Tuesday.
-    const days = calendarDays('month', '2026-06-20');
-    expect(days[0]).toBe('2026-06-01');
-    expect(days.at(-1)).toBe('2026-07-05');
+  it('month: a month starting on Sunday starts on its first day', () => {
+    // 2026-11-01 is a Sunday, 11-30 a Monday.
+    const days = calendarDays('month', '2026-11-20');
+    expect(days[0]).toBe('2026-11-01');
+    expect(days.at(-1)).toBe('2026-12-05');
   });
 
-  it('week: Monday to Sunday around the anchor', () => {
-    expect(calendarDays('week', '2026-10-18')).toEqual([
-      '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18',
+  it('week: Sunday to Saturday around the anchor', () => {
+    expect(calendarDays('week', '2026-10-17')).toEqual([
+      '2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17',
     ]);
+    expect(calendarDays('week', '2026-10-18')[0]).toBe('2026-10-18');
   });
 
   it('day and 多日 (3 days) start at the anchor', () => {
@@ -106,7 +108,7 @@ describe('where a task sits', () => {
 });
 
 describe('长条 lanes', () => {
-  const week = calendarDays('week', '2026-10-13'); // 10-12 … 10-18
+  const week = ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18'];
 
   it('puts overlapping bars in separate lanes and reuses free lanes', () => {
     const bars = layoutDayBars(week, [
@@ -201,10 +203,10 @@ describe('dragging to a time (周 / 日 / 多日视图)', () => {
 describe('农历 label of a day', () => {
   const base = { lunarMonthName: '九月', lunarDayName: '初三', lunarDay: 3, festivals: [] as string[], solarTerm: null as string | null };
 
-  it('shows 传统节日 first, then 节气, then 农历 month on 初一, else the 农历 day', () => {
-    expect(calendarDayLabel({ ...base, festivals: ['中秋节'], solarTerm: '白露' })).toBe('中秋节');
-    expect(calendarDayLabel({ ...base, solarTerm: '寒露' })).toBe('寒露');
-    expect(calendarDayLabel({ ...base, lunarDay: 1, lunarDayName: '初一' })).toBe('九月');
-    expect(calendarDayLabel(base)).toBe('初三');
+  it('shows 节日 first, then 节气, then 农历 month on 初一, else the 农历 day', () => {
+    expect(calendarDayLabel({ ...base, festivals: ['中秋节'], solarTerm: '白露' })).toEqual({ label: '中秋节', labelKind: 'festival' });
+    expect(calendarDayLabel({ ...base, solarTerm: '寒露' })).toEqual({ label: '寒露', labelKind: 'solarTerm' });
+    expect(calendarDayLabel({ ...base, lunarDay: 1, lunarDayName: '初一' })).toEqual({ label: '九月', labelKind: 'lunar' });
+    expect(calendarDayLabel(base)).toEqual({ label: '初三', labelKind: 'lunar' });
   });
 });

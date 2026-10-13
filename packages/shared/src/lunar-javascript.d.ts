@@ -6,6 +6,8 @@ declare module 'lunar-javascript' {
     getMonth(): number;
     getDay(): number;
     getLunar(): Lunar;
+    /** 公历节日 and some 纪念日 on this day. */
+    getFestivals(): string[];
     toYmd(): string;
   }
   interface Lunar {

@@ -27,6 +27,8 @@ const paths = {
   ),
   chevronRight: <path d="m10 7 5 5-5 5" />,
   chevronDown: <path d="m7 10 5 5 5-5" />,
+  /** 今天 in the narrow 日历 header (the reference's hollow dot). */
+  todayDot: <circle cx="12" cy="12" r="4.5" />,
   chevronLeft: <path d="m14 7-5 5 5 5" />,
   plus: <path d="M12 5v14M5 12h14" />,
   more: (

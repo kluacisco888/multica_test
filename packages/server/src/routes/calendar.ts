@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { addDays, calendarDayLabel, calendarRangeSchema, daysBetween, type CalendarDay, type CalendarDaysResponse } from '@dida/shared';
-import { solarToLunar } from '@dida/shared/lunar';
+import { solarFestivals, solarToLunar } from '@dida/shared/lunar';
 import { sendValidationError } from '../http-errors.js';
 
 /*
  * 日历视图 (spec 用户故事 70): what each day cell shows besides tasks: 农历,
- * 传统节日, 节气, and the 休 (法定假日) / 班 (调休补班) badge. Both come from the
+ * 节日 (传统 and 公历), 节气, and the 休 (法定假日) / 班 (调休补班) badge. Both come from the
  * same sources as the rest of the app (EURO-10): `@dida/shared/lunar` and the
  * 工作日日历 of `app.holidays`, so the calendar always agrees with 重复任务.
  * Public data, but like every /api route it needs a session.
@@ -26,12 +26,12 @@ export function calendarRoutes(app: FastifyInstance) {
         lunarMonthName: lunar.monthName,
         lunarDayName: lunar.dayName,
         lunarDay: lunar.day,
-        festivals: lunar.festivals,
+        festivals: [...lunar.festivals, ...solarFestivals(date)],
         solarTerm: lunar.solarTerm,
         mark: info.isHoliday ? ('holiday' as const) : info.isMakeupWorkday ? ('makeup_workday' as const) : null,
         holidayName: info.holidayName,
       };
-      days.push({ ...day, label: calendarDayLabel(day) });
+      days.push({ ...day, ...calendarDayLabel(day) });
     }
     const response: CalendarDaysResponse = { days };
     return response;

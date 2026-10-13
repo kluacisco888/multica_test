@@ -8,6 +8,8 @@ import {
   isReadOnlyMethod,
   resolveOutputPath,
   parseArgs,
+  parseScript,
+  forbiddenControl,
   profileLockOwner,
 } from '../lib.mjs';
 
@@ -38,7 +40,9 @@ test('parseArgs reads url, output and options with defaults', () => {
     fullPage: true,
     waitMs: 5000,
     viewport: { width: 1280, height: 800 },
+    script: null,
   });
+  assert.equal(parseArgs(['https://dida365.com/', '-o', '/x/b.png', '--script', 'nav.json']).script, 'nav.json');
   const d = parseArgs(['https://dida365.com/', '-o', '/x/b.png']);
   assert.equal(d.fullPage, false);
   assert.equal(d.waitMs, 3000);
@@ -67,5 +71,61 @@ test('profileLockOwner reports a live lock and ignores stale or missing ones', (
     assert.equal(profileLockOwner(dir), null);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('parseScript accepts only navigation steps (ADR-0008)', () => {
+  const steps = parseScript(
+    JSON.stringify([
+      { click: 'role=link[name="日历"]' },
+      { hover: 'text=月' },
+      { scroll: '.list', by: 300 },
+      { wait: 500 },
+      { waitFor: 'text=2026年10月' },
+      { screenshot: 'month.png', fullPage: true },
+      { press: 'Escape' },
+    ]),
+  );
+  assert.deepEqual(steps, [
+    { action: 'click', selector: 'role=link[name="日历"]' },
+    { action: 'hover', selector: 'text=月' },
+    { action: 'scroll', selector: '.list', by: 300 },
+    { action: 'wait', ms: 500 },
+    { action: 'waitFor', selector: 'text=2026年10月' },
+    { action: 'screenshot', output: 'month.png', fullPage: true },
+    { action: 'press', key: 'Escape' },
+  ]);
+});
+
+test('parseScript rejects typing, dragging, unknown steps and bad values', () => {
+  assert.throws(() => parseScript('{}'), /数组/);
+  assert.throws(() => parseScript('not json'), /JSON/);
+  for (const step of [
+    { fill: 'input', value: 'x' },
+    { type: 'abc' },
+    { dragTo: 'x' },
+    { press: 'a' },
+    { press: 'Enter' },
+    { click: 'x', extra: 1 },
+    { click: '' },
+    { wait: -1 },
+    { wait: 120001 },
+    { screenshot: 'a.jpg' },
+    { scroll: 'x', by: 'far' },
+  ]) {
+    assert.throws(() => parseScript(JSON.stringify([step])), /步骤/, JSON.stringify(step));
+  }
+});
+
+test('forbiddenControl flags controls that would create, change or delete data', () => {
+  for (const label of ['删除', '新建清单', '添加任务', '完成', '保存', '确定', '移动到', '归档', '放弃', '清空回收站', '退出登录', '订阅', '升级高级会员', 'Delete', 'Add Task']) {
+    assert.ok(forbiddenControl({ text: label, tag: 'button' }), label);
+  }
+  assert.ok(forbiddenControl({ text: '', tag: 'input', type: 'checkbox' }), 'checkbox');
+  assert.ok(forbiddenControl({ text: '', tag: 'input', type: 'text' }), 'text input');
+  assert.ok(forbiddenControl({ text: '', tag: 'textarea' }), 'textarea');
+  assert.ok(forbiddenControl({ text: '', tag: 'div', editable: true }), 'contenteditable');
+  for (const label of ['月', '周', '日', '多日', '日历', '今天', '下一页', '']) {
+    assert.equal(forbiddenControl({ text: label, tag: 'div' }), null, label);
   }
 });

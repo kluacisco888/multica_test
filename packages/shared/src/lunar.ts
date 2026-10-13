@@ -79,3 +79,38 @@ export function traditionalFestivals(date: string): string[] {
 function festivalsOf(lunarFestivals: string[], solarTerm: string | null): string[] {
   return solarTerm === '清明' ? [...lunarFestivals, '清明节'] : [...lunarFestivals];
 }
+
+/**
+ * 公历节日 the 日历 shows (元旦, 国庆节, 圣诞节 …), named like the reference.
+ * lunar-javascript also lists 纪念日 such as 世界住房日; the reference leaves
+ * those out (checked on 2026-10-05), so only these are kept.
+ */
+const SOLAR_FESTIVAL_NAMES: Readonly<Record<string, string>> = {
+  元旦节: '元旦',
+  情人节: '情人节',
+  妇女节: '妇女节',
+  植树节: '植树节',
+  愚人节: '愚人节',
+  劳动节: '劳动节',
+  青年节: '青年节',
+  母亲节: '母亲节',
+  儿童节: '儿童节',
+  父亲节: '父亲节',
+  建党节: '建党节',
+  建军节: '建军节',
+  教师节: '教师节',
+  国庆节: '国庆节',
+  万圣节前夜: '万圣夜',
+  万圣节: '万圣节',
+  感恩节: '感恩节',
+  平安夜: '平安夜',
+  圣诞节: '圣诞节',
+};
+
+/** 公历节日 on a `YYYY-MM-DD` date. Throws RangeError for an invalid date. */
+export function solarFestivals(date: string): string[] {
+  const { year, month, day } = parseCivilDate(date);
+  return Solar.fromYmd(year, month, day)
+    .getFestivals()
+    .flatMap((name: string) => SOLAR_FESTIVAL_NAMES[name] ?? []);
+}
