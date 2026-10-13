@@ -72,7 +72,16 @@
   --color-border-strong: #8a8b8d; /* checkbox outline: 3:1 for UI components */
   --color-focus: #2f5ae0;
 
-  /* ---- Typography ---- */
+  /* ---- Colour: 时间线 (measured on the reference timeline, 1440×900) ---- */
+  --color-timeline-track: #f7f8f8; /* day area behind the bars */
+  --color-timeline-weekend: #f2f3f3; /* Saturday and Sunday columns */
+  --color-timeline-row-line: #ebecec; /* line between rows */
+  --color-timeline-today: rgb(224 49 49 / 0.24); /* today line (#f2d0d0 on the track) */
+  --color-timeline-bar: #4772fa; /* bar accent when the 清单 has no colour */
+  /* Weekday / past / weekend day labels: reference #b7b7b7 (2:1), darkened like --color-text-secondary. */
+  --color-timeline-day-dim: #6b6c6e;
+
+
   --font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
     'Noto Sans CJK SC', 'Segoe UI', sans-serif;
   --font-size-xs: 12px; /* counts, meta */
@@ -116,6 +125,10 @@
   --attachment-card-height: 52px; /* file 附件 card */
   --attachment-preview-width: 960px; /* preview dialog (images, PDF) */
   --comment-avatar-size: 28px;
+  --timeline-row-height: 44px; /* reference: 44px rows */
+  --timeline-head-height: 40px; /* date header row */
+  --timeline-bar-height: 28px;
+  --timeline-unscheduled-width: 240px; /* 待安排 panel */
 
   /* ---- Shape & elevation ---- */
   --radius-sm: 4px;
