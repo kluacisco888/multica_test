@@ -164,7 +164,7 @@ CI 定义在 `ci/github-actions.yml`：lint、类型检查、四层测试，再�
 | `DELETE /api/tasks/:id` | 删除：任务连同子任务、检查项移进回收站（软删除，`/api/changes` 里是墓碑），204 |
 | `GET /api/trash` | 回收站：用户删除的那个任务（子任务跟着它，不单独列出），最近删除的在前，带 `deletedAt` |
 | `POST /api/trash/:id/restore` | 还原：任务、子任务和检查项一起恢复（新修订号）；原清单已删除就回到收件箱，父任务不在了就变成顶层任务 |
-| `DELETE /api/trash/:id`、`DELETE /api/trash` | 彻底删除一个 / 清空回收站：清空标题、描述、日期、标签和检查项文字，墓碑保留。后台任务 `trash.purge`（pg-boss，每天 03:30 和启动时各一次）对删除满 30 天的任务做同样的清理 |
+| `DELETE /api/trash/:id`、`DELETE /api/trash` | 彻底删除一个 / 清空回收站：清空标题、描述、日期、标签和检查项文字，附件和评论也变成墓碑并清空文件名和评论内容，墓碑保留。附件文件在事务提交后删除；删除失败时附件行已是墓碑、文件还在，下一次清理（`trash.purge` 或下一次彻底删除）会重试。后台任务 `trash.purge`（pg-boss，每天 03:30 和启动时各一次）对删除满 30 天的任务做同样的清理。应用每次启动还会执行幂等的 `cleanUpPurged()`，补清理 EURO-32 之前彻底删除留下的附件和评论 |
 | `kind`（PATCH） | `text` ⇄ `checklist`：描述每个非空行变成一个检查项（去掉 `- `、`1. `、`[x]` 等列表标记，`[x]` 记为已勾选），描述清空；切回时每个检查项变成一行描述（勾选状态不保留），检查项删除（墓碑） |
 | `GET/POST /api/tasks/:id/checklist-items` | 检查项列表 / 新建（只能加到检查清单模式的任务上，否则 400 `not_checklist`），默认排在最后 |
 | `PATCH/DELETE /api/checklist-items/:id` | 勾选、改文字、`sortOrder` 排序；删除是软删除。检查项在 `/api/changes` 里的实体类型是 `checklistItem` |

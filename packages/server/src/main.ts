@@ -19,6 +19,9 @@ const app = await buildApp({
 });
 // Partial uploads from a crash are never finished; drop them so backups stay clean.
 await app.attachmentStore.cleanIncoming();
+// 附件 / 评论 that purges before EURO-32 left behind; idempotent, so it runs on every start.
+const cleared = await app.trash.cleanUpPurged();
+if (cleared > 0) app.log.info({ cleared }, '回收站: cleared attachments and comments of purged tasks');
 
 if (!config.encryptionKey) {
   app.log.warn('APP_ENCRYPTION_KEY is not set: 通知渠道 cannot be saved or used (generate one with `openssl rand -base64 32`)');
