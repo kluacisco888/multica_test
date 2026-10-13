@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { inArray } from 'drizzle-orm';
 import { fixedClock } from '../../src/clock.js';
 import { reminderDeliveries } from '../../src/db/schema/reminders.js';
+import { startFakeSmtp, type FakeSmtpServer } from '../fakes/fake-smtp.js';
 import { startFakeWebhook, type FakeWebhookServer } from '../fakes/fake-webhook.js';
 import { createTestApp, type TestApp, type TestUser } from '../support/test-app.js';
 
@@ -19,15 +20,18 @@ describe('reminders: review edge cases', () => {
   const clock = fixedClock(START);
   let t: TestApp;
   let hook: FakeWebhookServer;
+  let smtp: FakeSmtpServer;
   let n = 0;
 
   beforeAll(async () => {
     hook = await startFakeWebhook();
+    smtp = await startFakeSmtp();
     t = await createTestApp({ clock });
   });
   afterAll(async () => {
     await t.close();
     await hook.close();
+    await smtp.close();
   });
 
   function api(user: TestUser | null, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', url: string, payload?: object) {
@@ -157,5 +161,57 @@ describe('reminders: review edge cases', () => {
       expect.objectContaining({ taskTitle: '渠道被删', channelId: u.channelId, channelName: '飞书', attempts: 0, error: '渠道已删除', fireAt: DUE }),
     ]);
     expect(await alerts(u)).toHaveLength(1);
+  });
+
+  it('round 1: a closed alert cannot be snoozed (409)', async () => {
+    const u = await account();
+    const alert = await firedAlert(u, '先关闭');
+    expect((await api(u, 'POST', `/api/reminders/alerts/${alert.id}/dismiss`)).statusCode).toBe(204);
+    const res = await api(u, 'POST', `/api/reminders/alerts/${alert.id}/snooze`, { minutes: 5 });
+    expect(res.statusCode).toBe(409);
+    clock.set('2026-10-14T02:05:00.000Z');
+    await t.app.reminders.tick();
+    expect(u.hooks()).toHaveLength(1);
+  });
+
+  it('round 1: one of two chosen channels deleted — the other is sent, the deleted one is a 渠道已删除 failure', async () => {
+    const u = await account();
+    const second = await api(u, 'POST', '/api/notification-channels', {
+      type: 'feishu',
+      name: '飞书2',
+      isDefault: false,
+      config: { webhookUrl: `${hook.url}/hook/${u.username}-2` },
+    });
+    expect(second.statusCode, second.body).toBe(201);
+    const secondId = second.json().id as string;
+    await createTask(u, { title: '删一个', dates: timed(DUE), reminders: [{ type: 'before', minutes: 0 }], reminderChannelIds: [u.channelId, secondId] });
+    expect((await api(u, 'DELETE', `/api/notification-channels/${secondId}`)).statusCode).toBeLessThan(300);
+    clock.set(DUE);
+    expect(await t.app.reminders.tick()).toMatchObject({ fired: 1, sent: 1, failed: 1 });
+    expect(u.hooks()).toHaveLength(1);
+    expect(hook.requests.filter((r) => r.path === `/hook/${u.username}-2`)).toHaveLength(0);
+    const failures = (await api(u, 'GET', '/api/reminders/failures')).json().failures;
+    expect(failures).toEqual([expect.objectContaining({ channelId: secondId, channelName: '飞书2', error: '渠道已删除', attempts: 0 })]);
+  });
+
+  it('round 1: an SMTP 5xx rejection is retried at +1, +6, +21 minutes before it is a failure', async () => {
+    const u = await account();
+    const mail = await api(u, 'POST', '/api/notification-channels', {
+      type: 'email',
+      name: '邮件',
+      isDefault: false,
+      config: { host: smtp.host, port: smtp.port, security: 'none', username: `${u.username}@qq.com`, password: 'code', to: `${u.username}@qq.com` },
+    });
+    expect(mail.statusCode, mail.body).toBe(201);
+    await createTask(u, { title: '邮件550', dates: timed(DUE), reminders: [{ type: 'before', minutes: 0 }], reminderChannelIds: [mail.json().id] });
+    smtp.failNext(550, 550, 550, 550);
+    const fire = new Date(DUE).getTime();
+    for (const offset of [0, 60_000, 6 * 60_000]) {
+      clock.set(new Date(fire + offset));
+      expect(await t.app.reminders.tick()).toMatchObject({ retrying: 1, failed: 0 });
+    }
+    clock.set(new Date(fire + 21 * 60_000));
+    expect(await t.app.reminders.tick()).toMatchObject({ retrying: 0, failed: 1 });
+    expect((await api(u, 'GET', '/api/reminders/failures')).json().failures).toEqual([expect.objectContaining({ attempts: 4 })]);
   });
 });
