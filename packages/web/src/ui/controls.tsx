@@ -269,14 +269,19 @@ export function ContextMenu({
     function onPointerDown(event: PointerEvent) {
       if (!menu?.contains(event.target as Node)) onCloseRef.current();
     }
-    function onScroll() {
+    // The menu is pinned to a viewport point: close it when that point moves.
+    function onViewportChange(event: Event) {
+      // Scrolling a long menu itself is fine.
+      if (event.target instanceof Node && menu?.contains(event.target)) return;
       onCloseRef.current();
     }
     document.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('resize', onScroll);
+    window.addEventListener('resize', onViewportChange);
+    window.addEventListener('scroll', onViewportChange, true);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown);
-      window.removeEventListener('resize', onScroll);
+      window.removeEventListener('resize', onViewportChange);
+      window.removeEventListener('scroll', onViewportChange, true);
     };
   }, [x, y]);
 

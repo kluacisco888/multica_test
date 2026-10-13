@@ -144,7 +144,9 @@ export function tagRoutes(app: FastifyInstance) {
           for (const task of tagged) {
             await ops.update(tasks, task.id, { tagIds: task.tagIds.filter((t) => t !== tag.id) });
           }
-          // Tombstones are not served with their fields, but keep them clean for a later 回收站 restore.
+          // Tombstones only expose id/revision/deletedAt to sync clients, so this cleanup bypasses
+          // the sync writer on purpose (no new revision): it only keeps a later 回收站 restore
+          // from bringing back a deleted 标签. The README lists this as the one allowed raw write.
           await tx
             .update(tasks)
             .set({ tagIds: sql`array_remove(${tasks.tagIds}, ${tag.id}::uuid)` })

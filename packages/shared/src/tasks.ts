@@ -28,6 +28,7 @@ export const TASK_MAX_TAGS = 50;
 const tagIdsSchema = z
   .array(z.uuid())
   .max(TASK_MAX_TAGS, `最多 ${TASK_MAX_TAGS} 个标签`)
+  // Lower-case like PostgreSQL prints uuids, so duplicates differing in case collapse too.
   .transform((ids) => [...new Set(ids.map((id) => id.toLowerCase()))]);
 
 export const taskStatusSchema = z.enum(['open', 'completed', 'abandoned']);

@@ -139,7 +139,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   useEffect(() => {
     const unknownList = sidebar && route.listId && !sidebar.lists.some((l) => l.id === route.listId);
     const unknownTag = tags && route.tagId && !tags.some((t) => t.id === route.tagId);
-    if (unknownList || unknownTag) navigate({ listId: null, taskId: null }, { replace: true });
+    if (unknownList || unknownTag) navigate({ listId: null, tagId: null, taskId: null }, { replace: true });
   }, [sidebar, tags, route.listId, route.tagId, navigate]);
 
   const currentScope = view ? scopeKey(view) : null;
@@ -339,7 +339,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     try {
       await api.deleteTag(tag.id);
       setDialog({ kind: 'none' });
-      if (route.tagId === tag.id) navigate({ listId: null, taskId: null });
+      if (route.tagId === tag.id) navigate({ listId: null, tagId: null, taskId: null });
       await reloadTags();
       // Tasks on screen lost the 标签: refetch them.
       setTasksEpoch((n) => n + 1);
