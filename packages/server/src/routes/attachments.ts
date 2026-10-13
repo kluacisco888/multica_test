@@ -17,6 +17,7 @@ import { attachments } from '../db/schema/attachments.js';
 import { tasks } from '../db/schema/tasks.js';
 import { sendError, sendValidationError } from '../http-errors.js';
 import { findOwned } from '../sync/sync.js';
+import { lockTaskTrees } from '../task-tree.js';
 import { idTaken, notFound } from './respond.js';
 
 type Params = { Params: { id: string } };
@@ -98,9 +99,11 @@ export function attachmentRoutes(app: FastifyInstance) {
       }
       // From here on the file at (userId, id) was created by this request.
       try {
-        const row = await app.sync.transaction(userId, async (ops) => {
-          // The 任务 may have been deleted while the file was uploading.
-          if (!(await findOwned(app.db, tasks, userId, task.id))) return null;
+        const row = await app.sync.transaction(userId, async (ops, tx) => {
+          // The 任务 may have been deleted while the file was uploading; the
+          // lock (same as 删除 / 彻底删除) keeps it from being purged under us.
+          await lockTaskTrees(tx, userId);
+          if (!(await findOwned(tx, tasks, userId, task.id))) return null;
           return ops.insert(attachments, {
             id,
             taskId: task.id,

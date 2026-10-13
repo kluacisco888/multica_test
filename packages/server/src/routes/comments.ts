@@ -11,6 +11,7 @@ import { comments } from '../db/schema/attachments.js';
 import { tasks } from '../db/schema/tasks.js';
 import { sendValidationError } from '../http-errors.js';
 import { findOwned } from '../sync/sync.js';
+import { lockTaskTrees } from '../task-tree.js';
 import { notFound, Rejection, respond } from './respond.js';
 
 type Params = { Params: { id: string } };
@@ -52,7 +53,13 @@ export function commentRoutes(app: FastifyInstance) {
     const { id, content } = body.data;
     return respond(
       reply,
-      () => app.sync.transaction(userId, (ops) => ops.insert(comments, { ...(id ? { id } : {}), taskId: task.id, content, editedAt: null })),
+      () =>
+        app.sync.transaction(userId, async (ops, tx) => {
+          // Same lock as 删除 / 彻底删除: a 评论 never lands on a task purged meanwhile.
+          await lockTaskTrees(tx, userId);
+          if (!(await findOwned(tx, tasks, userId, task.id))) throw new Rejection(notFound);
+          return ops.insert(comments, { ...(id ? { id } : {}), taskId: task.id, content, editedAt: null });
+        }),
       (row) => reply.code(201).send(commentToApi(row)),
     );
   });

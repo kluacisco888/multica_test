@@ -87,7 +87,9 @@ export async function buildApp(deps: AppDeps) {
   app.decorate('db', db);
   const sync = createSyncWriter(db, clock);
   app.decorate('sync', sync);
-  app.decorate('trash', createTrashService({ db, sync, clock }));
+  const attachmentStore = createAttachmentStore(config.dataDir);
+  app.decorate('attachmentStore', attachmentStore);
+  app.decorate('trash', createTrashService({ db, sync, clock, files: attachmentStore, log: app.log }));
   app.decorate('accounts', accounts);
   app.decorate('sessions', sessions);
   app.decorate(
@@ -107,7 +109,6 @@ export async function buildApp(deps: AppDeps) {
   });
   const cipher = config.encryptionKey ? createCredentialCipher(config.encryptionKey) : null;
   app.decorate('notifier', createNotifier({ db, cipher, clock }));
-  app.decorate('attachmentStore', createAttachmentStore(config.dataDir));
   await app.register(fastifyCookie);
   registerAuthentication(app, { sessions, config });
 

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream, type ReadStream } from 'node:fs';
-import { link, mkdir, rm, stat } from 'node:fs/promises';
+import { link, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { Transform, type Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -39,11 +39,23 @@ export interface AttachmentStore {
   write(userId: string, id: string, body: Readable, maxBytes: number): Promise<number>;
   open(userId: string, id: string): Promise<{ stream: ReadStream; size: number } | null>;
   remove(userId: string, id: string): Promise<void>;
+  /** Attachment ids that have a file, per user; only `userId`'s when given. */
+  list(userId?: string): Promise<{ userId: string; id: string }[]>;
   /** Delete partial uploads left by a crash; call once at startup, before serving. */
   cleanIncoming(): Promise<void>;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Entry names of a directory; none when it does not exist. */
+async function names(dir: string): Promise<string[]> {
+  try {
+    return await readdir(dir);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+}
 
 export function createAttachmentStore(dataDir: string): AttachmentStore {
   const root = path.resolve(dataDir, 'attachments');
@@ -98,6 +110,17 @@ export function createAttachmentStore(dataDir: string): AttachmentStore {
     },
     async remove(userId, id) {
       await rm(fileOf(userId, id), { force: true });
+    },
+    async list(userId) {
+      const users = userId ? [userId.toLowerCase()] : await names(root);
+      const files: { userId: string; id: string }[] = [];
+      for (const user of users) {
+        if (!UUID.test(user)) continue;
+        for (const id of await names(path.join(root, user))) {
+          if (UUID.test(id)) files.push({ userId: user, id });
+        }
+      }
+      return files;
     },
     async cleanIncoming() {
       await rm(incoming, { recursive: true, force: true });
