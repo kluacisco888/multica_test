@@ -74,7 +74,7 @@ export function attachmentRoutes(app: FastifyInstance) {
       if (!task) return notFound(reply);
       const query = uploadAttachmentQuerySchema.safeParse(request.query);
       if (!query.success) return sendValidationError(reply, query.error);
-      const declared = Number(request.headers['content-length'] ?? 0);
+      const declared = Number([request.headers['content-length'] ?? 0].flat()[0]);
       if (declared > ATTACHMENT_MAX_BYTES) {
         // Refuse before reading; the unread body makes the connection unusable.
         reply.header('connection', 'close');
@@ -112,9 +112,9 @@ export function attachmentRoutes(app: FastifyInstance) {
         }
         return reply.code(201).send(attachmentToApi(row));
       } catch (error) {
-        // Only an id collision with another user's row gets here; keep their file.
-        if (isUniqueViolation(error)) return idTaken(reply);
+        // The file just written sits in this user's directory: never someone else's.
         await app.attachmentStore.remove(userId, id);
+        if (isUniqueViolation(error)) return idTaken(reply);
         throw error;
       }
     });
