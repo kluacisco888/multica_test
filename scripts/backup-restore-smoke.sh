@@ -55,8 +55,13 @@ echo "    uploaded attachment $attachment_id ($(wc -c <"$work/original.bin") byt
 
 echo "==> backup of '$src'"
 COMPOSE_PROJECT_NAME="$src" scripts/backup.sh "$work/smoke.tar.gz"
-tar -tzf "$work/smoke.tar.gz" | grep -qx attachments.tar
-tar -xzOf "$work/smoke.tar.gz" attachments.tar | tar -t | grep -q "attachments/.*/$attachment_id\$" \
+# Lists go to files first: `tar … | grep -q` under pipefail fails with SIGPIPE
+# (141) whenever grep stops reading before tar has written its last entry.
+tar -tzf "$work/smoke.tar.gz" >"$work/backup.list"
+grep -qx attachments.tar "$work/backup.list" || { echo "error: attachments.tar is not in the backup" >&2; exit 1; }
+tar -xzOf "$work/smoke.tar.gz" attachments.tar >"$work/attachments.tar"
+tar -tf "$work/attachments.tar" >"$work/attachments.list"
+grep -q "attachments/.*/$attachment_id\$" "$work/attachments.list" \
   || { echo "error: the attachment file is not in attachments.tar" >&2; exit 1; }
 
 echo "==> restore into '$dst' on 127.0.0.1:$dst_port"

@@ -115,6 +115,7 @@ export async function buildApp(deps: AppDeps) {
       request.log.error({ err: error }, 'unhandled error');
       return sendError(reply, 500, 'internal', '服务器内部错误');
     }
+    if (status === 415) return sendError(reply, 415, 'unsupported_media_type', '不支持的 Content-Type');
     return sendError(reply, status, 'bad_request', (error as Error).message);
   });
 

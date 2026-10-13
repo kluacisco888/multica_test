@@ -203,6 +203,32 @@ describe('附件 API', () => {
     expect((await download(alice, id)).rawPayload.toString()).toBe('a');
   });
 
+  it('a deleted 任务 takes its 附件 with it: download and list answer 404', async () => {
+    const list = await t.app.inject({ method: 'POST', url: '/api/lists', headers: alice.headers, payload: { name: '要删的清单' } });
+    expect(list.statusCode, list.body).toBe(201);
+    const res = await t.app.inject({
+      method: 'POST',
+      url: '/api/tasks',
+      headers: alice.headers,
+      payload: { title: '随清单删除', listId: list.json().id },
+    });
+    const task = taskSchema.parse(res.json());
+    const attachment = await uploaded(alice, task.id, 'gone.png', Buffer.from('png'), 'image/png');
+    expect((await download(alice, attachment.id)).statusCode).toBe(200);
+
+    // Deleting the 清单 soft-deletes its 任务 (the only way to delete a 任务 for now).
+    const del = await t.app.inject({ method: 'DELETE', url: `/api/lists/${list.json().id}`, headers: alice.headers });
+    expect(del.statusCode).toBe(204);
+    for (const query of ['', '?download=1']) {
+      const gone = await download(alice, attachment.id, query);
+      expect(gone.statusCode).toBe(404);
+      expect(gone.json()).toEqual({ error: { code: 'not_found', message: '资源不存在' } });
+    }
+    const listed = await t.app.inject({ method: 'GET', url: `/api/tasks/${task.id}/attachments`, headers: alice.headers });
+    expect(listed.statusCode).toBe(404);
+    expect((await upload(alice, task.id, 'late.txt', Buffer.from('x'))).statusCode).toBe(404);
+  });
+
   it('deletes softly: the file is gone, a tombstone with a new revision stays in /api/changes', async () => {
     const task = await createTask(alice, '删除');
     const before = changesResponseSchema.parse(

@@ -10,7 +10,7 @@ import {
   type Attachment,
   type AttachmentsResponse,
 } from '@dida/shared';
-import { FileTooLargeError } from '../attachments/store.js';
+import { AttachmentExistsError, FileTooLargeError } from '../attachments/store.js';
 import { sessionUser } from '../auth.js';
 import { isUniqueViolation } from '../db/errors.js';
 import { attachments } from '../db/schema/attachments.js';
@@ -92,8 +92,11 @@ export function attachmentRoutes(app: FastifyInstance) {
         size = await app.attachmentStore.write(userId, id, body, ATTACHMENT_MAX_BYTES);
       } catch (error) {
         if (error instanceof FileTooLargeError) return tooLarge(reply);
+        // Same client id uploading concurrently: the other request owns the file.
+        if (error instanceof AttachmentExistsError) return idTaken(reply);
         throw error;
       }
+      // From here on the file at (userId, id) was created by this request.
       try {
         const row = await app.sync.transaction(userId, async (ops) => {
           // The 任务 may have been deleted while the file was uploading.
@@ -112,7 +115,7 @@ export function attachmentRoutes(app: FastifyInstance) {
         }
         return reply.code(201).send(attachmentToApi(row));
       } catch (error) {
-        // The file just written sits in this user's directory: never someone else's.
+        // Only this request's own file (link succeeded above) is removed.
         await app.attachmentStore.remove(userId, id);
         if (isUniqueViolation(error)) return idTaken(reply);
         throw error;
@@ -123,7 +126,8 @@ export function attachmentRoutes(app: FastifyInstance) {
   app.get<Params & { Querystring: { download?: string } }>('/api/attachments/:id/content', async (request, reply) => {
     const userId = sessionUser(request).id;
     const row = await findOwned(app.db, attachments, userId, request.params.id);
-    if (!row) return notFound(reply);
+    // A 附件 of a deleted 任务 is gone with it (the 任务's tombstone covers it in /api/changes).
+    if (!row || !(await findOwned(app.db, tasks, userId, row.taskId))) return notFound(reply);
     const file = await app.attachmentStore.open(userId, row.id);
     if (!file) {
       request.log.error({ attachmentId: row.id }, 'attachment file missing on the data volume');

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream, type ReadStream } from 'node:fs';
-import { mkdir, rename, rm, stat } from 'node:fs/promises';
+import { link, mkdir, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { Transform, type Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -19,24 +19,35 @@ export class FileTooLargeError extends Error {
   }
 }
 
+/** A file for this attachment id already exists (another upload with the same client id won). */
+export class AttachmentExistsError extends Error {
+  constructor() {
+    super('attachment file exists');
+  }
+}
+
 export interface AttachmentStore {
   /** Root directory, `<dataDir>/attachments`. */
   readonly root: string;
   /**
    * Stream `body` into the file of (`userId`, `id`), at most `maxBytes`.
    * Throws FileTooLargeError (and keeps nothing) when the body is larger.
-   * Returns the byte count. The file only appears once fully written.
+   * Throws AttachmentExistsError when the file of this id already exists:
+   * an existing file is never replaced. Returns the byte count. The file only
+   * appears once fully written; on success the caller owns it.
    */
   write(userId: string, id: string, body: Readable, maxBytes: number): Promise<number>;
   open(userId: string, id: string): Promise<{ stream: ReadStream; size: number } | null>;
   remove(userId: string, id: string): Promise<void>;
+  /** Delete partial uploads left by a crash; call once at startup, before serving. */
+  cleanIncoming(): Promise<void>;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function createAttachmentStore(dataDir: string): AttachmentStore {
   const root = path.resolve(dataDir, 'attachments');
-  // Partial uploads; same file system as the final location so rename is atomic.
+  // Partial uploads; same file system as the final location so link is atomic.
   const incoming = path.join(root, '.incoming');
 
   function fileOf(userId: string, id: string): string {
@@ -65,10 +76,13 @@ export function createAttachmentStore(dataDir: string): AttachmentStore {
       try {
         await pipeline(body, limit, createWriteStream(temp, { flags: 'wx' }));
         if (size > maxBytes) throw new FileTooLargeError();
-        await rename(temp, target);
-      } catch (error) {
+        // link (unlike rename) fails with EEXIST instead of replacing a file
+        // another request with the same id has already put there.
+        await link(temp, target).catch((error: NodeJS.ErrnoException) => {
+          throw error.code === 'EEXIST' ? new AttachmentExistsError() : error;
+        });
+      } finally {
         await rm(temp, { force: true });
-        throw error;
       }
       return size;
     },
@@ -84,6 +98,9 @@ export function createAttachmentStore(dataDir: string): AttachmentStore {
     },
     async remove(userId, id) {
       await rm(fileOf(userId, id), { force: true });
+    },
+    async cleanIncoming() {
+      await rm(incoming, { recursive: true, force: true });
     },
   };
 }

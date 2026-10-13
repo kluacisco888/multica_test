@@ -45,9 +45,8 @@ describe('附件 / 评论 review edge cases', () => {
   const download = (user: TestUser, id: string) =>
     t.app.inject({ method: 'GET', url: `/api/attachments/${id}/content`, headers: user.headers });
 
-  // KNOWN BUG (EURO-16 review): the loser's rename overwrites the winner's file, then its rollback
-  // deletes it, so the 201 attachment is gone (404). Change `it.fails` back to `it` once fixed.
-  it.fails('two concurrent uploads with the same client id: the one that wins keeps its own bytes on disk', async () => {
+  // Was a bug found in review (rename overwrote the winner's file); fixed with link + EEXIST.
+  it('two concurrent uploads with the same client id: the one that wins keeps its own bytes on disk', async () => {
     const task = await createTask(alice, '并发同 id');
     const id = randomUUID();
     const a = randomBytes(2_000_000);
@@ -98,6 +97,7 @@ describe('附件 / 评论 review edge cases', () => {
     // A malformed Content-Type is refused by Fastify (415); an unknown but valid one is download-only.
     const malformed = await upload(alice, task.id, 'y', Buffer.from('y'), '', { 'content-type': 'not a type' });
     expect(malformed.statusCode).toBe(415);
+    expect(malformed.json().error.code).toBe('unsupported_media_type');
     const weirdRes = await upload(alice, task.id, 'y', Buffer.from('y'), '', { 'content-type': 'application/x-made-up' });
     expect(weirdRes.statusCode, weirdRes.body).toBe(201);
     const weird = attachmentSchema.parse(weirdRes.json());
