@@ -5,6 +5,14 @@ import { channelToApi } from '../notify/notifier.js';
 import { checklistItems, folders, lists, tasks } from '../db/schema/tasks.js';
 import type { SyncEntity } from './columns.js';
 
+/** Server-side 回收站 bookkeeping (see `trash.ts`), not part of the synced record. */
+function withoutTrashColumns(row: Record<string, unknown>): object {
+  const rest = { ...row };
+  delete rest.trashRootId;
+  delete rest.purgedAt;
+  return rest;
+}
+
 /**
  * Synced entity types served by `GET /api/changes`. Each feature task that
  * adds a table built with `syncColumns()` registers it here.
@@ -12,10 +20,10 @@ import type { SyncEntity } from './columns.js';
 export const syncEntities: readonly SyncEntity[] = [
   { type: 'folder', table: folders },
   { type: 'list', table: lists },
-  { type: 'task', table: tasks },
+  { type: 'task', table: tasks, serialize: withoutTrashColumns },
   { type: 'settings', table: userSettings },
   // Credentials stay out of the sync feed: only the masked API form is sent.
   { type: 'notificationChannel', table: notificationChannels, serialize: channelToApi },
-  { type: 'checklistItem', table: checklistItems },
+  { type: 'checklistItem', table: checklistItems, serialize: withoutTrashColumns },
   { type: 'tag', table: tags },
 ];

@@ -57,6 +57,13 @@
       "when": 1791876666758,
       "tag": "0007_priority_tags",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791879741867,
+      "tag": "0008_trash_archive",
+      "breakpoints": true
     }
   ]
 }

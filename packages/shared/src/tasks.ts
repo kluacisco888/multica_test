@@ -5,8 +5,11 @@ import { taskDatesInputSchema, taskDatesSchema } from './task-dates.js';
 /*
  * 任务 basics (spec 用户故事 20、21、27、31、40), dates (23–26, see
  * `task-dates.ts`), 子任务 and 检查清单 mode (用户故事 35–37), 优先级 and 标签
- * (22、18). `abandoned` (放弃) is reserved in the status
- * enum; this version only moves between `open` and `completed`.
+ * (22、18), 放弃 and the 回收站 (28–30).
+ *
+ * Status: `open`, `completed` (完成, counts as done) or `abandoned` (放弃: kept,
+ * but never counted as done). `completedAt` is set only while completed,
+ * `abandonedAt` only while abandoned.
  *
  * 子任务 rules (see task-tree.ts): a 子任务 lives in its parent's 清单, trees
  * are at most 5 levels deep counting the root as level 1, completing a task
@@ -52,6 +55,8 @@ export const taskSchema = z.object({
   description: z.string(),
   status: taskStatusSchema,
   completedAt: z.iso.datetime().nullable(),
+  /** When it was 放弃; null unless `status` is `abandoned`. */
+  abandonedAt: z.iso.datetime().nullable(),
   sortOrder: z.string(),
   /** null: no date. */
   dates: taskDatesSchema.nullable(),
@@ -85,8 +90,11 @@ export const updateTaskRequestSchema = z
   .object({
     title: titleSchema,
     description: descriptionSchema,
-    /** `open` ⇄ `completed`. Completing also completes every open 子任务 below. */
-    status: z.enum(['open', 'completed']),
+    /**
+     * `open`, `completed` or `abandoned` (放弃). Completing / abandoning also
+     * completes / abandons every open 子任务 below; re-opening re-opens closed ancestors.
+     */
+    status: taskStatusSchema,
     /**
      * Move to another 清单 (with all 子任务); lands at the top unless
      * `sortOrder` is given. A 子任务 moved this way becomes a top-level task.
@@ -120,3 +128,17 @@ export type TasksQuery = z.infer<typeof tasksQuerySchema>;
 /** `GET /api/tasks?listId=`: open tasks in list order, then completed ones, newest completion first. */
 export const tasksResponseSchema = z.object({ tasks: z.array(taskSchema) });
 export type TasksResponse = z.infer<typeof tasksResponseSchema>;
+
+/** 回收站 (spec 用户故事 29、30): deleted tasks stay restorable this many days, then their content is purged. */
+export const TRASH_RETENTION_DAYS = 30;
+
+/** A task in the 回收站: the task as it was, plus when it was deleted. */
+export const trashedTaskSchema = taskSchema.extend({ deletedAt: z.iso.datetime() });
+export type TrashedTask = z.infer<typeof trashedTaskSchema>;
+
+/**
+ * `GET /api/trash`: deleted tasks, most recently deleted first. Only the task
+ * the user deleted is listed; its 子任务 went with it and come back with it.
+ */
+export const trashResponseSchema = z.object({ tasks: z.array(trashedTaskSchema) });
+export type TrashResponse = z.infer<typeof trashResponseSchema>;

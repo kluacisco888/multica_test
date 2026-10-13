@@ -49,6 +49,7 @@ await app.listen({ host: config.host, port: config.port });
 jobs = await startBackgroundJobs({
   databaseUrl: config.databaseUrl,
   holidays: app.holidays,
+  trash: app.trash,
   timezone: config.defaultTimezone,
   log: app.log,
 });

@@ -15,7 +15,8 @@ import { folders, lists, tasks } from '../db/schema/tasks.js';
 import { sendValidationError } from '../http-errors.js';
 import { endOfSidebarLevel, ensureInbox, folderToApi, listToApi, topLevelKeys, type FolderRow } from '../organize.js';
 import { findOwned } from '../sync/sync.js';
-import { deleteChecklistItemsOf } from '../task-tree.js';
+import { liveTasksOfList, lockTaskTrees } from '../task-tree.js';
+import { moveToTrash } from '../trash.js';
 import { inboxProtected, invalidFolder, notFound, Rejection, respond } from './respond.js';
 
 type Params = { Params: { id: string } };
@@ -29,7 +30,7 @@ async function ownFolder(db: Executor, userId: string, id: string): Promise<Fold
   return row ?? null;
 }
 
-/** 清单 and 文件夹 (spec 用户故事 12–15). */
+/** 清单 and 文件夹 (spec 用户故事 12–15), 清单归档 (16). */
 export function listRoutes(app: FastifyInstance) {
   app.get('/api/lists', async (request) => {
     const userId = sessionUser(request).id;
@@ -86,7 +87,7 @@ export function listRoutes(app: FastifyInstance) {
     const body = updateListRequestSchema.safeParse(request.body);
     if (!body.success) return sendValidationError(reply, body.error);
     if (list.isInbox) return inboxProtected(reply, '修改');
-    const patch = body.data;
+    const { archived, ...patch } = body.data;
     return respond(
       reply,
       () =>
@@ -97,7 +98,8 @@ export function listRoutes(app: FastifyInstance) {
           }
           const sortOrder =
             patch.sortOrder ?? (folderChanged ? await endOfSidebarLevel(tx, userId, patch.folderId ?? null) : undefined);
-          const row = await ops.update(lists, list.id, { ...patch, ...(sortOrder ? { sortOrder } : {}) });
+          const archive = archived === undefined || archived === (list.archivedAt !== null) ? {} : { archivedAt: archived ? app.clock.now() : null };
+          const row = await ops.update(lists, list.id, { ...patch, ...archive, ...(sortOrder ? { sortOrder } : {}) });
           if (!row) throw new Rejection(notFound);
           return row;
         }),
@@ -114,13 +116,14 @@ export function listRoutes(app: FastifyInstance) {
       reply,
       () =>
         app.sync.transaction(userId, async (ops, tx) => {
-          // The 清单's tasks go with it (tombstones, so offline clients drop them too).
-          const owned = await tx
-            .select({ id: tasks.id })
-            .from(tasks)
-            .where(and(eq(tasks.userId, userId), eq(tasks.listId, list.id), isNull(tasks.deletedAt)));
-          await deleteChecklistItemsOf(ops, tx, userId, owned.map((task) => task.id));
-          for (const task of owned) await ops.softDelete(tasks, task.id);
+          // The 清单's tasks go into the 回收站, one batch per task tree (tombstones, so
+          // offline clients drop them too); restoring one later puts it into the 收件箱.
+          await lockTaskTrees(tx, userId);
+          const owned = await liveTasksOfList(tx, userId, list.id);
+          const ids = new Set(owned.map((task) => task.id));
+          for (const root of owned.filter((task) => task.parentId === null || !ids.has(task.parentId))) {
+            await moveToTrash(ops, tx, userId, root, owned);
+          }
           if (!(await ops.softDelete(lists, list.id))) throw new Rejection(notFound);
           return { id: list.id };
         }),

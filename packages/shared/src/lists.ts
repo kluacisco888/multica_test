@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { isSortKey } from './sort-key.js';
 
 /*
- * 清单、收件箱、文件夹 (spec 用户故事 12–15). Every user has exactly one 收件箱;
+ * 清单、收件箱、文件夹 (spec 用户故事 12–15) and 归档 (16). Every user has exactly one 收件箱;
  * it cannot be deleted, archived or edited. 文件夹 are one level deep and hold
  * only 清单. Sidebar order: 文件夹 and top-level 清单 share one sort-key space,
  * 清单 inside a 文件夹 have their own.
@@ -63,10 +63,12 @@ export const listSchema = z.object({
   folderId: z.uuid().nullable(),
   sortOrder: z.string(),
   isInbox: z.boolean(),
+  /** 归档: set while archived (hidden from the sidebar tree, its tasks out of every 智能清单). */
+  archivedAt: z.iso.datetime().nullable(),
 });
 export type TaskList = z.infer<typeof listSchema>;
 
-/** `GET /api/lists`: the 收件箱 first, then every 清单 and 文件夹 in sidebar order. */
+/** `GET /api/lists`: the 收件箱 first, then every 清单 (archived ones included, see `archivedAt`) and 文件夹 in sidebar order. */
 export const sidebarResponseSchema = z.object({
   lists: z.array(listSchema),
   folders: z.array(folderSchema),
@@ -94,6 +96,8 @@ export const updateListRequestSchema = z
     icon: iconSchema.nullable(),
     folderId: z.uuid().nullable(),
     sortOrder: sortKeySchema,
+    /** 归档 / 取消归档. */
+    archived: z.boolean(),
   })
   .partial()
   .strict();
