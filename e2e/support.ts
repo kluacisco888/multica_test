@@ -43,11 +43,11 @@ export async function openSidebar(page: Page): Promise<Locator> {
   return sidebar;
 }
 
-/** Open the 账户 dialog (rail avatar on desktop, drawer header on mobile). */
+/** Open the 设置 dialog on its 账户与安全 tab (rail avatar on desktop, drawer header on mobile). */
 export async function openAccount(page: Page, username: string): Promise<Locator> {
   if (isMobile(page)) await openSidebar(page);
   await page.getByRole('button', { name: `账户：${username}` }).click();
-  const dialog = page.getByRole('dialog', { name: '账户' });
+  const dialog = page.getByRole('dialog', { name: '设置' });
   await expect(dialog).toBeVisible();
   return dialog;
 }

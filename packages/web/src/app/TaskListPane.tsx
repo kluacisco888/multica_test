@@ -1,4 +1,4 @@
-import type { Task, TaskList } from '@dida/shared';
+import { describeTaskDates, type Task, type TaskList } from '@dida/shared';
 import { useState, type FormEvent } from 'react';
 import { IconButton, MenuButton, TaskCheckbox } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
@@ -8,6 +8,8 @@ interface TaskListPaneProps {
   tasks: Task[] | null;
   selectedTaskId: string | null;
   sidebarVisible: boolean;
+  timeZone: string;
+  now: Date;
   onToggleSidebar: () => void;
   onAddTask: (title: string) => Promise<boolean>;
   onSelectTask: (taskId: string) => void;
@@ -15,7 +17,7 @@ interface TaskListPaneProps {
   onEditList: (() => void) | null;
 }
 
-/** The middle column: list title, quick add, open tasks, then the 已完成 section (spec 用户故事 20、27、40、65). */
+/** The middle column: list title, quick add, open tasks, then the 已完成 section (spec 用户故事 20、23–27、40、65). */
 export function TaskListPane(props: TaskListPaneProps) {
   const { list, tasks } = props;
   const [showCompleted, setShowCompleted] = useState(true);
@@ -55,6 +57,8 @@ export function TaskListPane(props: TaskListPaneProps) {
                   selected={task.id === props.selectedTaskId}
                   onSelectTask={props.onSelectTask}
                   onToggleTask={props.onToggleTask}
+                  timeZone={props.timeZone}
+                  now={props.now}
                 />
               ))}
             </ul>
@@ -90,6 +94,8 @@ export function TaskListPane(props: TaskListPaneProps) {
                   selected={task.id === props.selectedTaskId}
                   onSelectTask={props.onSelectTask}
                   onToggleTask={props.onToggleTask}
+                  timeZone={props.timeZone}
+                  now={props.now}
                 />
                   ))}
                 </ul>
@@ -139,8 +145,13 @@ function TaskRow({
   selected,
   onSelectTask,
   onToggleTask,
-}: { task: Task; selected: boolean } & Pick<TaskListPaneProps, 'onSelectTask' | 'onToggleTask'>) {
+  timeZone,
+  now,
+}: { task: Task; selected: boolean } & Pick<TaskListPaneProps, 'onSelectTask' | 'onToggleTask' | 'timeZone' | 'now'>) {
   const done = task.status === 'completed';
+  const date = task.dates ? describeTaskDates(task.dates, { now, timeZone }) : null;
+  // Completed tasks are never shown as overdue.
+  const overdue = date?.overdue === true && !done;
   return (
     <li className={`task-row ${selected ? 'task-row-selected' : ''} ${done ? 'task-row-done' : ''}`}>
       <TaskCheckbox checked={done} label={task.title} onChange={() => onToggleTask(task)} />
@@ -151,6 +162,12 @@ function TaskRow({
         <span className="task-row-meta" title="有描述">
           <Icon name="list" size={14} />
           <span className="visually-hidden">有描述</span>
+        </span>
+      )}
+      {date && (
+        <span className={`task-row-date ${overdue ? 'date-overdue' : ''}`}>
+          {date.text}
+          {overdue && <span className="visually-hidden">，已过期</span>}
         </span>
       )}
     </li>

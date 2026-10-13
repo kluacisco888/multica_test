@@ -40,6 +40,10 @@
   --color-text-section: #6f7176; /* sidebar section labels (reference #b6b8bd) */
   --color-text-done: #757678; /* completed task titles (reference #a2a3a3) */
   --color-danger: #d32f2f; /* reference #e03131 */
+  /* Task dates: reference blue #4772fa (4.15:1 at 12px) darkened like --color-brand-text; overdue uses --color-danger. */
+  --color-date: #2f5ae0;
+  --color-date-range: #ecf0fe; /* days inside a selected 时间段 */
+  --color-segment-bg: #f2f3f5; /* 日期 / 时间段 segmented tabs */
   --color-success: #1a7f37;
 
   /* ---- Colour: lines ---- */
@@ -80,6 +84,11 @@
   --sidebar-item-height: 38px;
   --task-row-height: 40px;
   --input-height: 36px;
+  --date-popover-width: 264px;
+  --date-day-size: 32px;
+  --date-day-size-touch: 40px; /* mobile tap target */
+  --settings-dialog-width: 800px;
+  --settings-nav-width: 214px;
 
   /* ---- Shape & elevation ---- */
   --radius-sm: 4px;
