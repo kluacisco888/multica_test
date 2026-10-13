@@ -431,3 +431,37 @@ test('--script: every way a page can open a new tab or window fails the run befo
     }
   }
 });
+
+// EURO-22 第 3 次审查：Worker / SharedWorker 里开的 WebSocket 不经过 context.routeWebSocket，
+// 浏览器层的 Fetch 也不管 WebSocket，握手直接到达服务器（main 上的工具同样如此）。
+const WORKER_WS_PAGE = `<!doctype html><title>worker-ws-probe</title>
+<script>
+  const host = location.host;
+  const blob = (code) => URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+  new Worker(blob("onmessage = (e) => { new WebSocket('ws://' + e.data + '/worker-ws'); };")).postMessage(host);
+  new SharedWorker(blob("onconnect = (c) => { c.ports[0].onmessage = (e) => { new WebSocket('ws://' + e.data + '/shared-ws'); }; };")).port.postMessage(host);
+</script>`;
+
+test('WebSockets opened in a Worker or SharedWorker never reach the server', { skip: !hasChromium && 'Chromium 未安装' }, async () => {
+  const seen = [];
+  const server = createServer((req, res) => {
+    seen.push(`${req.method} ${req.url}`);
+    res.writeHead(req.url === '/' ? 200 : 204, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(req.url === '/' ? WORKER_WS_PAGE : undefined);
+  });
+  server.on('upgrade', (req, socket) => {
+    seen.push(`UPGRADE ${req.url}`);
+    socket.destroy();
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const home = mkdtempSync(path.join(tmpdir(), 'ref-env-it-'));
+  mkdirSync(path.join(home, 'profile'), { mode: 0o700 });
+  try {
+    await run([`http://127.0.0.1:${server.address().port}/`, '-o', path.join(home, 'x.png'), '--wait', '1500'], { DIDA_REF_HOME: home });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.deepEqual(seen.filter((s) => s.startsWith('UPGRADE ')), [], `websockets that reached the server: ${seen.join(', ')}`);
+  } finally {
+    server.close();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
