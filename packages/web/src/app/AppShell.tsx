@@ -1,5 +1,6 @@
 import {
   DEFAULT_TIME_ZONE,
+  datesAsStored,
   type Filter,
   type SearchMatchField,
   type SmartListId,
@@ -18,7 +19,6 @@ import {
   type SidebarResponse,
   type Tag,
   type Task,
-  type TaskDates,
   type TaskDatesInput,
   type TaskList,
   type TrashedTask,
@@ -382,10 +382,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
 
   /** 时间线 drag: show the new dates at once, then save them (a failure re-reads the tasks). */
   async function moveTask(task: Task, dates: TaskDatesInput) {
-    const shown: TaskDates = dates.allDay
-      ? { allDay: true, startDate: dates.startDate ?? null, dueDate: dates.dueDate }
-      : { allDay: false, startAt: dates.startAt ?? null, dueAt: dates.dueAt, timeZone };
-    putTask({ ...task, dates: shown });
+    putTask({ ...task, dates: datesAsStored(dates, timeZone) });
     await changeTask(task, { dates });
   }
 

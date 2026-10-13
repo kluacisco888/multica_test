@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dragTaskDates, scheduleOnDay, timelineBar, timelineDays, timelineStart } from './timeline.js';
+import { datesAsStored, dragTaskDates, scheduleOnDay, timelineBar, timelineDays, timelineStart } from './timeline.js';
 import { taskDatesInputSchema, type TaskDates } from './task-dates.js';
 
 const SH = 'Asia/Shanghai';
@@ -124,5 +124,12 @@ describe('scheduling and the visible days', () => {
 
   it('lists consecutive days', () => {
     expect(timelineDays('2026-10-30', 4)).toEqual(['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']);
+  });
+});
+
+describe('datesAsStored', () => {
+  it('fills the missing start and the time zone', () => {
+    expect(datesAsStored({ allDay: true, dueDate: '2026-10-13' }, SH)).toEqual(allDay(null, '2026-10-13'));
+    expect(datesAsStored({ allDay: false, dueAt: '2026-10-13T01:00:00.000Z' }, SH)).toEqual(timed(null, '2026-10-13T01:00:00.000Z'));
   });
 });

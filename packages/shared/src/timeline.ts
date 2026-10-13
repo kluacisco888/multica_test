@@ -79,6 +79,13 @@ export function dragTaskDates(dates: TaskDates, drag: TimelineDrag, days: number
   return sameDates(dates, next) ? null : next;
 }
 
+/** Input dates (as just saved) in the stored shape, to show them before the server answers. */
+export function datesAsStored(dates: TaskDatesInput, timeZone: string): TaskDates {
+  return dates.allDay
+    ? { allDay: true, startDate: dates.startDate ?? null, dueDate: dates.dueDate }
+    : { allDay: false, startAt: dates.startAt ?? null, dueAt: dates.dueAt, timeZone };
+}
+
 /** Dates of a task without a date dropped on `day`: due that day, all day. */
 export function scheduleOnDay(day: string): TaskDatesInput {
   return { allDay: true, startDate: null, dueDate: day };

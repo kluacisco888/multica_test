@@ -1,6 +1,7 @@
 import {
   addDays,
   arrangeTasks,
+  datesAsStored,
   daysBetween,
   describeTaskDates,
   dragTaskDates,
@@ -123,7 +124,8 @@ export function TimelinePane(props: TimelinePaneProps) {
 
   useLayoutEffect(() => {
     scrollToDay(timelineStart(today));
-    // Re-centre when the scale changes; `today` only changes at midnight.
+    // Re-centre when the scale changes only. `today` changes at midnight; the
+    // rendered days then shift by one, which the next scroll event settles.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scale]);
 
@@ -141,10 +143,7 @@ export function TimelinePane(props: TimelinePaneProps) {
   function save(task: Task, dates: TaskDatesInput | null) {
     if (!dates) return;
     props.onMoveTask(task, dates);
-    const text = describeTaskDates(dates.allDay ? { ...dates, startDate: dates.startDate ?? null } : { ...dates, startAt: dates.startAt ?? null, timeZone }, {
-      now,
-      timeZone,
-    }).text;
+    const text = describeTaskDates(datesAsStored(dates, timeZone), { now, timeZone }).text;
     setAnnouncement(`${task.title}：${text}`);
   }
 
@@ -193,7 +192,8 @@ export function TimelinePane(props: TimelinePaneProps) {
     const area = scroller.getBoundingClientRect();
     const rect = tracks.getBoundingClientRect();
     if (x < Math.max(rect.left, area.left + NAME_WIDTH) || x > area.right || y < area.top || y > area.bottom) return null;
-    return days[Math.floor((x - rect.left) / dayWidth)] ?? null;
+    const index = Math.floor((x - rect.left) / dayWidth);
+    return index >= 0 ? (days[index] ?? null) : null;
   }
 
   function onPlacePointerDown(e: ReactPointerEvent<HTMLButtonElement>, task: Task) {
@@ -250,7 +250,7 @@ export function TimelinePane(props: TimelinePaneProps) {
     if (!dates) return null;
     if (drag?.taskId === task.id && drag.moved && drag.days !== 0) {
       const preview = dragTaskDates(dates, drag.edge, drag.days, timeZone);
-      if (preview) dates = preview.allDay ? { ...preview, startDate: preview.startDate ?? null } : { ...preview, startAt: preview.startAt ?? null, timeZone };
+      if (preview) dates = datesAsStored(preview, timeZone);
     }
     const bar = timelineBar(dates, timeZone);
     if (!bar) return null;
