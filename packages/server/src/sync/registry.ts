@@ -9,6 +9,7 @@ import { channelToApi } from '../notify/notifier.js';
 import { filterToApi } from '../routes/filters.js';
 import type { FilterRow } from '../task-views.js';
 import { checklistItems, folders, lists, tasks } from '../db/schema/tasks.js';
+import { reminderDeliveries } from '../db/schema/reminders.js';
 import type { SyncEntity } from './columns.js';
 
 /** Server-side 回收站 bookkeeping (see `trash.ts`), not part of the synced record. */
@@ -35,4 +36,5 @@ export const syncEntities: readonly SyncEntity[] = [
   { type: 'attachment', table: attachments, serialize: attachmentToApi },
   { type: 'comment', table: comments, serialize: commentToApi },
   { type: 'filter', table: filters, serialize: (row: FilterRow) => filterToApi(row) },
+  { type: 'reminderDelivery', table: reminderDeliveries },
 ];

@@ -273,3 +273,46 @@
     width: calc(100vw - 2 * var(--space-4));
   }
 }
+
+/* ---- 提醒: 全天提醒时间 and 发送失败的提醒 (spec 用户故事 80、83) ---- */
+
+.channels .all-day-reminder {
+  margin-bottom: var(--space-6);
+}
+
+.all-day-reminder-input {
+  flex: none;
+  width: 112px;
+}
+
+.all-day-reminder-hint {
+  margin: 0 0 var(--space-2);
+}
+
+.reminder-failures {
+  margin-top: var(--space-6);
+}
+
+.reminder-failure-list {
+  margin: 0;
+  list-style: none;
+}
+
+.reminder-failure + .reminder-failure {
+  border-top: 1px solid var(--color-divider-strong);
+}
+
+.reminder-failure-title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-size-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reminder-failure-detail {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
+}

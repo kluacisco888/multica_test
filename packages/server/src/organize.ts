@@ -142,6 +142,8 @@ export function taskToApi(row: TaskRow): Task {
     priority: row.priority,
     tagIds: row.tagIds,
     repeat: row.repeat,
+    reminders: row.reminders,
+    reminderChannelIds: row.reminderChannelIds,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
     revision: row.revision,

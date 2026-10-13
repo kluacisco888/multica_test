@@ -534,7 +534,7 @@ describe('智能清单, 过滤器 and 搜索 API', () => {
     it('stores hidden smart lists and per-view sort / group, merged per view', async () => {
       const user = await t.createUser('view-settings');
       const initial = await ok(user, 'GET', '/api/settings', undefined, (v) => settingsSchema.parse(v));
-      expect(initial).toEqual({ timeZone: 'Asia/Shanghai', hiddenSmartLists: [], viewOptions: {} });
+      expect(initial).toEqual({ timeZone: 'Asia/Shanghai', hiddenSmartLists: [], viewOptions: {}, allDayReminderTime: '09:00' });
 
       const hidden = await ok(user, 'PATCH', '/api/settings', { hiddenSmartLists: ['tomorrow', 'notImportant', 'tomorrow'] }, (v) =>
         settingsSchema.parse(v),

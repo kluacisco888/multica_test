@@ -1,6 +1,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { PgBoss } from 'pg-boss';
 import type { HolidayService } from './holidays/service.js';
+import type { ReminderService } from './reminders/scheduler.js';
 import type { TrashService } from './trash.js';
 
 /*
@@ -19,6 +20,16 @@ export const TRASH_PURGE_QUEUE = 'trash.purge';
 /** Daily at 03:30 in the configured time zone. */
 export const TRASH_PURGE_CRON = '30 3 * * *';
 
+/**
+ * 提醒 delivery (spec 用户故事 78–84): a tick sends whatever is due. It runs
+ * at startup (catching up after a downtime, at most 24 hours back), every
+ * minute as a safety net, and at each scheduled instant: the reminder service
+ * calls its waker with every new fire / retry time, which queues a tick job
+ * with `startAfter` at that instant.
+ */
+export const REMINDER_TICK_QUEUE = 'reminders.tick';
+export const REMINDER_TICK_CRON = '* * * * *';
+
 export interface BackgroundJobs {
   boss: PgBoss;
   stop(): Promise<void>;
@@ -28,12 +39,13 @@ export interface BackgroundJobsDeps {
   databaseUrl: string;
   holidays: HolidayService;
   trash: TrashService;
+  reminders: ReminderService;
   /** Time zone the daily schedules run in. */
   timezone: string;
   log: FastifyBaseLogger;
 }
 
-export async function startBackgroundJobs({ databaseUrl, holidays, trash, timezone, log }: BackgroundJobsDeps): Promise<BackgroundJobs> {
+export async function startBackgroundJobs({ databaseUrl, holidays, trash, reminders, timezone, log }: BackgroundJobsDeps): Promise<BackgroundJobs> {
   const boss = new PgBoss({ connectionString: databaseUrl, max: 4 });
   boss.on('error', (err) => log.error({ err }, 'pg-boss error'));
   await boss.start();
@@ -56,8 +68,32 @@ export async function startBackgroundJobs({ databaseUrl, holidays, trash, timezo
   // Also at startup: a server that was down at 03:30 catches up.
   await boss.send(TRASH_PURGE_QUEUE, null);
 
+  await boss.createQueue(REMINDER_TICK_QUEUE);
+  await boss.schedule(REMINDER_TICK_QUEUE, REMINDER_TICK_CRON, null, { tz: timezone });
+  // One tick job per distinct instant; older entries are dropped once past.
+  const queued = new Set<number>();
+  const wake = (at: Date) => {
+    const now = Date.now();
+    for (const t of queued) if (t < now) queued.delete(t);
+    if (queued.has(at.getTime())) return;
+    queued.add(at.getTime());
+    boss.send(REMINDER_TICK_QUEUE, null, { startAfter: at }).catch((err: unknown) => log.error({ err }, 'could not queue a reminder tick'));
+  };
+  await boss.work(REMINDER_TICK_QUEUE, { pollingIntervalSeconds: 1 }, async () => {
+    const result = await reminders.tick();
+    if (result.fired + result.retrying + result.failed + result.missed > 0) log.info(result, '提醒: tick');
+    const next = await reminders.nextDueAt();
+    if (next) wake(next);
+  });
+  reminders.setWaker(wake);
+  // Also at startup: reminders that came due while the server was down (at most 24 hours ago).
+  await boss.send(REMINDER_TICK_QUEUE, null);
+
   return {
     boss,
-    stop: () => boss.stop({ graceful: true, timeout: 10_000 }),
+    stop: async () => {
+      reminders.setWaker(null);
+      await boss.stop({ graceful: true, timeout: 10_000 });
+    },
   };
 }

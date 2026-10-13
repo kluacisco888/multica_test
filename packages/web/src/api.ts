@@ -21,6 +21,10 @@ import {
   type SearchResponse,
   type UpdateFilterRequest,
   apiErrorSchema,
+  reminderAlertsResponseSchema,
+  reminderFailuresResponseSchema,
+  type ReminderAlert,
+  type ReminderFailure,
   type AdminUser,
   type CreateUserRequest,
   channelsResponseSchema,
@@ -359,4 +363,25 @@ export async function deleteFilter(id: string): Promise<void> {
 /** 全局搜索 over title, 描述, 检查项 (and 评论 once they exist). */
 export async function searchTasks(q: string): Promise<SearchResponse> {
   return searchResponseSchema.parse(await (await call('GET', `/api/search?${new URLSearchParams({ q }).toString()}`)).json());
+}
+
+/* ---- 提醒 (spec 用户故事 82、83) ---- */
+
+/** 应用内提醒: reminders that fired in the last hour and were not dismissed. */
+export async function fetchReminderAlerts(): Promise<ReminderAlert[]> {
+  return reminderAlertsResponseSchema.parse(await (await call('GET', '/api/reminders/alerts')).json()).alerts;
+}
+
+export async function dismissReminderAlert(id: string): Promise<void> {
+  await call('POST', `/api/reminders/alerts/${encodeURIComponent(id)}/dismiss`);
+}
+
+/** 稍后提醒: remind again in `minutes`. */
+export async function snoozeReminderAlert(id: string, minutes: number): Promise<void> {
+  await call('POST', `/api/reminders/alerts/${encodeURIComponent(id)}/snooze`, { minutes });
+}
+
+/** Deliveries that still failed after their retries. */
+export async function fetchReminderFailures(): Promise<ReminderFailure[]> {
+  return reminderFailuresResponseSchema.parse(await (await call('GET', '/api/reminders/failures')).json()).failures;
 }

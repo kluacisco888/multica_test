@@ -30,6 +30,8 @@ import { tagRoutes } from './routes/tags.js';
 import { taskRoutes } from './routes/tasks.js';
 import { trashRoutes } from './routes/trash.js';
 import { recomputeNextInstances } from './repeat.js';
+import { createReminderService, type ReminderService } from './reminders/scheduler.js';
+import { reminderRoutes } from './routes/reminders.js';
 import { createSessionStore, type SessionStore } from './sessions.js';
 import type { SyncEntity } from './sync/columns.js';
 import { syncEntities as registeredSyncEntities } from './sync/registry.js';
@@ -60,6 +62,8 @@ declare module 'fastify' {
     trash: TrashService;
     /** Files of 附件 under `<DATA_DIR>/attachments`. */
     attachmentStore: AttachmentStore;
+    /** 提醒调度与投递 (see reminders/scheduler.ts). */
+    reminders: ReminderService;
   }
 }
 
@@ -110,6 +114,7 @@ export async function buildApp(deps: AppDeps) {
   });
   const cipher = config.encryptionKey ? createCredentialCipher(config.encryptionKey) : null;
   app.decorate('notifier', createNotifier({ db, cipher, clock }));
+  app.decorate('reminders', createReminderService({ db, sync, clock, notifier: app.notifier, log: app.log }));
   await app.register(fastifyCookie);
   registerAuthentication(app, { sessions, config });
 
@@ -140,6 +145,7 @@ export async function buildApp(deps: AppDeps) {
   commentRoutes(app);
   filterRoutes(app);
   searchRoutes(app);
+  reminderRoutes(app);
   deps.routes?.(app);
 
   if (config.webDistDir) {

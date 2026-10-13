@@ -578,6 +578,12 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
             <span className="visually-hidden">{`重复：${repeatText}`}</span>
           </span>
         )}
+        {task.dates && task.reminders.length > 0 && (
+          <span className="task-row-meta" title="提醒">
+            <Icon name="alarm" size={14} />
+            <span className="visually-hidden">有提醒</span>
+          </span>
+        )}
         {date && (
           <span className={`task-row-date ${overdue ? 'date-overdue' : ''}`}>
             {date.text}

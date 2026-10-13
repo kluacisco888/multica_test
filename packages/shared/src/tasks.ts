@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { calendarRangeSchema } from './calendar.js';
 import { sortKeySchema } from './lists.js';
+import { reminderSchema, remindersSchema } from './reminders.js';
 import { repeatRuleSchema } from './repeat-rule.js';
 import { smartListIdSchema } from './smart-lists.js';
 import { taskDatesInputSchema, taskDatesSchema } from './task-dates.js';
@@ -68,8 +69,19 @@ export const taskSchema = z.object({
   tagIds: z.array(z.uuid()),
   /** 重复规则; null: not a 重复任务. Always null when the task has no date. */
   repeat: repeatRuleSchema.nullable(),
+  /** 提醒 (see reminders.ts); empty without a date. Each fits the kind of date (timed / 全天). */
+  reminders: z.array(reminderSchema),
+  /** 通知渠道 the reminders go to; null: the user's default channels (用户故事 78). */
+  reminderChannelIds: z.array(z.uuid()).nullable(),
 });
 export type Task = z.infer<typeof taskSchema>;
+
+/** A task's 通知渠道 ids: distinct, at most 20. */
+const reminderChannelIdsSchema = z
+  .array(z.uuid())
+  .max(20, '最多 20 个通知渠道')
+  .transform((ids) => [...new Set(ids.map((id) => id.toLowerCase()))])
+  .nullable();
 
 const titleSchema = z.string().trim().min(1, '标题不能为空').max(TASK_TITLE_MAX_LENGTH, `标题最多 ${TASK_TITLE_MAX_LENGTH} 个字符`);
 const descriptionSchema = z.string().max(TASK_DESCRIPTION_MAX_LENGTH, '描述太长');
@@ -90,6 +102,9 @@ export const createTaskRequestSchema = z.object({
   tagIds: tagIdsSchema.optional(),
   /** 重复规则; needs `dates`. */
   repeat: repeatRuleSchema.nullable().optional(),
+  /** 提醒; need `dates` and must fit them (timed: `before`, 全天: `day`). */
+  reminders: remindersSchema.optional(),
+  reminderChannelIds: reminderChannelIdsSchema.optional(),
 });
 export type CreateTaskRequest = z.input<typeof createTaskRequestSchema>;
 
@@ -125,6 +140,14 @@ export const updateTaskRequestSchema = z
      * dates also clears the rule. Completing a 重复任务 generates its next instance.
      */
     repeat: repeatRuleSchema.nullable(),
+    /**
+     * Replace the 提醒. They must fit the (new) dates; changing the dates
+     * between timed and 全天 drops the reminders that no longer fit, and
+     * clearing the dates clears them.
+     */
+    reminders: remindersSchema,
+    /** Replace the 通知渠道 of the reminders; null: the default channels. */
+    reminderChannelIds: reminderChannelIdsSchema,
   })
   .partial()
   .strict();

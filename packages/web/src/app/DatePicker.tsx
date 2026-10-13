@@ -6,6 +6,9 @@ import {
   zonedDateTime,
   zonedToInstant,
   describeRepeatFrequency,
+  sortReminders,
+  type NotificationChannel,
+  type Reminder,
   type RepeatRule,
   type TaskDates,
   type TaskDatesInput,
@@ -13,12 +16,14 @@ import {
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { Button, IconButton } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
+import { describeReminders, fittingReminders, ReminderChannelsRow, ReminderEditor, ReminderRow } from './ReminderPicker.js';
 import { RepeatEditor, RepeatRow } from './RepeatPicker.js';
 
 /*
  * 滴答-style date picker (spec 用户故事 23–26): a popover with the tabs 日期
  * (one due date, optional time) and 时间段 (start → due, 全天 or with times),
- * a month calendar, the 重复 row (see RepeatPicker.tsx), 清除 and 确定.
+ * a month calendar, the 重复 row (see RepeatPicker.tsx), the 提醒 rows (see
+ * ReminderPicker.tsx), 清除 and 确定.
  * Timed values are entered as wall-clock time in the user's time zone and
  * saved as UTC instants.
  */
@@ -33,16 +38,30 @@ interface Draft {
   startTime: string;
   dueTime: string;
   repeat: RepeatRule | null;
+  /** All reminders picked; only the ones fitting `allDay` are saved. */
+  reminders: Reminder[];
+  channelIds: string[] | null;
+}
+
+/** What 确定 saves besides the dates. */
+export interface ReminderSettings {
+  reminders: Reminder[];
+  reminderChannelIds: string[] | null;
 }
 
 const DEFAULT_START_TIME = '09:00';
 const DEFAULT_DUE_TIME = '10:00';
 
-function draftFrom(dates: TaskDates | null, timeZone: string, repeat: RepeatRule | null): Draft {
-  return { ...datesDraft(dates, timeZone), repeat: dates ? repeat : null };
+function draftFrom(dates: TaskDates | null, timeZone: string, repeat: RepeatRule | null, reminders: ReminderSettings): Draft {
+  return {
+    ...datesDraft(dates, timeZone),
+    repeat: dates ? repeat : null,
+    reminders: dates ? reminders.reminders : [],
+    channelIds: reminders.reminderChannelIds,
+  };
 }
 
-function datesDraft(dates: TaskDates | null, timeZone: string): Omit<Draft, 'repeat'> {
+function datesDraft(dates: TaskDates | null, timeZone: string): Omit<Draft, 'repeat' | 'reminders' | 'channelIds'> {
   if (!dates) return { mode: 'date', allDay: true, start: null, due: null, startTime: DEFAULT_START_TIME, dueTime: DEFAULT_START_TIME };
   if (dates.allDay) {
     return {
@@ -107,20 +126,27 @@ interface TaskDateButtonProps {
   dates: TaskDates | null;
   /** 重复规则 of the task (only meaningful with dates). */
   repeat: RepeatRule | null;
+  /** 提醒 of the task and their 通知渠道. */
+  reminders: ReminderSettings;
+  /** 全天提醒时间 setting. */
+  allDayTime: string;
+  /** The user's 通知渠道, to choose where the reminders go. */
+  channels: NotificationChannel[];
   timeZone: string;
   now: Date;
   isMobile: boolean;
   disabled?: boolean;
-  onSave: (dates: TaskDatesInput | null, repeat: RepeatRule | null) => void;
+  onSave: (dates: TaskDatesInput | null, repeat: RepeatRule | null, reminders: ReminderSettings) => void;
 }
 
 /** The detail-header date control: the current label, opening the picker. */
-export function TaskDateButton({ dates, repeat, timeZone, now, isMobile, disabled, onSave }: TaskDateButtonProps) {
+export function TaskDateButton({ dates, repeat, reminders, allDayTime, channels, timeZone, now, isMobile, disabled, onSave }: TaskDateButtonProps) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const popoverId = useId();
   const label = dates ? describeTaskDates(dates, { now, timeZone }) : null;
   const repeatText = dates && repeat ? describeRepeatFrequency(repeat, dueDay(dates, timeZone)) : null;
+  const reminderText = dates && reminders.reminders.length > 0 ? describeReminders(reminders.reminders, allDayTime) : null;
 
   function close() {
     setOpen(false);
@@ -136,12 +162,13 @@ export function TaskDateButton({ dates, repeat, timeZone, now, isMobile, disable
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? popoverId : undefined}
-        aria-label={label ? `日期：${label.text}${label.overdue ? '，已过期' : ''}${repeatText ? `，重复：${repeatText}` : ''}` : '设置日期'}
+        aria-label={label ? `日期：${label.text}${label.overdue ? '，已过期' : ''}${repeatText ? `，重复：${repeatText}` : ''}${reminderText ? `，提醒：${reminderText}` : ''}` : '设置日期'}
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
       >
         <Icon name="calendar" size={16} />
         <span>{label?.text ?? '截止日期'}</span>
+        {reminderText && <Icon name="alarm" size={14} className="date-trigger-repeat" />}
         {repeatText && <Icon name="repeat" size={14} className="date-trigger-repeat" />}
       </button>
       {open && (
@@ -149,14 +176,17 @@ export function TaskDateButton({ dates, repeat, timeZone, now, isMobile, disable
           id={popoverId}
           dates={dates}
           repeat={repeat}
+          reminders={reminders}
+          allDayTime={allDayTime}
+          channels={channels}
           timeZone={timeZone}
           today={todayIn(now, timeZone)}
           isMobile={isMobile}
           anchor={buttonRef}
           onCancel={close}
-          onSave={(value, rule) => {
+          onSave={(value, rule, extra) => {
             close();
-            onSave(value, rule);
+            onSave(value, rule, extra);
           }}
         />
       )}
@@ -168,6 +198,9 @@ function DatePickerPopover({
   id,
   dates,
   repeat,
+  reminders,
+  allDayTime,
+  channels,
   timeZone,
   today,
   isMobile,
@@ -178,16 +211,21 @@ function DatePickerPopover({
   id: string;
   dates: TaskDates | null;
   repeat: RepeatRule | null;
+  reminders: ReminderSettings;
+  allDayTime: string;
+  channels: NotificationChannel[];
   timeZone: string;
   today: string;
   isMobile: boolean;
   anchor: RefObject<HTMLButtonElement | null>;
   onCancel: () => void;
-  onSave: (dates: TaskDatesInput | null, repeat: RepeatRule | null) => void;
+  onSave: (dates: TaskDatesInput | null, repeat: RepeatRule | null, reminders: ReminderSettings) => void;
 }) {
-  const [draft, setDraft] = useState(() => draftFrom(dates, timeZone, repeat));
+  const [draft, setDraft] = useState(() => draftFrom(dates, timeZone, repeat, reminders));
   /** 自定义重复 editor shown instead of the date panel. */
   const [customRepeat, setCustomRepeat] = useState(false);
+  /** 自定义提醒 editor, likewise. */
+  const [customReminder, setCustomReminder] = useState(false);
   const [editing, setEditing] = useState<'start' | 'due'>('start');
   const [view, setView] = useState(() => monthStart(draft.due ?? today));
   const ref = useRef<HTMLDivElement>(null);
@@ -220,7 +258,20 @@ function DatePickerPopover({
   function closeCustom() {
     setCustomRepeat(false);
     // Focus goes back to the 重复 row once it is rendered again.
-    requestAnimationFrame(() => ref.current?.querySelector<HTMLElement>('.date-repeat-trigger')?.focus());
+    requestAnimationFrame(() => ref.current?.querySelector<HTMLElement>('.date-repeat-trigger[aria-label^="重复："]')?.focus());
+  }
+
+  function closeCustomReminder() {
+    setCustomReminder(false);
+    requestAnimationFrame(() => ref.current?.querySelector<HTMLElement>('.date-reminder-trigger')?.focus());
+  }
+
+  /** The reminders 确定 saves: the ones that fit the chosen kind of date. */
+  const draftReminders = draft.due ? fittingReminders(draft.reminders, draft.allDay) : [];
+
+  function setReminders(next: typeof draft.reminders) {
+    // Like 重复: choosing a reminder without a date starts today.
+    update(next.length > 0 && !draft.due ? { reminders: next, due: today } : { reminders: next });
   }
 
   function setMode(mode: Mode) {
@@ -295,7 +346,17 @@ function DatePickerPopover({
       className={`date-popover ${isMobile ? 'date-popover-sheet' : ''}`}
       onKeyDown={onKeyDown}
     >
-      {customRepeat ? (
+      {customReminder ? (
+        <ReminderEditor
+          allDay={draft.allDay}
+          allDayTime={allDayTime}
+          onCancel={closeCustomReminder}
+          onSave={(reminder) => {
+            setReminders(sortReminders([...draftReminders, reminder]));
+            closeCustomReminder();
+          }}
+        />
+      ) : customRepeat ? (
         <RepeatEditor
           value={draft.repeat}
           anchor={repeatAnchor}
@@ -410,6 +471,16 @@ function DatePickerPopover({
                 )}
               </>
             )}
+            <ReminderRow
+              value={draftReminders}
+              allDay={draft.allDay}
+              allDayTime={allDayTime}
+              onChange={setReminders}
+              onCustom={() => setCustomReminder(true)}
+            />
+            {draftReminders.length > 0 && (
+              <ReminderChannelsRow channels={channels} value={draft.channelIds} onChange={(channelIds) => update({ channelIds })} />
+            )}
             <RepeatRow value={draft.repeat} anchor={repeatAnchor} onChange={setRepeat} onCustom={() => setCustomRepeat(true)} />
             {error && (
               <p className="date-error" role="alert">
@@ -418,8 +489,14 @@ function DatePickerPopover({
             )}
           </div>
           <div className="date-footer">
-            <Button onClick={() => onSave(null, null)}>清除</Button>
-            <Button variant="primary" disabled={error !== null} onClick={() => onSave(result, result ? draft.repeat : null)}>
+            <Button onClick={() => onSave(null, null, { reminders: [], reminderChannelIds: draft.channelIds })}>清除</Button>
+            <Button
+              variant="primary"
+              disabled={error !== null}
+              onClick={() =>
+                onSave(result, result ? draft.repeat : null, { reminders: result ? draftReminders : [], reminderChannelIds: draft.channelIds })
+              }
+            >
               确定
             </Button>
           </div>

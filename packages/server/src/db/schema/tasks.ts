@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { boolean, check, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core';
-import type { RepeatBasis, RepeatRule } from '@dida/shared';
+import type { Reminder, RepeatBasis, RepeatRule } from '@dida/shared';
 import { syncColumns, syncIndex } from '../../sync/columns.js';
 
 /** 文件夹: groups 清单, one level deep, never holds tasks directly. */
@@ -94,6 +94,10 @@ export const tasks = pgTable(
     repeatPrevId: uuid().references((): AnyPgColumn => tasks.id),
     /** Inputs the next-instance date was computed from, to recompute it after 节假日数据更新. */
     repeatBasis: jsonb().$type<RepeatBasis>(),
+    /** 提醒 (spec 用户故事 79–81); scheduled as 提醒投递记录 (reminder_deliveries). */
+    reminders: jsonb().$type<Reminder[]>().notNull().default([]),
+    /** 通知渠道 of the reminders; null: the user's default channels (用户故事 78). */
+    reminderChannelIds: uuid().array(),
   },
   (t) => [
     syncIndex('tasks', t),

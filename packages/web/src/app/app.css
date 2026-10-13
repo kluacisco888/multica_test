@@ -2738,3 +2738,89 @@ span.task-row-expand {
     border-left: 0;
   }
 }
+
+/* ---- 应用内提醒 (spec 用户故事 82) ---- */
+
+.reminder-alerts {
+  position: fixed;
+  right: var(--space-6);
+  bottom: var(--space-6);
+  z-index: 45;
+  display: grid;
+  gap: var(--space-3);
+  width: 320px;
+  pointer-events: none;
+}
+
+.reminder-alert {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  background: var(--color-bg);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-popover);
+  pointer-events: auto;
+}
+
+.reminder-alert-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-brand-text);
+}
+
+.reminder-alert-kind {
+  flex: 1;
+}
+
+.reminder-alert-close {
+  margin-right: calc(-1 * var(--space-2));
+  color: var(--color-text-secondary);
+}
+
+.reminder-alert-title {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.reminder-alert-when {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-date);
+}
+
+.reminder-alert-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.reminder-alert-snooze .ui-menu-trigger {
+  min-height: var(--input-height);
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-md);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.reminder-alert-snooze .ui-menu-trigger:hover {
+  background: var(--color-bg-hover);
+}
+
+/* The cards sit at the bottom of the screen: the 稍后提醒 menu opens upwards. */
+.reminder-alert-snooze .ui-menu {
+  top: auto;
+  bottom: calc(100% + var(--space-1));
+}
+
+@media (max-width: 767px) {
+  .reminder-alerts {
+    right: var(--space-4);
+    bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+    left: var(--space-4);
+    width: auto;
+  }
+}
