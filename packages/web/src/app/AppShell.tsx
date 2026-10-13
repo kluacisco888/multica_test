@@ -5,6 +5,8 @@ import {
   DEFAULT_TIME_ZONE,
   datesAsStored,
   todayIn,
+  keyBetween,
+  type BatchAction,
   type CalendarDay,
   type CalendarMode,
   type NotificationChannel,
@@ -57,6 +59,7 @@ import { SettingsDialog, type SettingsTab } from './SettingsDialog.js';
 import { MOBILE_QUERY, useMediaQuery, useRoute } from './route.js';
 import { activeSidebar, Sidebar } from './Sidebar.js';
 import { TaskDetail } from './TaskDetail.js';
+import { BatchDateDialog, BatchPanel, type BatchContext } from './BatchPanel.js';
 import type { ManualBoardActions } from './KanbanBoard.js';
 import { TaskListPane } from './TaskListPane.js';
 import { TimelinePane } from './TimelinePane.js';
@@ -341,6 +344,13 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   // Dates are shown in the user's time zone, so wait for the settings too.
   const listTasks = settings && tasks && tasks.scope === currentScope ? tasks.items : null;
   const selectedTask = listTasks?.find((t) => t.id === route.taskId) ?? null;
+  // 多选 (spec 用户故事 34): two or more selected tasks of this view, in display order.
+  const [multi, setMulti] = useState<{ scope: string | null; ids: string[] }>({ scope: null, ids: [] });
+  const [pickingBatchDate, setPickingBatchDate] = useState(false);
+  const multiTasks =
+    multi.scope === currentScope && listTasks ? multi.ids.flatMap((id) => listTasks.find((t) => t.id === id) ?? []) : [];
+  // On a phone a plain tap opens the task full screen, so one Ctrl / Shift-selected task already starts the 多选.
+  const batchTasks = multiTasks.length >= (isMobile ? 1 : 2) ? multiTasks : [];
   const viewOptions = view ? viewOptionsFor(view, settings?.viewOptions) : null;
   // Tab / Shift+Tab only make sense in a 清单 shown in its own order.
   const indentable = view?.kind === 'list' && viewOptions?.sortBy === 'custom' && viewOptions.groupBy === 'none';
@@ -499,6 +509,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   }
 
   function selectTask(taskId: string | null) {
+    setMulti({ scope: null, ids: [] });
     // In the 日历 the URL names the view and date, so the task stays on the same page.
     const calendar = calendarMode && calendarAnchor ? { mode: calendarMode, date: calendarAnchor } : null;
     navigate({ ...route, calendar, taskId });
@@ -558,6 +569,9 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       // (the 标签, today's date in 今天, 低优先级 in 不重要的 …).
       const task = await api.createTask({ ...addTarget.request, title });
       putTask(task);
+      // A new task lands first; if it does not sort first here, the server re-keyed the 清单 (long keys): re-read it.
+      const rekeyed = listTasks?.some((t) => t.listId === task.listId && t.parentId === null && t.id !== task.id && t.sortOrder <= task.sortOrder);
+      if (rekeyed) void reloadTasks();
       void reloadSidebar();
       return true;
     } catch (e) {
@@ -630,6 +644,55 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   async function moveTask(task: Task, dates: TaskDatesInput) {
     putTask({ ...task, dates: datesAsStored(dates, timeZone) });
     await changeTask(task, { dates });
+  }
+
+  /** Ctrl / Cmd / Shift + click: two or more tasks (one on a phone) become the 多选; fewer go back to one open task (or none). */
+  function multiSelect(ids: string[]) {
+    if (ids.length >= (isMobile ? 1 : 2)) {
+      if (route.taskId) selectTask(null);
+      setMulti({ scope: currentScope, ids });
+    } else {
+      selectTask(ids[0] ?? null);
+    }
+  }
+
+  /** 批量操作 on the 多选. Actions that can take tasks out of the view end the selection. */
+  async function runBatch(action: BatchAction) {
+    const ids = batchTasks.map((t) => t.id);
+    if (ids.length === 0) return;
+    try {
+      await api.batchTasks(ids, action);
+      if (action.op === 'delete' || action.op === 'complete' || action.op === 'abandon' || action.op === 'move') {
+        setMulti({ scope: null, ids: [] });
+      }
+      await reloadTasks();
+      void reloadSidebar();
+    } catch (e) {
+      fail(e);
+      void reloadTasks();
+    }
+  }
+
+  /** 拖拽排序 (spec 用户故事 32): show the new place at once, then save it (a failure re-reads the tasks). */
+  async function reorderTask(task: Task, afterId: string | null) {
+    const pinned = task.pinOrder !== null;
+    const key = (t: Task) => (pinned ? (t.pinOrder ?? '') : t.sortOrder);
+    const group = (listTasks ?? [])
+      .filter((t) => t.id !== task.id && (pinned ? t.pinOrder !== null : t.listId === task.listId && t.parentId === task.parentId))
+      .sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : a.id < b.id ? -1 : 1));
+    const index = afterId === null ? 0 : group.findIndex((t) => t.id === afterId) + 1;
+    try {
+      const guess = keyBetween(group[index - 1] ? key(group[index - 1]!) : null, group[index] ? key(group[index]!) : null);
+      putTask(pinned ? { ...task, pinOrder: guess } : { ...task, sortOrder: guess });
+    } catch {
+      // Out-of-order keys on screen: just wait for the server.
+    }
+    try {
+      for (const moved of await api.moveTask(task.id, afterId)) putTask(moved);
+    } catch (e) {
+      fail(e);
+      void reloadTasks();
+    }
   }
 
   /** 删除: the task and its 子任务 go to the 回收站. */
@@ -878,6 +941,19 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     return () => document.removeEventListener('keydown', onKeyDown);
   });
 
+  const batch: BatchContext | null =
+    batchTasks.length > 0
+      ? {
+          tasks: batchTasks,
+          lists: sidebar?.lists ?? [],
+          tags: tags ?? [],
+          timeZone,
+          now,
+          onAction: (action) => void runBatch(action),
+          onPickDate: () => setPickingBatchDate(true),
+        }
+      : null;
+
   // 时间线 (spec 用户故事 68) and 看板 (66、67) use the whole width until a task is opened, like the reference.
   const timeline = view !== null && viewLayouts(view).includes('timeline') && viewOptions?.layout === 'timeline';
   const board = boardMode && !route.trash;
@@ -1026,9 +1102,28 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onEditList={currentList && !currentList.isInbox ? () => setDialog({ kind: 'list', list: currentList, folderId: currentList.folderId }) : null}
           columns={view?.kind === 'list' ? listColumns : null}
           kanban={kanbanActions}
+          multiSelectedIds={batchTasks.map((t) => t.id)}
+          onMultiSelect={multiSelect}
+          batch={batch}
+          onBatchDelete={() => void runBatch({ op: 'delete' })}
+          isMobile={isMobile}
+          onMoveTask={(task, afterId) => void reorderTask(task, afterId)}
         />
       )}
-      {showDetail && !(isMobile && route.trash) && (
+      {batch && !isMobile && !route.trash && !route.calendar && !timeline && (
+        <BatchPanel ctx={batch} onCancel={() => setMulti({ scope: null, ids: [] })} onDelete={() => void runBatch({ op: 'delete' })} />
+      )}
+      {pickingBatchDate && batch && (
+        <BatchDateDialog
+          initial={today}
+          onCancel={() => setPickingBatchDate(false)}
+          onSave={(date) => {
+            setPickingBatchDate(false);
+            void runBatch({ op: 'dates', dates: { allDay: true, startDate: null, dueDate: date } });
+          }}
+        />
+      )}
+      {showDetail && !batch && !(isMobile && route.trash) && (
         <TaskDetail
           key={selectedTask?.id ?? 'empty'}
           task={selectedTask}

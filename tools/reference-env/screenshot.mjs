@@ -121,7 +121,7 @@ async function runStep(page, step, shotPath) {
         });
         const reason = forbiddenControl(info);
         if (reason) throw new Error(`拒绝点击 ${step.selector}：${reason}（ADR-0008）`);
-        await target.click({ timeout: STEP_TIMEOUT_MS });
+        await target.click({ timeout: STEP_TIMEOUT_MS, modifiers: step.modifiers, button: step.button });
       } else {
         await target.hover({ timeout: STEP_TIMEOUT_MS });
       }

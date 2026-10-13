@@ -3166,3 +3166,254 @@ span.task-row-expand {
     cursor: default;
   }
 }
+
+/* ---- 拖拽排序、置顶与多选 (EURO-22) ---- */
+
+/* 已置顶: the pin icon in the reference's orange. */
+.task-section-toggle .task-section-pin {
+  color: var(--color-priority-medium);
+}
+
+.task-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 10px;
+}
+
+/* 全选 / 取消全选 while several tasks are selected (reference: blue text at the right of the group). */
+.task-section-select {
+  padding: 2px var(--space-1);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  color: var(--color-brand-text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.task-section-select:hover {
+  background: var(--color-icon-hover);
+}
+
+/* 多选: selected rows share the light blue of the reference; touching rows read as one block. */
+.task-row-multi,
+.task-row-multi:hover {
+  background: var(--color-brand-softer);
+  border-radius: 0;
+}
+
+.task-item:has(> .task-row-multi):not(:has(+ .task-item > .task-row-multi)) > .task-row-multi {
+  border-bottom-right-radius: var(--radius-md);
+  border-bottom-left-radius: var(--radius-md);
+}
+
+.task-item:not(.task-item:has(> .task-row-multi) + .task-item) > .task-row-multi {
+  border-top-left-radius: var(--radius-md);
+  border-top-right-radius: var(--radius-md);
+}
+
+.task-row-multi .task-row-title,
+.task-row-multi .task-row-meta,
+.task-row-multi .task-row-tags,
+.task-row-multi .task-row-list,
+.task-row-multi .task-row-date {
+  border-bottom-color: transparent;
+}
+
+/* Drag grip: hangs left of the row on hover, like the reference's ≡. */
+.task-row-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -16px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  color: var(--color-text-secondary);
+  visibility: hidden;
+  cursor: grab;
+}
+
+.task-row:hover .task-row-grip {
+  visibility: visible;
+}
+
+/* Touch screens have no hover and no drag: Alt + ↑ / ↓ (keyboard) is the way there. */
+@media (hover: none) {
+  .task-row-grip {
+    display: none;
+  }
+}
+
+.task-row[draggable='true'] {
+  cursor: default;
+}
+
+.task-row-dragging {
+  opacity: 0.5;
+}
+
+.task-row[data-drop='before'] {
+  box-shadow: inset 0 2px 0 var(--color-brand);
+}
+
+.task-row[data-drop='after'] {
+  box-shadow: inset 0 -2px 0 var(--color-brand);
+}
+
+/* 已选择 N 项 (the detail column while several tasks are selected). */
+.batch-panel {
+  padding: 0 var(--space-5) var(--space-5);
+  overflow-y: auto;
+}
+
+.batch-panel-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+}
+
+.batch-panel-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text);
+}
+
+.batch-panel-count {
+  padding: 0 2px;
+  color: var(--color-brand-text);
+}
+
+.batch-panel-cancel {
+  padding: var(--space-1) var(--space-2);
+  font: inherit;
+  font-size: var(--font-size-md);
+  color: var(--color-brand-text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.batch-panel-cancel:hover {
+  background: var(--color-icon-hover);
+}
+
+.batch-panel-fields {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-1) 0;
+  background: var(--color-bg-card);
+  border-radius: var(--radius-lg, 8px);
+}
+
+.batch-panel-field-anchor {
+  display: block;
+}
+
+.batch-panel-field,
+.batch-panel-field.ui-menu-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 44px;
+  padding: 0 var(--space-3);
+  font: inherit;
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.batch-panel-field:hover {
+  background: var(--color-icon-hover);
+}
+
+.batch-panel-field-accent,
+.batch-panel-field-accent.ui-menu-trigger {
+  color: var(--color-brand-text);
+}
+
+.batch-panel-field-disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.batch-panel-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+.batch-panel-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  height: 68px;
+  font: inherit;
+  font-size: var(--font-size-md);
+  color: var(--color-text);
+  background: var(--color-bg-card);
+  border: 0;
+  border-radius: var(--radius-lg, 8px);
+  cursor: pointer;
+}
+
+.batch-panel-action svg {
+  color: var(--color-brand);
+}
+
+.batch-panel-action:hover {
+  background: var(--color-bg-hover);
+}
+
+.batch-panel-action:disabled {
+  color: var(--color-text-secondary);
+  cursor: default;
+}
+
+.batch-panel-action-danger,
+.batch-panel-action-danger svg {
+  color: var(--color-danger);
+}
+
+/* Phone: the toolbar floating over the bottom of the list (reference at 390px). */
+.batch-toolbar {
+  position: fixed;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+  transform: translateX(-50%);
+}
+
+.batch-toolbar-count {
+  min-width: 20px;
+  padding: 0 var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-brand-text);
+  text-align: center;
+}
+
+.batch-toolbar .ui-menu {
+  top: auto;
+  bottom: calc(100% + 4px);
+}

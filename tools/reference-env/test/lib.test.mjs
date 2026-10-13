@@ -97,6 +97,32 @@ test('parseScript accepts only navigation steps (ADR-0008)', () => {
   ]);
 });
 
+test('parseScript accepts multi-select clicks (Shift / Ctrl / Cmd) and right clicks', () => {
+  const steps = parseScript(
+    JSON.stringify([
+      { click: 'text="a"', modifiers: ['Control'] },
+      { click: 'text="b"', modifiers: ['Shift'] },
+      { click: 'text="c"', modifiers: ['Meta'], button: 'left' },
+      { click: 'text="d"', button: 'right' },
+    ]),
+  );
+  assert.deepEqual(steps, [
+    { action: 'click', selector: 'text="a"', modifiers: ['Control'] },
+    { action: 'click', selector: 'text="b"', modifiers: ['Shift'] },
+    { action: 'click', selector: 'text="c"', modifiers: ['Meta'] },
+    { action: 'click', selector: 'text="d"', button: 'right' },
+  ]);
+  for (const step of [
+    { click: 'x', modifiers: ['Alt'] },
+    { click: 'x', modifiers: 'Shift' },
+    { click: 'x', modifiers: ['Shift', 'Shift'] },
+    { click: 'x', button: 'middle' },
+    { hover: 'x', modifiers: ['Shift'] },
+  ]) {
+    assert.throws(() => parseScript(JSON.stringify([step])), /步骤/, JSON.stringify(step));
+  }
+});
+
 test('parseScript rejects typing, dragging, unknown steps and bad values', () => {
   assert.throws(() => parseScript('{}'), /数组/);
   assert.throws(() => parseScript('not json'), /JSON/);

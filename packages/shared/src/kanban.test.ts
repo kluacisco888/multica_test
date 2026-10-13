@@ -37,6 +37,7 @@ function task(title: string, extra: Partial<Task> = {}): Task {
     reminders: [],
     reminderChannelIds: null,
     columnId: null,
+    pinOrder: null,
     ...extra,
   };
 }

@@ -107,6 +107,9 @@ const MAX_WAIT_MS = 120_000;
 /** 只用于关闭弹层、移动焦点、滚动的键；不含 Enter / 空格（会触发按钮）和字符键。 */
 const NAVIGATION_KEYS = new Set(['Escape', 'Tab', 'Shift+Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End']);
 
+/** 点击时可以按住的修饰键（多选）；Meta 是 macOS 的 Cmd。 */
+const CLICK_MODIFIERS = new Set(['Shift', 'Control', 'Meta']);
+
 function stepError(index, step, why) {
   return new Error(`导航脚本步骤 ${index + 1} ${JSON.stringify(step)} 无效：${why}`);
 }
@@ -129,8 +132,25 @@ export function parseScript(json) {
       const extra = keys.filter((k) => !allowed.includes(k));
       if (extra.length > 0) throw stepError(i, step, `不认识的字段 ${extra.join(', ')}`);
     };
-    if ('click' in step || 'hover' in step || 'waitFor' in step) {
-      const action = 'click' in step ? 'click' : 'hover' in step ? 'hover' : 'waitFor';
+    if ('click' in step) {
+      // 多选（Shift / Ctrl / Cmd 点击）和右键菜单只改页面上的选中状态、打开菜单，不改数据。
+      only('click', 'modifiers', 'button');
+      if (!isSelector(step.click)) throw stepError(i, step, '需要非空选择器');
+      const modifiers = step.modifiers ?? [];
+      if (!Array.isArray(modifiers) || !modifiers.every((m) => CLICK_MODIFIERS.has(m)) || new Set(modifiers).size !== modifiers.length) {
+        throw stepError(i, step, `modifiers 只能是 ${[...CLICK_MODIFIERS].join(' / ')}`);
+      }
+      const button = step.button ?? 'left';
+      if (button !== 'left' && button !== 'right') throw stepError(i, step, 'button 只能是 left / right');
+      return {
+        action: 'click',
+        selector: step.click,
+        ...(modifiers.length > 0 ? { modifiers } : {}),
+        ...(button === 'right' ? { button } : {}),
+      };
+    }
+    if ('hover' in step || 'waitFor' in step) {
+      const action = 'hover' in step ? 'hover' : 'waitFor';
       only(action);
       if (!isSelector(step[action])) throw stepError(i, step, '需要非空选择器');
       return { action, selector: step[action] };

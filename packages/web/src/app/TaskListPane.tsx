@@ -25,8 +25,14 @@ import {
   type ViewOptions,
   VIEW_LAYOUT_LABELS,
   type ViewLayout,
+  dropAfterId,
+  selectTask,
+  stepAfterId,
+  toggleGroup,
+  type SelectMode,
 } from '@dida/shared';
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { batchContextSections, BatchToolbar, type BatchContext } from './BatchPanel.js';
 import { ContextMenu, IconButton, MenuButton, TaskCheckbox, type ContextMenuSection } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { KanbanBoard, type ManualBoardActions } from './KanbanBoard.js';
@@ -75,7 +81,22 @@ interface TaskListPaneProps {
   columns: KanbanColumn[] | null;
   /** 清单 board actions (看板视图 of a 清单). */
   kanban: ManualBoardActions | null;
+  /** 多选: the selected tasks when two or more are (spec 用户故事 34); empty otherwise. */
+  multiSelectedIds: readonly string[];
+  /** Ctrl / Cmd / Shift + click and 全选: the new selection (fewer than two: back to one open task, or none). */
+  onMultiSelect: (ids: string[]) => void;
+  /** 批量操作 on the selection (its menus and the phone toolbar); null without a selection. */
+  batch: BatchContext | null;
+  onBatchDelete: () => void;
+  isMobile: boolean;
+  /** 拖拽排序 (spec 用户故事 32): put `task` right after `afterId` (null: first) in its group. */
+  onMoveTask: (task: Task, afterId: string | null) => void;
 }
+
+/** Where a dragged row would land. */
+type DropHint = { id: string; position: 'before' | 'after' } | null;
+/** Rows a task is ordered with on screen: same section and parent (已置顶 roots together). */
+const orderGroupKey = (sectionKey: string, task: Task) => `${sectionKey}|${task.parentId ?? ''}`;
 
 type MenuState = { task: Task; x: number; y: number; opener: HTMLElement | null } | null;
 type LayoutMenuState = { x: number; y: number; opener: HTMLElement | null } | null;
@@ -140,8 +161,100 @@ export function TaskListPane(props: TaskListPaneProps) {
     if (view.kind !== 'list') board = arrangeAutoBoard(tasks, viewOptions, arrangeContext);
     else if (props.columns) board = arrangeListBoard(tasks, props.columns, viewOptions, arrangeContext);
   }
-  const nodesOf = (items: Task[]): TaskNode<Task>[] =>
-    nested ? buildTaskTree(items) : items.map((task) => ({ task, depth: 1, children: [] }));
+  const nodesOf = (items: Task[], section?: TaskSection): TaskNode<Task>[] => {
+    if (!nested) return items.map((task) => ({ task, depth: 1, children: [] }));
+    // 已置顶 keeps its pin order for the roots; each root brings its 子任务.
+    if (section?.pinned) {
+      const rank = new Map(items.map((t, i) => [t.id, i]));
+      return buildTaskTree(items).sort((a, b) => (rank.get(a.task.id) ?? 0) - (rank.get(b.task.id) ?? 0));
+    }
+    return buildTaskTree(items);
+  };
+
+  // 拖拽排序 only in a 清单's own (custom) order, where the rows are the stored order.
+  const reorderable = view?.kind === 'list' && !archived && viewOptions.sortBy === 'custom' && !boardMode;
+  const [dragged, setDragged] = useState<{ id: string; group: string } | null>(null);
+  const [dropHint, setDropHint] = useState<DropHint>(null);
+  const anchor = useRef<string | null>(null);
+
+  // Display order (for Shift + click ranges) and the order groups (for drops), from what is on screen.
+  const shownOrder: string[] = [];
+  const groups = new Map<string, string[]>();
+  const groupOfTask = new Map<string, string>();
+  const sectionNodes = sections.map((section) => ({ section, nodes: nodesOf(section.tasks, section) }));
+  for (const { section, nodes } of sectionNodes) {
+    const walk = (list: TaskNode<Task>[], visible: boolean) => {
+      for (const node of list) {
+        const key = orderGroupKey(section.key, node.task);
+        groups.set(key, [...(groups.get(key) ?? []), node.task.id]);
+        groupOfTask.set(node.task.id, key);
+        if (visible) shownOrder.push(node.task.id);
+        walk(node.children, visible && !collapsed.has(node.task.id));
+      }
+    };
+    walk(nodes, !collapsedSections.has(section.key));
+  }
+  const multi = new Set(props.multiSelectedIds);
+
+  function select(task: Task, mode: SelectMode) {
+    if (mode === 'single') {
+      anchor.current = task.id;
+      props.onSelectTask(task.id);
+      return;
+    }
+    const base = props.multiSelectedIds.length > 0 ? [...props.multiSelectedIds] : props.selectedTaskId ? [props.selectedTaskId] : [];
+    // Without a 多选 the range starts at the open task (or the clicked one), never at an old anchor.
+    const from = props.multiSelectedIds.length > 0 ? anchor.current : props.selectedTaskId;
+    const next = selectTask(shownOrder, { ids: base, anchor: from }, task.id, mode);
+    anchor.current = next.anchor;
+    props.onMultiSelect(next.ids);
+  }
+
+  function toggleSectionSelection(section: TaskSection) {
+    const ids = section.tasks.map((t) => t.id).filter((id) => shownOrder.includes(id));
+    props.onMultiSelect(toggleGroup(shownOrder, { ids: [...props.multiSelectedIds], anchor: anchor.current }, ids).ids);
+  }
+
+  function moveBy(task: Task, step: -1 | 1): boolean {
+    const key = groupOfTask.get(task.id);
+    const afterId = key ? stepAfterId(groups.get(key) ?? [], task.id, step) : undefined;
+    if (afterId === undefined) return false;
+    focusAfterMove.current = task.id;
+    props.onMoveTask(task, afterId);
+    return true;
+  }
+
+  const drag = reorderable
+    ? {
+        draggedId: dragged?.id ?? null,
+        hint: dropHint,
+        start(task: Task) {
+          const group = groupOfTask.get(task.id);
+          if (group) setDragged({ id: task.id, group });
+        },
+        end() {
+          setDragged(null);
+          setDropHint(null);
+        },
+        over(event: DragEvent<HTMLElement>, task: Task) {
+          if (!dragged || groupOfTask.get(task.id) !== dragged.group || task.id === dragged.id) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          const rect = event.currentTarget.getBoundingClientRect();
+          const position = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+          if (dropHint?.id !== task.id || dropHint.position !== position) setDropHint({ id: task.id, position });
+        },
+        drop(event: DragEvent<HTMLElement>, task: Task) {
+          if (!dragged || !dropHint) return;
+          event.preventDefault();
+          const moved = tasks?.find((t) => t.id === dragged.id);
+          const afterId = dropAfterId(groups.get(dragged.group) ?? [], dragged.id, task.id, dropHint.position);
+          setDragged(null);
+          setDropHint(null);
+          if (moved && afterId !== undefined) props.onMoveTask(moved, afterId);
+        },
+      }
+    : null;
 
   // A moved row is re-mounted under its new parent: give it focus back.
   useEffect(() => {
@@ -180,7 +293,6 @@ export function TaskListPane(props: TaskListPaneProps) {
     selectedTaskId: props.selectedTaskId,
     collapsed,
     onToggleCollapsed: (id: string) => toggleIn(setCollapsed, id),
-    onSelectTask: props.onSelectTask,
     onToggleTask: props.onToggleTask,
     onIndent: indent,
     indentable: props.indentable,
@@ -190,6 +302,11 @@ export function TaskListPane(props: TaskListPaneProps) {
     listName,
     matches: props.searchMatches,
     onOpenMenu: (task: Task, x: number, y: number, opener: HTMLElement | null) => setMenu({ task, x, y, opener }),
+    multi,
+    onSelect: select,
+    onClearMulti: () => props.onMultiSelect([]),
+    onMoveBy: reorderable ? moveBy : null,
+    drag,
   };
 
   const layoutSections = layoutMenuSections(viewOptions, props.onChangeViewOptions, view ? viewLayouts(view) : []);
@@ -288,10 +405,10 @@ export function TaskListPane(props: TaskListPaneProps) {
           {view && EMPTY_HINTS[view.kind] && <p>{EMPTY_HINTS[view.kind]}</p>}
         </div>
       ) : (
-        sections.map((section) =>
+        sectionNodes.map(({ section, nodes }) =>
           section.title === '' ? (
             <ul key={section.key} className="task-rows" aria-label="任务">
-              <TaskRows nodes={nodesOf(section.tasks)} {...rowProps} />
+              <TaskRows nodes={nodes} sectionKey={section.key} {...rowProps} />
             </ul>
           ) : (
             <TaskSectionBlock
@@ -299,28 +416,41 @@ export function TaskListPane(props: TaskListPaneProps) {
               section={section}
               collapsed={collapsedSections.has(section.key)}
               onToggle={() => toggleIn(setCollapsedSections, section.key)}
+              selection={
+                multi.size > 0
+                  ? { all: section.tasks.every((t) => multi.has(t.id)), onToggle: () => toggleSectionSelection(section) }
+                  : null
+              }
             >
               {/* Completed subtrees keep their shape; a completed 子任务 of an open task shows as a root. */}
-              <TaskRows nodes={nodesOf(section.tasks)} {...rowProps} />
+              <TaskRows nodes={nodes} sectionKey={section.key} {...rowProps} />
             </TaskSectionBlock>
           ),
         )
       )}
 
+      {props.isMobile && props.batch && !boardMode && (
+        <BatchToolbar ctx={props.batch} onCancel={() => props.onMultiSelect([])} onDelete={props.onBatchDelete} />
+      )}
+
       {menu && (
         <ContextMenu
-          label={`任务操作：${menu.task.title}`}
+          label={props.batch && multi.has(menu.task.id) ? `批量操作：已选择 ${multi.size} 项` : `任务操作：${menu.task.title}`}
           x={menu.x}
           y={menu.y}
           returnFocus={menu.opener}
           // Read the task fresh: it may have changed since the menu opened.
-          sections={[
+          sections={
+            props.batch && multi.has(menu.task.id)
+              ? batchContextSections(props.batch, props.onBatchDelete)
+              : [
             ...taskContextSections(
               tasks?.find((t) => t.id === menu.task.id) ?? menu.task,
               props.tags,
               (patch) => props.onChangeTask(menu.task, patch),
               () => props.onDeleteTask(menu.task),
             ),
+            ...(menu.task.parentId === null && menu.task.status === 'open' ? [pinSection(menu.task, (patch) => props.onChangeTask(menu.task, patch))] : []),
             ...(board?.kind === 'manual' && props.kanban && menu.task.parentId === null ? [columnMoveSection(menu.task, props.columns ?? [], props.kanban)] : []),
           ]}
           onClose={() => setMenu(null)}
@@ -382,6 +512,17 @@ export function layoutMenuSections(
   ];
 }
 
+/** 置顶 / 取消置顶 (spec 用户故事 33): top-level open tasks. */
+function pinSection(task: Task, onChange: (patch: UpdateTaskRequest) => void): ContextMenuSection {
+  return {
+    items: [
+      task.pinOrder !== null
+        ? { label: '取消置顶', icon: 'pin', onSelect: () => onChange({ pinned: false }) }
+        : { label: '置顶', icon: 'pin', onSelect: () => onChange({ pinned: true }) },
+    ],
+  };
+}
+
 /** 移动到分组: the keyboard / touch way to move a card between 分栏. */
 function columnMoveSection(task: Task, columns: KanbanColumn[], kanban: ManualBoardActions): ContextMenuSection {
   const current = columns.some((c) => c.id === task.columnId) ? task.columnId : null;
@@ -403,22 +544,36 @@ function TaskSectionBlock({
   section,
   collapsed,
   onToggle,
+  selection,
   children,
 }: {
   section: TaskSection;
   collapsed: boolean;
   onToggle: () => void;
+  /** While several tasks are selected: 全选 / 取消全选 of this group. */
+  selection: { all: boolean; onToggle: () => void } | null;
   children: ReactNode;
 }) {
   const id = `section-${section.key.replace(/[^a-zA-Z0-9-]/g, '-')}`;
   return (
-    <section className="task-section" aria-labelledby={`${id}-heading`}>
+    <section className={`task-section ${section.pinned ? 'task-section-pinned' : ''}`} aria-labelledby={`${id}-heading`}>
       <h2 id={`${id}-heading`} className="task-section-heading">
         <button type="button" className="task-section-toggle" aria-expanded={!collapsed} aria-controls={id} onClick={onToggle}>
           <Icon name={collapsed ? 'chevronRight' : 'chevronDown'} size={12} />
+          {section.pinned && <Icon name="pin" size={16} className="task-section-pin" />}
           <span>{section.title}</span>
           <span className="task-section-count">{section.tasks.length}</span>
         </button>
+        {selection && (
+          <button
+            type="button"
+            className="task-section-select"
+            aria-label={`${selection.all ? '取消全选' : '全选'}「${section.title}」`}
+            onClick={selection.onToggle}
+          >
+            {selection.all ? '取消全选' : '全选'}
+          </button>
+        )}
       </h2>
       {!collapsed && (
         <ul id={id} className="task-rows" aria-label={section.completed ? '已完成的任务' : `${section.title}的任务`}>
@@ -506,7 +661,6 @@ interface TaskRowsProps {
   selectedTaskId: string | null;
   collapsed: ReadonlySet<string>;
   onToggleCollapsed: (id: string) => void;
-  onSelectTask: (taskId: string) => void;
   onToggleTask: (task: Task) => void;
   onIndent: (task: Task, outdent: boolean) => boolean;
   /** False outside a 清单's own order: Tab / Shift+Tab don't indent there. */
@@ -519,6 +673,29 @@ interface TaskRowsProps {
   /** 搜索: where each task matched. */
   matches?: Record<string, SearchMatchField[]> | undefined;
   onOpenMenu: (task: Task, x: number, y: number, opener: HTMLElement | null) => void;
+  /** Section the rows are in (drops stay inside it). */
+  sectionKey: string;
+  /** 多选: the selected tasks when several are. */
+  multi: ReadonlySet<string>;
+  onSelect: (task: Task, mode: SelectMode) => void;
+  onClearMulti: () => void;
+  /** Alt + ↑ / ↓ (keyboard 拖拽排序); null where the order cannot change. */
+  onMoveBy: ((task: Task, step: -1 | 1) => boolean) | null;
+  drag: {
+    draggedId: string | null;
+    hint: DropHint;
+    start: (task: Task) => void;
+    end: () => void;
+    over: (event: DragEvent<HTMLElement>, task: Task) => void;
+    drop: (event: DragEvent<HTMLElement>, task: Task) => void;
+  } | null;
+}
+
+/** Click modifiers: Shift selects a range, Ctrl / Cmd adds or removes one task. */
+function selectModeOf(e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }): SelectMode {
+  if (e.shiftKey) return 'range';
+  if (e.ctrlKey || e.metaKey) return 'toggle';
+  return 'single';
 }
 
 function TaskRows({ nodes, ...rest }: TaskRowsProps) {
@@ -531,7 +708,6 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
     selectedTaskId,
     collapsed,
     onToggleCollapsed,
-    onSelectTask,
     onToggleTask,
     onIndent,
     indentable,
@@ -541,7 +717,13 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
     listName,
     matches,
     onOpenMenu,
+    multi,
+    onSelect,
+    onClearMulti,
+    onMoveBy,
+    drag,
   } = rest;
+  const multiSelected = multi.has(task.id);
   const matchedIn = matches?.[task.id]?.filter((f) => f !== 'title') ?? [];
   const titleRef = useRef<HTMLButtonElement>(null);
   const taskTags = tagsOf(task, tags);
@@ -562,6 +744,22 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+    // 多选 from the keyboard: Shift / Ctrl / Cmd + Enter or Space, like the clicks; Esc clears it.
+    if ((e.key === 'Enter' || e.key === ' ') && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      onSelect(task, selectModeOf(e));
+      return;
+    }
+    if (e.key === 'Escape' && multi.size > 0) {
+      e.preventDefault();
+      onClearMulti();
+      return;
+    }
+    // Keyboard 拖拽排序: Alt + ↑ / ↓ moves the task one place within its group.
+    if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && onMoveBy) {
+      if (onMoveBy(task, e.key === 'ArrowUp' ? -1 : 1)) e.preventDefault();
+      return;
+    }
     // Keyboard access to the right-click menu: the ContextMenu key or Shift+F10.
     if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
       e.preventDefault();
@@ -577,10 +775,31 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
   return (
     <li className="task-item">
       <div
-        className={`task-row ${selected ? 'task-row-selected' : ''} ${done ? 'task-row-done' : ''}`}
+        className={`task-row ${selected ? 'task-row-selected' : ''} ${multiSelected ? 'task-row-multi' : ''} ${done ? 'task-row-done' : ''} ${
+          drag?.draggedId === task.id ? 'task-row-dragging' : ''
+        }`}
         style={{ '--task-depth': depth - 1 } as CSSProperties}
         onContextMenu={onContextMenu}
+        data-drop={drag?.hint?.id === task.id ? drag.hint.position : undefined}
+        draggable={drag !== null && !done}
+        onDragStart={
+          drag && !done
+            ? (e) => {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', task.title);
+                drag.start(task);
+              }
+            : undefined
+        }
+        onDragEnd={drag ? drag.end : undefined}
+        onDragOver={drag ? (e) => drag.over(e, task) : undefined}
+        onDrop={drag ? (e) => drag.drop(e, task) : undefined}
       >
+        {drag && !done && (
+          <span className="task-row-grip" aria-hidden="true">
+            <Icon name="grip" size={14} />
+          </span>
+        )}
         {children.length > 0 ? (
           <button
             type="button"
@@ -603,11 +822,12 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
           data-task-id={task.id}
           aria-current={selected ? 'true' : undefined}
           aria-description={task.priority !== 'none' ? PRIORITY_LABELS[task.priority] : undefined}
-          aria-keyshortcuts={selected && !done && indentable ? 'Tab Shift+Tab' : undefined}
-          onClick={() => onSelectTask(task.id)}
+          aria-keyshortcuts={selected && !done && indentable ? 'Tab Shift+Tab' : onMoveBy && !done ? 'Alt+ArrowUp Alt+ArrowDown' : undefined}
+          onClick={(e) => onSelect(task, selectModeOf(e))}
           onKeyDown={onKeyDown}
         >
           {task.title}
+          {multiSelected && <span className="visually-hidden">（已选中）</span>}
         </button>
         {taskTags.length > 0 && (
           <ul className="task-row-tags" aria-label="标签">
