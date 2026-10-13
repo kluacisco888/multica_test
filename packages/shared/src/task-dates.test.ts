@@ -131,3 +131,39 @@ describe('describeTaskDates (list label, same words as 滴答)', () => {
     expect(label(allDay('2026-10-13'), SH).text).toBe('今天');
   });
 });
+
+describe('time zone changes across daylight saving time (review)', () => {
+  const label = (dates: TaskDates, timeZone: string, at: Date) => describeTaskDates(dates, { now: at, timeZone });
+
+  it('keeps the instant and moves the shown time by the offset on each side of the New York change', () => {
+    // 2026-11-01 02:00 EDT -> 01:00 EST. Before: UTC-4, after: UTC-5; Shanghai is UTC+8 all year.
+    const beforeChange = timed(zonedToInstant('2026-10-31', '09:00', NY), null, NY);
+    const afterChange = timed(zonedToInstant('2026-11-02', '09:00', NY), null, NY);
+    const at = new Date('2026-10-30T16:00:00.000Z'); // 2026-10-31 00:00 Shanghai, 10-30 12:00 New York
+    expect(label(beforeChange, NY, at).text).toBe('明天 09:00');
+    expect(label(beforeChange, SH, at).text).toBe('21:00');
+    expect(label(afterChange, NY, at).text).toBe('周一 09:00');
+    expect(label(afterChange, SH, at).text).toBe('周一 22:00');
+  });
+
+  it('keeps all-day dates unchanged when switching to and from a zone on its DST change day', () => {
+    const day = allDay('2026-11-01');
+    const at = new Date('2026-11-01T05:30:00.000Z'); // 01:30 EST (second 01:30) in New York, 13:30 in Shanghai
+    expect(label(day, NY, at).text).toBe('今天');
+    expect(label(day, SH, at).text).toBe('今天');
+    expect(label(day, 'Europe/London', at).text).toBe('今天');
+  });
+
+  it('resolves wall-clock times on the change days to real instants', () => {
+    // Repeated hour (fall back): the earlier occurrence, 01:30 EDT.
+    expect(zonedToInstant('2026-11-01', '01:30', NY)).toBe('2026-11-01T05:30:00.000Z');
+    // Hours after the change use the new offset.
+    expect(zonedToInstant('2026-11-01', '03:00', NY)).toBe('2026-11-01T08:00:00.000Z');
+    expect(zonedToInstant('2026-03-08', '03:30', NY)).toBe('2026-03-08T07:30:00.000Z');
+    // Skipped hour (spring forward, 02:00-03:00 does not exist): lands on a real
+    // instant one hour away from the typed time and round-trips to a valid wall clock.
+    const gap = zonedToInstant('2026-03-08', '02:30', NY);
+    expect(['2026-03-08T06:30:00.000Z', '2026-03-08T07:30:00.000Z']).toContain(gap);
+    expect(zonedToInstant(zonedDateTime(gap, NY).date, zonedDateTime(gap, NY).time, NY)).toBe(gap);
+  });
+});

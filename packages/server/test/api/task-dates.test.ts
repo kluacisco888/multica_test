@@ -155,6 +155,49 @@ describe('task dates and time zone settings API', () => {
     clock.set('2026-10-13T02:00:00.000Z');
   });
 
+  it('across a DST change: switching zones keeps instants and all-day dates, timed labels follow the new zone (review)', async () => {
+    const erin = await t.createUser('erin');
+    await setTimeZone(erin, 'America/New_York');
+    clock.set('2026-10-30T16:00:00.000Z'); // 10-30 12:00 New York (EDT), 10-31 00:00 Shanghai
+    // 09:00 New York on each side of 2026-11-01 (EDT UTC-4 -> EST UTC-5).
+    const edt = await createTask(erin, { title: '夏令时内', dates: { allDay: false, dueAt: '2026-10-31T13:00:00.000Z' } });
+    const est = await createTask(erin, { title: '夏令时后', dates: { allDay: false, dueAt: '2026-11-02T14:00:00.000Z' } });
+    const day = await createTask(erin, { title: '切换当天', dates: { allDay: true, dueDate: '2026-11-01' } });
+    expect(edt.dates).toMatchObject({ timeZone: 'America/New_York' });
+    const label = (task: Task, timeZone: string) => describeTaskDates(task.dates!, { now: clock.now(), timeZone });
+    expect(label(edt, 'America/New_York').text).toBe('明天 09:00');
+    expect(label(est, 'America/New_York').text).toBe('周一 09:00');
+
+    const { timeZone } = await setTimeZone(erin, 'Asia/Shanghai');
+    const [edt2, est2, day2] = await Promise.all([getTask(erin, edt.id), getTask(erin, est.id), getTask(erin, day.id)]);
+    expect(edt2.dates).toEqual(edt.dates);
+    expect(est2.dates).toEqual(est.dates);
+    expect(day2.dates).toEqual({ allDay: true, startDate: null, dueDate: '2026-11-01' });
+    // UTC-4 -> +8 is 12 hours, UTC-5 -> +8 is 13 hours.
+    expect(label(edt2, timeZone).text).toBe('21:00');
+    expect(label(est2, timeZone).text).toBe('周一 22:00');
+    expect(label(day2, timeZone).text).toBe('明天');
+    clock.set('2026-10-13T02:00:00.000Z');
+  });
+
+  it('keeps settings per user: one user changing the zone never shows up for another (review)', async () => {
+    const [u1, u2] = await Promise.all([t.createUser('frank'), t.createUser('grace')]);
+    await Promise.all([setTimeZone(u1, 'Asia/Tokyo'), setTimeZone(u2, 'Europe/Paris')]);
+    expect(await settings(u1)).toEqual({ timeZone: 'Asia/Tokyo' });
+    expect(await settings(u2)).toEqual({ timeZone: 'Europe/Paris' });
+    // A timed task gets its owner's zone, not the other user's.
+    const task = await createTask(u2, { title: 'x', dates: { allDay: false, dueAt: '2026-10-14T01:00:00.000Z' } });
+    expect(task.dates).toMatchObject({ timeZone: 'Europe/Paris' });
+    // Concurrent first changes for one user leave a single settings row.
+    const zones = ['Asia/Seoul', 'Asia/Dubai', 'Europe/Rome', 'America/Chicago', 'Australia/Sydney'];
+    const hank = await t.createUser('hank');
+    const results = await Promise.all(zones.map((z) => api(hank, 'PATCH', '/api/settings', { timeZone: z })));
+    expect(results.map((r) => r.statusCode)).toEqual(zones.map(() => 200));
+    const changes = changesResponseSchema.parse((await api(hank, 'GET', '/api/changes')).json());
+    expect(changes.entities.settings?.upserts).toHaveLength(1);
+    expect(zones).toContain((await settings(hank)).timeZone);
+  });
+
   it('lists tasks with their dates and syncs dates and settings through /api/changes', async () => {
     const dave = await t.createUser('dave');
     const task = await createTask(dave, { title: '同步', dates: { allDay: true, startDate: '2026-10-13', dueDate: '2026-10-14' } });
