@@ -6,6 +6,7 @@ import {
   orderTags,
   planSidebarDrop,
   tagWithChildren,
+  TRASH_RETENTION_DAYS,
   type CurrentUser,
   type DropPosition,
   type Folder,
@@ -15,6 +16,7 @@ import {
   type Tag,
   type Task,
   type TaskList,
+  type TrashedTask,
   type UpdateSettingsRequest,
   type UpdateTaskRequest,
 } from '@dida/shared';
@@ -25,9 +27,10 @@ import { ConfirmDialog, FolderDialog, ListDialog, TagDialog, type ListDraft, typ
 import { Rail } from './Rail.js';
 import { SettingsDialog, type SettingsTab } from './SettingsDialog.js';
 import { MOBILE_QUERY, useMediaQuery, useRoute } from './route.js';
-import { Sidebar } from './Sidebar.js';
+import { activeSidebar, Sidebar } from './Sidebar.js';
 import { TaskDetail } from './TaskDetail.js';
 import { TaskListPane, type ListPaneView } from './TaskListPane.js';
+import { TrashPane } from './TrashPane.js';
 
 type DialogState =
   | { kind: 'none' }
@@ -37,7 +40,9 @@ type DialogState =
   | { kind: 'delete-list'; list: TaskList }
   | { kind: 'delete-folder'; folder: Folder }
   | { kind: 'tag'; tag: Tag | null; parentId: string | null }
-  | { kind: 'delete-tag'; tag: Tag };
+  | { kind: 'delete-tag'; tag: Tag }
+  | { kind: 'purge-task'; task: TrashedTask }
+  | { kind: 'empty-trash' };
 
 /** Key of the task set on screen: one 清单 or one 标签. */
 const scopeKey = (view: ListPaneView) => (view.kind === 'list' ? `list:${view.list.id}` : `tag:${view.tag.id}`);
@@ -60,6 +65,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [dialog, setDialog] = useState<DialogState>({ kind: 'none' });
   const [settings, setSettings] = useState<Settings | null>(null);
+  /** The 回收站 while it is on screen. */
+  const [trash, setTrash] = useState<TrashedTask[] | null>(null);
   const now = useNow();
 
   const fail = useCallback((e: unknown) => {
@@ -127,13 +134,38 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const inbox = sidebar?.lists.find((l) => l.isInbox) ?? null;
   const currentTag = route.tagId ? (tags?.find((t) => t.id === route.tagId) ?? null) : null;
   const currentList = useMemo(() => {
-    if (!sidebar || route.tagId) return null;
+    if (!sidebar || route.tagId || route.trash) return null;
     return (route.listId ? sidebar.lists.find((l) => l.id === route.listId) : inbox) ?? null;
-  }, [sidebar, route.listId, route.tagId, inbox]);
+  }, [sidebar, route.listId, route.tagId, route.trash, inbox]);
   const view: ListPaneView | null = useMemo(() => {
+    if (route.trash) return null;
     if (currentTag) return { kind: 'tag', tag: currentTag, inbox };
     return currentList ? { kind: 'list', list: currentList } : null;
-  }, [currentTag, currentList, inbox]);
+  }, [currentTag, currentList, inbox, route.trash]);
+
+  const reloadTrash = useCallback(async () => {
+    try {
+      setTrash(await api.fetchTrash());
+    } catch (e) {
+      fail(e);
+    }
+  }, [fail]);
+
+  useEffect(() => {
+    if (!route.trash) return;
+    let cancelled = false;
+    api
+      .fetchTrash()
+      .then((items) => {
+        if (!cancelled) setTrash(items);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) fail(e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [route.trash, fail]);
 
   // An unknown or deleted 清单 / 标签 in the URL falls back to the 收件箱.
   useEffect(() => {
@@ -168,6 +200,12 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
 
   function openList(listId: string) {
     navigate({ listId: listId === inbox?.id ? null : listId, taskId: null });
+    setDrawerOpen(false);
+  }
+
+  function openTrash() {
+    if (!route.trash) setTrash(null); // show 正在加载… rather than an old copy
+    navigate({ listId: null, tagId: null, taskId: null, trash: true });
     setDrawerOpen(false);
   }
 
@@ -242,8 +280,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     // A 标签 view mixes 清单 and flattens trees: indenting there could move the task
     // into another 清单, so Tab keeps its default meaning (move focus).
     if (view?.kind !== 'list') return false;
-    if (!listTasks || task.status === 'completed') return false;
-    const plan = outdent ? planOutdent(listTasks, task.id) : planIndent(listTasks, task.id, (t) => t.status !== 'completed');
+    if (!listTasks || task.status !== 'open') return false;
+    const plan = outdent ? planOutdent(listTasks, task.id) : planIndent(listTasks, task.id, (t) => t.status === 'open');
     if (plan.kind === 'none') return false;
     if (plan.kind === 'too-deep') {
       setError(DEPTH_EXCEEDED_MESSAGE);
@@ -268,6 +306,58 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       // Undo optimistic changes.
       void reloadTasks();
       return null;
+    }
+  }
+
+  /** 删除: the task and its 子任务 go to the 回收站. */
+  async function deleteTask(task: Task) {
+    try {
+      await api.deleteTask(task.id);
+      if (route.taskId === task.id) selectTask(null);
+      await reloadTasks();
+      void reloadSidebar();
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  async function restoreTask(task: TrashedTask) {
+    try {
+      await api.restoreTask(task.id);
+      await reloadTrash();
+      void reloadSidebar();
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  async function purgeTask(task: TrashedTask) {
+    try {
+      await api.purgeTask(task.id);
+      setDialog({ kind: 'none' });
+      await reloadTrash();
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  async function emptyTrash() {
+    try {
+      await api.emptyTrash();
+      setDialog({ kind: 'none' });
+      await reloadTrash();
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  /** 归档 / 取消归档 (spec 用户故事 16). */
+  async function archiveList(list: TaskList, archived: boolean) {
+    try {
+      await api.updateList(list.id, { archived });
+      await reloadSidebar();
+    } catch (e) {
+      fail(e);
     }
   }
 
@@ -364,7 +454,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
 
   async function moveSidebarItem(dragged: SidebarItemRef, target: SidebarItemRef, position: DropPosition) {
     if (!sidebar) return;
-    const plan = planSidebarDrop(sidebar, dragged, target, position);
+    const plan = planSidebarDrop(activeSidebar(sidebar), dragged, target, position);
     if (!plan) return;
     setSidebar({
       ...sidebar,
@@ -410,6 +500,9 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onAddFolder={() => setDialog({ kind: 'folder', folder: null })}
           onEditList={(list) => setDialog({ kind: 'list', list, folderId: list.folderId })}
           onDeleteList={(list) => setDialog({ kind: 'delete-list', list })}
+          onArchiveList={(list, archived) => void archiveList(list, archived)}
+          trashActive={route.trash === true}
+          onOpenTrash={openTrash}
           onRenameFolder={(folder) => setDialog({ kind: 'folder', folder })}
           onDeleteFolder={(folder) => setDialog({ kind: 'delete-folder', folder })}
           onToggleFolder={toggleFolder}
@@ -420,7 +513,20 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onDeleteTag={(tag) => setDialog({ kind: 'delete-tag', tag })}
         />
       )}
-      {!(isMobile && selectedTask) && (
+      {route.trash && (
+        <TrashPane
+          tasks={trash}
+          lists={sidebar?.lists ?? []}
+          sidebarVisible={sidebarVisible}
+          timeZone={timeZone}
+          now={now}
+          onToggleSidebar={() => (isMobile ? setDrawerOpen((v) => !v) : setSidebarOpen((v) => !v))}
+          onRestore={(task) => void restoreTask(task)}
+          onPurge={(task) => setDialog({ kind: 'purge-task', task })}
+          onEmpty={() => setDialog({ kind: 'empty-trash' })}
+        />
+      )}
+      {!route.trash && !(isMobile && selectedTask) && (
         <TaskListPane
           view={view}
           tasks={listTasks}
@@ -433,13 +539,15 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onToggleSidebar={() => (isMobile ? setDrawerOpen((v) => !v) : setSidebarOpen((v) => !v))}
           onAddTask={addTask}
           onSelectTask={selectTask}
-          onToggleTask={(task) => changeTask(task, { status: task.status === 'completed' ? 'open' : 'completed' })}
+          onToggleTask={(task) => changeTask(task, { status: task.status !== 'open' ? 'open' : 'completed' })}
           onIndent={indentTask}
           onChangeTask={(task, patch) => void changeTask(task, patch)}
+          onDeleteTask={(task) => void deleteTask(task)}
+          onArchiveList={currentList && !currentList.isInbox ? (archived) => void archiveList(currentList, archived) : null}
           onEditList={currentList && !currentList.isInbox ? () => setDialog({ kind: 'list', list: currentList, folderId: currentList.folderId }) : null}
         />
       )}
-      {showDetail && (
+      {showDetail && !(isMobile && route.trash) && (
         <TaskDetail
           key={selectedTask?.id ?? 'empty'}
           task={selectedTask}
@@ -454,6 +562,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onSelectTask={selectTask}
           onAddSubtask={addSubtask}
           onIndent={indentTask}
+          onDelete={(task) => void deleteTask(task)}
           indentable={view?.kind === 'list'}
           onError={fail}
         />
@@ -497,7 +606,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       {dialog.kind === 'delete-list' && (
         <ConfirmDialog
           title="删除清单"
-          message={`删除清单「${dialog.list.name}」后，其中的任务也会一起删除。`}
+          message={`删除清单「${dialog.list.name}」后，其中的任务会移到回收站，${TRASH_RETENTION_DAYS} 天内可以还原（还原到收件箱）。`}
           confirmLabel="删除"
           onCancel={() => setDialog({ kind: 'none' })}
           onConfirm={() => removeList(dialog.list)}
@@ -510,6 +619,24 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           confirmLabel="删除"
           onCancel={() => setDialog({ kind: 'none' })}
           onConfirm={() => removeFolder(dialog.folder)}
+        />
+      )}
+      {dialog.kind === 'purge-task' && (
+        <ConfirmDialog
+          title="彻底删除"
+          message={`彻底删除「${dialog.task.title}」后无法恢复。`}
+          confirmLabel="彻底删除"
+          onCancel={() => setDialog({ kind: 'none' })}
+          onConfirm={() => purgeTask(dialog.task)}
+        />
+      )}
+      {dialog.kind === 'empty-trash' && (
+        <ConfirmDialog
+          title="清空回收站"
+          message="回收站里的任务会被彻底删除，无法恢复。"
+          confirmLabel="清空"
+          onCancel={() => setDialog({ kind: 'none' })}
+          onConfirm={emptyTrash}
         />
       )}
       {dialog.kind === 'tag' && (
@@ -536,13 +663,14 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   );
 }
 
-/** Same order as the server: open by sort key, then completed, newest completion first. */
+/** Same order as the server: open by sort key, then closed (完成 / 放弃), most recently closed first. */
 function sortTasks(items: Task[]): Task[] {
+  const closedAt = (t: Task) => t.completedAt ?? t.abandonedAt ?? '';
   return [...items].sort((a, b) => {
-    const doneA = a.status === 'completed';
-    const doneB = b.status === 'completed';
+    const doneA = a.status !== 'open';
+    const doneB = b.status !== 'open';
     if (doneA !== doneB) return doneA ? 1 : -1;
-    if (doneA) return (b.completedAt ?? '').localeCompare(a.completedAt ?? '');
+    if (doneA) return closedAt(b).localeCompare(closedAt(a));
     return a.sortOrder < b.sortOrder ? -1 : a.sortOrder > b.sortOrder ? 1 : a.id < b.id ? -1 : 1;
   });
 }

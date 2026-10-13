@@ -29,6 +29,11 @@ interface SidebarProps {
   onAddFolder: () => void;
   onEditList: (list: TaskList) => void;
   onDeleteList: (list: TaskList) => void;
+  /** 归档 / 取消归档 a 清单. */
+  onArchiveList: (list: TaskList, archived: boolean) => void;
+  /** The 回收站 is on screen. */
+  trashActive: boolean;
+  onOpenTrash: () => void;
   onRenameFolder: (folder: Folder) => void;
   onDeleteFolder: (folder: Folder) => void;
   onToggleFolder: (folder: Folder) => void;
@@ -43,8 +48,14 @@ type DropHint = { key: string; position: DropPosition } | null;
 
 const refKey = (ref: SidebarItemRef) => `${ref.kind}:${ref.id}`;
 
+/** The sidebar without archived 清单: what the tree, drag-and-drop and 上移 / 下移 work on. */
+export function activeSidebar(sidebar: SidebarResponse): SidebarResponse {
+  return { ...sidebar, lists: sidebar.lists.filter((l) => l.archivedAt === null) };
+}
+
 /**
- * 侧栏 (spec 用户故事 12–15): 收件箱, then 清单 and 文件夹 in the user's order.
+ * 侧栏 (spec 用户故事 12–16、29): 收件箱, then 清单 and 文件夹 in the user's order, the
+ * collapsed 已归档的清单 group, 标签, and the 回收站 at the bottom like the reference.
  * Items can be dragged (mouse) or moved with the 上移 / 下移 menu entries (keyboard, touch).
  */
 export function Sidebar(props: SidebarProps) {
@@ -53,6 +64,8 @@ export function Sidebar(props: SidebarProps) {
   const [hint, setHint] = useState<DropHint>(null);
   /** Collapsed parent 标签 (kept for the session only). */
   const [collapsedTags, setCollapsedTags] = useState<ReadonlySet<string>>(new Set());
+  /** 已归档的清单 group, collapsed by default like the reference. */
+  const [archivedOpen, setArchivedOpen] = useState(false);
 
   if (!sidebar) {
     return (
@@ -67,7 +80,9 @@ export function Sidebar(props: SidebarProps) {
   const inbox = sidebar.lists.find((l) => l.isInbox);
   const listsById = new Map(sidebar.lists.map((l) => [l.id, l]));
   const foldersById = new Map(sidebar.folders.map((f) => [f.id, f]));
-  const outline = sidebarOutline(sidebar);
+  // Archived 清单 leave the tree (and its drag / 上移 / 下移 order) for the 已归档的清单 group.
+  const outline = sidebarOutline(activeSidebar(sidebar));
+  const archivedLists = sidebar.lists.filter((l) => l.archivedAt !== null).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
   const count = (listId: string) => sidebar.openTaskCounts[listId] ?? 0;
 
   /** Entries sharing a level with `entry`, in order (for 上移 / 下移). */
@@ -161,6 +176,35 @@ export function Sidebar(props: SidebarProps) {
           items={[
             { label: '编辑', icon: 'edit', onSelect: () => props.onEditList(list) },
             ...stepItems(entry),
+            { label: '归档', icon: 'archive', onSelect: () => props.onArchiveList(list, true) },
+            { label: '删除', icon: 'trash', danger: true, onSelect: () => props.onDeleteList(list) },
+          ]}
+        />
+      </li>
+    );
+  }
+
+  function archivedRow(list: TaskList): ReactNode {
+    const active = list.id === currentListId;
+    return (
+      <li key={list.id} className="sidebar-row sidebar-row-child">
+        <a
+          href={`/lists/${list.id}`}
+          className={`sidebar-item ${active ? 'sidebar-item-active' : ''}`}
+          aria-current={active ? 'page' : undefined}
+          onClick={(e) => {
+            e.preventDefault();
+            props.onOpenList(list.id);
+          }}
+        >
+          <span className="sidebar-item-icon">{list.icon ? <span className="sidebar-emoji">{list.icon}</span> : <Icon name="list" />}</span>
+          <span className="sidebar-item-name">{list.name}</span>
+        </a>
+        <MenuButton
+          className="sidebar-row-menu"
+          label={`清单操作：${list.name}`}
+          items={[
+            { label: '取消归档', icon: 'archive', onSelect: () => props.onArchiveList(list, false) },
             { label: '删除', icon: 'trash', danger: true, onSelect: () => props.onDeleteList(list) },
           ]}
         />
@@ -331,7 +375,7 @@ export function Sidebar(props: SidebarProps) {
           <IconButton icon="plus" label="添加清单" size={16} onClick={() => props.onAddList(null)} />
         </div>
       </div>
-      {topLevel.length === 0 ? (
+      {topLevel.length === 0 && archivedLists.length === 0 ? (
         <p className="sidebar-hint">用清单把任务分门别类，点击上方 + 新建一个清单</p>
       ) : (
         <ul className="sidebar-tree" aria-label="清单">
@@ -343,6 +387,31 @@ export function Sidebar(props: SidebarProps) {
             const list = listsById.get(entry.id);
             return list ? listRow(list, entry) : null;
           })}
+          {archivedLists.length > 0 && (
+            <li className="sidebar-folder">
+              <div className="sidebar-row">
+                <button
+                  type="button"
+                  className="sidebar-item sidebar-folder-toggle"
+                  aria-expanded={archivedOpen}
+                  onClick={() => setArchivedOpen((v) => !v)}
+                >
+                  <span className="sidebar-chevron">
+                    <Icon name={archivedOpen ? 'chevronDown' : 'chevronRight'} size={12} />
+                  </span>
+                  <span className="sidebar-item-icon">
+                    <Icon name="archive" />
+                  </span>
+                  <span className="sidebar-item-name">已归档的清单</span>
+                </button>
+              </div>
+              {archivedOpen && (
+                <ul className="sidebar-tree" aria-label="已归档的清单">
+                  {archivedLists.map(archivedRow)}
+                </ul>
+              )}
+            </li>
+          )}
         </ul>
       )}
       <hr className="sidebar-divider" />
@@ -359,6 +428,25 @@ export function Sidebar(props: SidebarProps) {
           {topTags.map(tagRow)}
         </ul>
       )}
+      <hr className="sidebar-divider" />
+      <ul className="sidebar-tree sidebar-smart" aria-label="智能清单">
+        <li className="sidebar-row">
+          <a
+            href="/trash"
+            className={`sidebar-item ${props.trashActive ? 'sidebar-item-active' : ''}`}
+            aria-current={props.trashActive ? 'page' : undefined}
+            onClick={(e) => {
+              e.preventDefault();
+              props.onOpenTrash();
+            }}
+          >
+            <span className="sidebar-item-icon">
+              <Icon name="trash" />
+            </span>
+            <span className="sidebar-item-name">回收站</span>
+          </a>
+        </li>
+      </ul>
     </nav>
   );
 }

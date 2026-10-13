@@ -613,3 +613,10 @@
   color: var(--color-text-secondary);
   background: var(--color-bg-hover);
 }
+
+/* 放弃: grey box with a white cross (aria-checked="mixed"). */
+.ui-task-checkbox.ui-task-checkbox-abandoned,
+.ui-task-checkbox.ui-task-checkbox-abandoned[class*='ui-priority-'] {
+  background: var(--color-border-strong);
+  border-color: var(--color-border-strong);
+}

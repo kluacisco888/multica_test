@@ -46,11 +46,14 @@ export function IconButton({
  */
 export function TaskCheckbox({
   checked,
+  abandoned = false,
   label,
   priority = 'none',
   onChange,
 }: {
   checked: boolean;
+  /** 放弃: shown with a cross and announced as 已放弃 (aria-checked "mixed"); clicking re-opens. */
+  abandoned?: boolean;
   label: string;
   priority?: Priority;
   onChange: (checked: boolean) => void;
@@ -59,15 +62,16 @@ export function TaskCheckbox({
     <button
       type="button"
       role="checkbox"
-      aria-checked={checked}
+      aria-checked={abandoned ? 'mixed' : checked}
       aria-label={label}
-      className={`ui-task-checkbox ui-priority-${priority}`}
+      aria-description={abandoned ? '已放弃' : undefined}
+      className={`ui-task-checkbox ui-priority-${priority} ${abandoned ? 'ui-task-checkbox-abandoned' : ''}`}
       onClick={(e) => {
         e.stopPropagation();
         onChange(!checked);
       }}
     >
-      {checked && <Icon name="check" size={12} strokeWidth={2.5} />}
+      {abandoned ? <Icon name="close" size={10} strokeWidth={2.5} /> : checked && <Icon name="check" size={12} strokeWidth={2.5} />}
     </button>
   );
 }

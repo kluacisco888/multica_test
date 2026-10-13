@@ -38,16 +38,20 @@ interface TaskListPaneProps {
    */
   onIndent: (task: Task, outdent: boolean) => boolean;
   onChangeTask: (task: Task, patch: UpdateTaskRequest) => void;
+  /** 删除: into the 回收站. */
+  onDeleteTask: (task: Task) => void;
   onEditList: (() => void) | null;
+  /** 归档 / 取消归档 the 清单 on screen; null for the 收件箱 and 标签 views. */
+  onArchiveList: ((archived: boolean) => void) | null;
 }
 
 type MenuState = { task: Task; x: number; y: number; opener: HTMLElement | null } | null;
 
-const isOpen = (t: Task) => t.status !== 'completed';
+const isOpen = (t: Task) => t.status === 'open';
 
 /**
  * The middle column: list title, quick add, the open 任务 tree, then the 已完成
- * section (spec 用户故事 18、20、22、23–27、35、36、40、65). 子任务 are nested
+ * section with completed and 放弃 tasks (spec 用户故事 16、18、20、22、23–29、35、36、40、65). 子任务 are nested
  * lists; Tab / Shift+Tab on the selected task indents / outdents it; right-click
  * (or the ContextMenu key / Shift+F10) opens the task menu.
  */
@@ -61,6 +65,7 @@ export function TaskListPane(props: TaskListPaneProps) {
   const open = tasks?.filter(isOpen) ?? [];
   const completed = tasks?.filter((t) => !isOpen(t)) ?? [];
   const title = view ? (view.kind === 'list' ? view.list.name : view.tag.name) : '';
+  const archived = view?.kind === 'list' && view.list.archivedAt !== null;
   // Tasks added in a 标签 view go to the 收件箱 with that 标签.
   const addTarget = view ? (view.kind === 'list' ? view.list.name : (view.inbox?.name ?? '')) : '';
   const listName = (task: Task) => (view?.kind === 'tag' ? props.lists.find((l) => l.id === task.listId)?.name : undefined);
@@ -125,9 +130,33 @@ export function TaskListPane(props: TaskListPaneProps) {
         />
         <h1 className="list-pane-title">{title}</h1>
         {props.onEditList && (
-          <MenuButton label="清单更多操作" items={[{ label: '编辑清单', icon: 'edit', onSelect: props.onEditList }]} />
+          <MenuButton
+            label="清单更多操作"
+            items={[
+              { label: '编辑清单', icon: 'edit', onSelect: props.onEditList },
+              ...(props.onArchiveList
+                ? [
+                    archived
+                      ? { label: '取消归档', icon: 'archive' as const, onSelect: () => props.onArchiveList?.(false) }
+                      : { label: '归档', icon: 'archive' as const, onSelect: () => props.onArchiveList?.(true) },
+                  ]
+                : []),
+            ]}
+          />
         )}
       </header>
+
+      {archived && (
+        <div className="list-pane-banner" role="status">
+          <Icon name="archive" size={16} />
+          <span>清单已归档，其中的任务不会出现在智能清单里</span>
+          {props.onArchiveList && (
+            <button type="button" className="list-pane-banner-action" onClick={() => props.onArchiveList?.(false)}>
+              取消归档
+            </button>
+          )}
+        </div>
+      )}
 
       {view && (
         <QuickAdd key={view.kind === 'list' ? view.list.id : view.tag.id} target={addTarget} onAdd={props.onAddTask} />
@@ -184,8 +213,11 @@ export function TaskListPane(props: TaskListPaneProps) {
           y={menu.y}
           returnFocus={menu.opener}
           // Read the task fresh: it may have changed since the menu opened.
-          sections={taskContextSections(tasks?.find((t) => t.id === menu.task.id) ?? menu.task, props.tags, (patch) =>
-            props.onChangeTask(menu.task, patch),
+          sections={taskContextSections(
+            tasks?.find((t) => t.id === menu.task.id) ?? menu.task,
+            props.tags,
+            (patch) => props.onChangeTask(menu.task, patch),
+            () => props.onDeleteTask(menu.task),
           )}
           onClose={() => setMenu(null)}
         />
@@ -268,7 +300,8 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
   const taskTags = tagsOf(task, tags);
   const list = listName(task);
   const selected = task.id === selectedTaskId;
-  const done = task.status === 'completed';
+  const done = task.status !== 'open';
+  const abandoned = task.status === 'abandoned';
   const date = task.dates ? describeTaskDates(task.dates, { now, timeZone }) : null;
   // Completed tasks are never shown as overdue.
   const overdue = date?.overdue === true && !done;
@@ -314,7 +347,7 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
         ) : (
           <span className="task-row-expand" aria-hidden="true" />
         )}
-        <TaskCheckbox checked={done} label={task.title} priority={task.priority} onChange={() => onToggleTask(task)} />
+        <TaskCheckbox checked={done} abandoned={abandoned} label={task.title} priority={task.priority} onChange={() => onToggleTask(task)} />
         <button
           ref={titleRef}
           type="button"
