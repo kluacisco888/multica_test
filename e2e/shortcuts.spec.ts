@@ -54,6 +54,17 @@ test.describe('keyboard', () => {
     await expect(quickAdd(page)).toBeFocused();
   });
 
+  test('N in the 日历 opens its 添加任务 box', async ({ page }) => {
+    await start(page, 'kb-n-cal');
+    await page.getByRole('navigation', { name: '模块' }).getByRole('link', { name: '日历' }).click();
+    await expect(page.getByRole('button', { name: /^日历视图：/ })).toBeVisible();
+    await page.locator('body').click({ position: { x: 5, y: 5 } });
+    await page.keyboard.press('n');
+    const box = page.getByRole('textbox', { name: '新任务标题' });
+    await expect(box).toBeFocused();
+    await expect(box).toHaveValue('');
+  });
+
   test('Enter in 添加任务 saves the task and keeps the box ready for the next one', async ({ page }) => {
     await start(page, 'kb-enter');
     await quickAdd(page).fill('第一件');

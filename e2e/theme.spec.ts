@@ -183,6 +183,45 @@ test('外观: 深色 changes every screen, survives a reload, and 浅色 brings 
   expect(bg).toBe('rgb(255, 255, 255)');
 });
 
+test('外观: 深色 and a 颜色系列 also cover the 时间线 and the 日历', async ({ page }, testInfo) => {
+  const user = createUser('theme-views');
+  await logIn(page, user.username, user.password);
+  const today = new Date().toISOString().slice(0, 10);
+  const post = (url: string, data: object) => page.request.post(url, { data });
+  await post('/api/tasks', { title: '有日期', dates: { allDay: true, startDate: null, dueDate: today } });
+  await post('/api/tasks', { title: '待安排的' });
+  const lists = (await (await page.request.get('/api/lists')).json()) as { lists: { id: string; isInbox: boolean }[] };
+  const inbox = lists.lists.find((l) => l.isInbox)?.id as string;
+  const patch = await page.request.patch('/api/settings', {
+    data: { themeMode: 'dark', themeColor: 'peach', viewOptions: { [`list:${inbox}`]: { sortBy: 'custom', groupBy: 'none', layout: 'timeline' } } },
+  });
+  expect(patch.ok(), await patch.text()).toBe(true);
+
+  // 时间线 of the 收件箱 (EURO-20).
+  await page.goto('/');
+  await expect(html(page)).toHaveAttribute('data-theme', 'dark');
+  await expect(page.getByText('待安排的')).toBeVisible();
+  expect(await lightLeftovers(page)).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath(`theme-dark-timeline-${testInfo.project.name}.png`) });
+
+  // 日历 (EURO-19): 月 and 周.
+  await page.goto(`/calendar/month/${today}`);
+  await expect(page.getByRole('button', { name: /有日期/ }).first()).toBeVisible();
+  expect(await lightLeftovers(page)).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath(`theme-dark-calendar-${testInfo.project.name}.png`) });
+  await page.goto(`/calendar/week/${today}`);
+  await expect(page.getByRole('button', { name: /有日期/ }).first()).toBeVisible();
+  expect(await lightLeftovers(page)).toEqual([]);
+
+  // The 颜色系列 reaches the 日历 background and the 时间线 bar colour.
+  const tokens = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    return { calendar: root.getPropertyValue('--color-calendar-bg').trim(), bar: root.getPropertyValue('--color-timeline-bar').trim(), accent: root.getPropertyValue('--accent').trim() };
+  });
+  expect(tokens.bar).toBe(tokens.accent);
+  expect(tokens.calendar).toContain('color-mix');
+});
+
 test('外观: 跟随系统 follows the OS setting, live', async ({ page }) => {
   const user = createUser('theme-system');
   await page.emulateMedia({ colorScheme: 'light' });

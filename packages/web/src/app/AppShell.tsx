@@ -728,10 +728,13 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           return;
         case 'addTask': {
           const input = document.querySelector<HTMLInputElement>('.quick-add-input');
-          if (!input) return;
+          // Views without a quick-add box (日历) mark their own 添加任务 control.
+          const button = input ? null : document.querySelector<HTMLButtonElement>('[data-shortcut="add-task"]');
+          if (!input && !button) return;
           // Keep the "n" out of the box it focuses.
           event.preventDefault();
-          input.focus();
+          if (input) input.focus();
+          else button?.click();
           return;
         }
         case 'priority': {
