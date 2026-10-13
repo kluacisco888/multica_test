@@ -11,7 +11,7 @@
 | `src/ui/controls.tsx` | `Button`、`IconButton`、`TaskCheckbox`、`MenuButton`、`Dialog` |
 | `src/ui/Icon.tsx` | 自绘线性图标（24 视框、1.75 描边、`currentColor`） |
 | `src/ui/Markdown.tsx` | 安全渲染 Markdown（禁用原始 HTML，链接新窗口打开） |
-| `src/ui/Brand.tsx` | 产品名和 Logo（自有设计，不用官方素材） |
+| `src/ui/Brand.tsx` | Logo 和品牌标识（自有设计，不用官方素材）；产品名「叮叮清单」只在 `packages/shared/src/product.ts` 的 `PRODUCT_NAME` 定义 |
 | `src/app/app.css` | 应用外壳、侧栏、任务列表、详情、登录页的布局 |
 
 ## Token 规则

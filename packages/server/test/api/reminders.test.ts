@@ -128,8 +128,8 @@ describe('reminders: scheduling and delivery', () => {
       expect(u.mails()).toEqual([]);
 
       expect(await tickAt('2026-10-14T01:30:00.000Z')).toMatchObject({ fired: 1, sent: 2 });
-      expect(u.hooks()).toEqual([{ text: '提醒：开会\n时间：10:00\n来自勾勾清单' }]);
-      expect(u.mails()).toEqual([{ subject: '提醒：开会', text: '时间：10:00\n来自勾勾清单' }]);
+      expect(u.hooks()).toEqual([{ text: '提醒：开会\n时间：10:00\n来自叮叮清单' }]);
+      expect(u.mails()).toEqual([{ subject: '提醒：开会', text: '时间：10:00\n来自叮叮清单' }]);
 
       // Running again at the same instant sends nothing twice.
       expect(await tickAt('2026-10-14T01:30:30.000Z')).toMatchObject({ fired: 0, sent: 0 });

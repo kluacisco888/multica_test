@@ -153,7 +153,7 @@ describe('notification channels API', () => {
       const [mail] = await smtp.waitForMessages(1);
       expect(mail).toMatchObject({ from: 'me@qq.com', to: ['inbox@example.com'] });
       const decoded = decodeMail(mail!.raw);
-      expect(decoded.subject).toBe('勾勾清单测试消息');
+      expect(decoded.subject).toBe('叮叮清单测试消息');
       expect(decoded.text).toContain('「QQ 邮箱」');
       expect(decoded.text).toContain('配置正确');
     });

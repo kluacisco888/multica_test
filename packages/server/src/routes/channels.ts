@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import {
   CHANNEL_CONFIG_FIELDS,
   CHANNEL_TYPE_LABELS,
+  PRODUCT_NAME,
   createChannelRequestSchema,
   updateChannelRequestSchema,
   type ChannelMessage,
@@ -35,8 +36,8 @@ const keyMissing = (reply: FastifyReply) => sendError(reply, 503, 'encryption_ke
 /** The 发送测试消息 text. */
 export function testMessage(channelName: string): ChannelMessage {
   return {
-    title: '勾勾清单测试消息',
-    body: `这是一条来自勾勾清单的测试消息。收到它，说明通知渠道「${channelName}」配置正确。`,
+    title: `${PRODUCT_NAME}测试消息`,
+    body: `这是一条来自${PRODUCT_NAME}的测试消息。收到它，说明通知渠道「${channelName}」配置正确。`,
   };
 }
 
