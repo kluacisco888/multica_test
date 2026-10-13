@@ -464,7 +464,9 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       await api.deleteList(list.id);
       setDialog({ kind: 'none' });
       if (currentList?.id === list.id) navigate({ listId: null, taskId: null });
-      await reloadSidebar();
+      // 过滤器 that named the 清单 no longer apply it.
+      await Promise.all([reloadSidebar(), reloadFilters()]);
+      setTasksEpoch((n) => n + 1);
     } catch (e) {
       fail(e);
     }
@@ -503,7 +505,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       await api.deleteTag(tag.id);
       setDialog({ kind: 'none' });
       if (route.tagId === tag.id) navigate({ listId: null, tagId: null, taskId: null });
-      await reloadTags();
+      await Promise.all([reloadTags(), reloadFilters()]);
       // Tasks on screen lost the 标签: refetch them.
       setTasksEpoch((n) => n + 1);
     } catch (e) {

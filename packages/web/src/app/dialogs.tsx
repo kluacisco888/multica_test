@@ -3,6 +3,7 @@ import {
   FILTER_DATE_OPTIONS,
   LIST_COLORS,
   LIST_ICONS,
+  liveRules,
   PRIORITIES,
   PRIORITY_LABELS,
   type Filter,
@@ -192,7 +193,11 @@ export function FilterDialog({
 }) {
   const id = useId();
   const [name, setName] = useState(filter?.name ?? '');
-  const [rules, setRules] = useState<FilterRules>(filter?.rules ?? EMPTY_RULES);
+  // 清单 / 标签 deleted since the 过滤器 was saved are no longer offered: drop them, so
+  // what is ticked is what is saved and what the view applies.
+  const [rules, setRules] = useState<FilterRules>(() =>
+    filter ? liveRules(filter.rules, new Set(lists.map((l) => l.id)), new Set(tags.map((t) => t.id))) : EMPTY_RULES,
+  );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const set = <K extends keyof FilterRules>(key: K, value: FilterRules[K]) => setRules((r) => ({ ...r, [key]: value }));
@@ -204,7 +209,7 @@ export function FilterDialog({
       return;
     }
     setSaving(true);
-    await onSave({ name: name.trim(), rules });
+    await onSave({ name: name.trim(), rules: liveRules(rules, new Set(lists.map((l) => l.id)), new Set(tags.map((t) => t.id))) });
     setSaving(false);
   }
 

@@ -162,6 +162,53 @@ test('过滤器: create with combined conditions, edit, delete', async ({ page }
   await expect((await openSidebar(page)).getByRole('link', { name: '工作全部' })).toHaveCount(0);
 });
 
+test('过滤器 whose 清单 was deleted can still be edited (review round 1)', async ({ page }) => {
+  const { username, password } = createUser('filter-deleted');
+  await logIn(page, username, password);
+  await post(page, '/api/tasks', { title: '收件箱的任务' });
+  await page.reload();
+
+  // 1. A 清单 「临时清单」 and a 过滤器 with 清单 = 临时清单.
+  let sidebar = await openSidebar(page);
+  await sidebar.getByRole('button', { name: '添加清单' }).click();
+  const listDialog = page.getByRole('dialog', { name: '添加清单' });
+  await listDialog.getByLabel('名称').fill('临时清单');
+  await listDialog.getByRole('button', { name: '保存' }).click();
+  await expect(listTitle(page)).toHaveText('临时清单');
+  sidebar = await openSidebar(page);
+  await sidebar.getByRole('button', { name: '添加过滤器' }).click();
+  const add = page.getByRole('dialog', { name: '添加过滤器' });
+  await add.getByLabel('名称').fill('看临时清单');
+  await add.getByRole('checkbox', { name: '临时清单' }).check();
+  await add.getByRole('button', { name: '保存' }).click();
+  await expect(listTitle(page)).toHaveText('看临时清单');
+  await expect(main(page).getByRole('button', { name: '收件箱的任务' })).toHaveCount(0);
+
+  // 2. Delete 「临时清单」.
+  sidebar = await openSidebar(page);
+  await sidebar.getByRole('button', { name: '清单操作：临时清单' }).click();
+  await page.getByRole('menuitem', { name: '删除' }).click();
+  await page.getByRole('dialog', { name: '删除清单' }).getByRole('button', { name: '删除' }).click();
+  await expect(page.getByRole('dialog', { name: '删除清单' })).toBeHidden();
+
+  // 3. Edit the 过滤器: nothing ticked under 清单 (= all 清单), rename, save.
+  sidebar = await openSidebar(page);
+  await sidebar.getByRole('button', { name: '过滤器操作：看临时清单' }).click();
+  await page.getByRole('menuitem', { name: '编辑' }).click();
+  const edit = page.getByRole('dialog', { name: '编辑过滤器' });
+  await expect(edit.getByRole('group', { name: /^清单/ }).getByRole('checkbox', { checked: true })).toHaveCount(0);
+  await edit.getByLabel('名称').fill('改个名');
+  await edit.getByRole('button', { name: '保存' }).click();
+  await expect(edit).toBeHidden();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(listTitle(page)).toHaveText('改个名');
+  // The view matches the dialog: 清单 is unrestricted, so the 收件箱 task shows.
+  await expect(main(page).getByRole('button', { name: '收件箱的任务', exact: true })).toBeVisible();
+  await page.reload();
+  await expect(listTitle(page)).toHaveText('改个名');
+  await expect(main(page).getByRole('button', { name: '收件箱的任务', exact: true })).toBeVisible();
+});
+
 test('全局搜索: title, 描述 and 检查项, including a 不进智能清单 清单', async ({ page }, testInfo) => {
   const { username, password } = createUser('search');
   await logIn(page, username, password);

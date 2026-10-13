@@ -7,6 +7,7 @@ import { userSettings } from '../db/schema/settings.js';
 import { notificationChannels } from '../db/schema/channels.js';
 import { channelToApi } from '../notify/notifier.js';
 import { filterToApi } from '../routes/filters.js';
+import type { FilterRow } from '../task-views.js';
 import { checklistItems, folders, lists, tasks } from '../db/schema/tasks.js';
 import type { SyncEntity } from './columns.js';
 
@@ -33,5 +34,5 @@ export const syncEntities: readonly SyncEntity[] = [
   { type: 'tag', table: tags },
   { type: 'attachment', table: attachments, serialize: attachmentToApi },
   { type: 'comment', table: comments, serialize: commentToApi },
-  { type: 'filter', table: filters, serialize: filterToApi },
+  { type: 'filter', table: filters, serialize: (row: FilterRow) => filterToApi(row) },
 ];

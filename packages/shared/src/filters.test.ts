@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterRulesSchema, isEmptyFilter, matchesFilter, type FilterRulesInput, type FilterTask } from './filters.js';
+import { filterRulesSchema, isEmptyFilter, liveRules, matchesFilter, type FilterRulesInput, type FilterTask } from './filters.js';
 
 const clock = { now: new Date('2026-10-13T02:00:00.000Z'), timeZone: 'Asia/Shanghai' };
 const LIST_A = '00000000-0000-4000-8000-00000000000a';
@@ -76,5 +76,13 @@ describe('过滤器 rules', () => {
       priorities: ['high'],
       listIds: [LIST_A],
     });
+  });
+
+  it('liveRules drops ids that are no longer live; a condition left empty no longer restricts', () => {
+    const rules = filterRulesSchema.parse({ listIds: [LIST_A, LIST_B], tagIds: [TAG_X], priorities: ['high'] });
+    const live = liveRules(rules, new Set([LIST_B]), new Set());
+    expect(live).toMatchObject({ listIds: [LIST_B], tagIds: [], priorities: ['high'] });
+    expect(matchesFilter(live, task({ listId: LIST_B, priority: 'high' }), clock, new Set())).toBe(true);
+    expect(isEmptyFilter(liveRules(filterRulesSchema.parse({ listIds: [LIST_A] }), new Set(), new Set()))).toBe(true);
   });
 });

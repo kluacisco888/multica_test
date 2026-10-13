@@ -3,6 +3,7 @@ import {
   COUNTED_SMART_LISTS,
   filterRulesSchema,
   listInSmartLists,
+  liveRules,
   matchesFilter,
   matchesSmartList,
   tagWithChildren,
@@ -13,6 +14,7 @@ import {
 } from '@dida/shared';
 import type { Executor } from './db/client.js';
 import type { filters } from './db/schema/filters.js';
+import { tags } from './db/schema/tags.js';
 import { lists, tasks } from './db/schema/tasks.js';
 import { compareTasks, taskToApi, type TaskRow } from './organize.js';
 import { liveTags } from './routes/tags.js';
@@ -70,10 +72,42 @@ export function storedRules(row: FilterRow): FilterRules {
   return parsed.success ? parsed.data : filterRulesSchema.parse({});
 }
 
+/** The user's 清单 and 标签 that 过滤器 rules may name: live ones, and deleted ones (ignored, see `liveRules`). */
+export interface RuleRefs {
+  liveLists: Set<string>;
+  liveTags: Set<string>;
+  deletedLists: Set<string>;
+  deletedTags: Set<string>;
+}
+
+export async function ruleRefs(db: Executor, userId: string): Promise<RuleRefs> {
+  const [listRows, tagRows] = await Promise.all([
+    db.select({ id: lists.id, deletedAt: lists.deletedAt }).from(lists).where(eq(lists.userId, userId)),
+    db.select({ id: tags.id, deletedAt: tags.deletedAt }).from(tags).where(eq(tags.userId, userId)),
+  ]);
+  const split = (rows: { id: string; deletedAt: Date | null }[]) => ({
+    live: new Set(rows.filter((r) => r.deletedAt === null).map((r) => r.id)),
+    deleted: new Set(rows.filter((r) => r.deletedAt !== null).map((r) => r.id)),
+  });
+  const l = split(listRows);
+  const t = split(tagRows);
+  return { liveLists: l.live, liveTags: t.live, deletedLists: l.deleted, deletedTags: t.deleted };
+}
+
+/** A 过滤器's rules as they apply now (deleted 清单 / 标签 left out). */
+export function effectiveRules(row: FilterRow, refs: RuleRefs): FilterRules {
+  return liveRules(storedRules(row), refs.liveLists, refs.liveTags);
+}
+
 /** The tasks a 过滤器 selects, in every 清单 (不进智能清单 does not apply to 过滤器). */
 export async function filterTasks(db: Executor, userId: string, filter: FilterRow, now: Date): Promise<Task[]> {
-  const rules = storedRules(filter);
-  const [rows, tagRows, clock] = await Promise.all([liveTaskRows(db, userId), liveTags(db, userId), viewClock(db, userId, now)]);
+  const [rows, tagRows, clock, refs] = await Promise.all([
+    liveTaskRows(db, userId),
+    liveTags(db, userId),
+    viewClock(db, userId, now),
+    ruleRefs(db, userId),
+  ]);
+  const rules = effectiveRules(filter, refs);
   const tagScope = new Set(rules.tagIds.flatMap((id) => tagWithChildren(tagRows, id)));
   return rows
     .sort(compareTasks)

@@ -81,6 +81,19 @@ export interface FilterTask extends SmartTask {
   tagIds: string[];
 }
 
+/**
+ * The rules as they apply now: 清单 / 标签 ids that are no longer live
+ * (deleted, possibly restored later from the 回收站) are left out. A
+ * condition whose ids are all gone no longer restricts.
+ */
+export function liveRules(rules: FilterRules, liveListIds: ReadonlySet<string>, liveTagIds: ReadonlySet<string>): FilterRules {
+  return {
+    ...rules,
+    listIds: rules.listIds.filter((id) => liveListIds.has(id)),
+    tagIds: rules.tagIds.filter((id) => liveTagIds.has(id)),
+  };
+}
+
 /** True when no condition is set: the 过滤器 shows every task. */
 export function isEmptyFilter(rules: FilterRules): boolean {
   return rules.listIds.length === 0 && rules.tagIds.length === 0 && !rules.untagged && rules.dates.length === 0 && rules.priorities.length === 0;

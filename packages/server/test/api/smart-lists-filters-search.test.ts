@@ -284,6 +284,102 @@ describe('智能清单, 过滤器 and 搜索 API', () => {
     });
   });
 
+  describe('过滤器 naming deleted 清单 / 标签 (review round 1)', () => {
+    let user: TestUser;
+    const getFilter = async (id: string) => {
+      const all = await ok(user, 'GET', '/api/filters', undefined, (v) => (v as { filters: unknown[] }).filters.map((f) => filterSchema.parse(f)));
+      return all.find((f) => f.id === id);
+    };
+    const del = async (url: string) => expect((await api(user, 'DELETE', url)).statusCode).toBe(204);
+
+    beforeAll(async () => {
+      user = await t.createUser('filters-deleted-refs');
+    });
+
+    it('a deleted 清单: the 过滤器 can be renamed, the id is dropped, the condition no longer restricts', async () => {
+      const temp = await createList(user, { name: '临时清单' });
+      const kept = await createList(user, { name: '保留清单' });
+      await createTask(user, { title: '临时里的任务', listId: temp.id });
+      await createTask(user, { title: '收件箱里的高优先级', priority: 'high' });
+      await createTask(user, { title: '保留清单里的高优先级', listId: kept.id, priority: 'high' });
+      const only = await ok(user, 'POST', '/api/filters', { name: '只看临时', rules: { listIds: [temp.id], priorities: ['high'] } }, (v) =>
+        filterSchema.parse(v),
+      );
+      const both = await ok(user, 'POST', '/api/filters', { name: '两个清单', rules: { listIds: [temp.id, kept.id] } }, (v) =>
+        filterSchema.parse(v),
+      );
+      expect(titles(await view(user, `filterId=${only.id}`))).toEqual([]);
+
+      await del(`/api/lists/${temp.id}`);
+
+      // Reading: the dead id is gone, and the view applies what is shown —
+      // 清单 is no longer restricted, only 高优先级 is.
+      expect((await getFilter(only.id))?.rules.listIds).toEqual([]);
+      expect(titles(await view(user, `filterId=${only.id}`))).toEqual(['保留清单里的高优先级', '收件箱里的高优先级']);
+      // With a live id left, only that one applies.
+      expect((await getFilter(both.id))?.rules.listIds).toEqual([kept.id]);
+      expect(titles(await view(user, `filterId=${both.id}`))).toEqual(['保留清单里的高优先级']);
+
+      // Saving: a rename alone works and stores the rules without the dead id, with a new revision.
+      const before = changesResponseSchema.parse((await api(user, 'GET', '/api/changes')).json());
+      const stored = before.entities.filter?.upserts.find((f) => f.id === only.id) as unknown as { rules: { listIds: string[] }; revision: number };
+      expect(stored.rules.listIds).toEqual([temp.id]); // kept as stored until the next save (回收站 restore, EURO-15)
+      const renamed = await ok(user, 'PATCH', `/api/filters/${only.id}`, { name: '改个名' }, (v) => filterSchema.parse(v));
+      expect(renamed.name).toBe('改个名');
+      expect(renamed.rules.listIds).toEqual([]);
+      expect(renamed.revision).toBeGreaterThan(stored.revision);
+      const after = changesResponseSchema.parse((await api(user, 'GET', `/api/changes?since=${before.revision}`)).json());
+      expect(after.entities.filter?.upserts).toEqual([expect.objectContaining({ id: only.id, rules: expect.objectContaining({ listIds: [] }) })]);
+
+      // An old dialog sending the dead id back is accepted and the id dropped.
+      const resent = await ok(user, 'PATCH', `/api/filters/${both.id}`, { rules: { listIds: [temp.id, kept.id] } }, (v) => filterSchema.parse(v));
+      expect(resent.rules.listIds).toEqual([kept.id]);
+      const created = await ok(user, 'POST', '/api/filters', { name: '新建也行', rules: { listIds: [temp.id] } }, (v) => filterSchema.parse(v));
+      expect(created.rules.listIds).toEqual([]);
+    });
+
+    it('a deleted 标签 (parent included): same behaviour', async () => {
+      const parent = await createTag(user, { name: '旧项目' });
+      const child = await createTag(user, { name: '旧子项目', parentId: parent.id });
+      const other = await createTag(user, { name: '其他' });
+      await createTask(user, { title: '带其他标签', tagIds: [other.id] });
+      await createTask(user, { title: '带子标签', tagIds: [child.id] });
+      const filter = await ok(user, 'POST', '/api/filters', { name: '按标签', rules: { tagIds: [parent.id], priorities: ['none'] } }, (v) =>
+        filterSchema.parse(v),
+      );
+      expect(titles(await view(user, `filterId=${filter.id}`))).toEqual(['带子标签']);
+
+      await del(`/api/tags/${parent.id}`);
+      expect((await getFilter(filter.id))?.rules.tagIds).toEqual([]);
+      // 标签 no longer restricts: every open task without a priority shows.
+      const shown = titles(await view(user, `filterId=${filter.id}`));
+      expect(shown).toEqual(expect.arrayContaining(['带其他标签', '带子标签']));
+      const renamed = await ok(user, 'PATCH', `/api/filters/${filter.id}`, { name: '按标签改名' }, (v) => filterSchema.parse(v));
+      expect(renamed.rules).toMatchObject({ tagIds: [], priorities: ['none'] });
+    });
+
+    it('another user’s or a never-existing id is still a 400', async () => {
+      const filter = await ok(user, 'POST', '/api/filters', { name: '校验', rules: {} }, (v) => filterSchema.parse(v));
+      const bobList = await createList(bob, { name: 'bob 删除的' });
+      await api(bob, 'DELETE', `/api/lists/${bobList.id}`);
+      const bobTag = await createTag(bob, { name: 'bob删除的标签' });
+      await api(bob, 'DELETE', `/api/tags/${bobTag.id}`);
+      const cases: [object, string][] = [
+        [{ listIds: [bobList.id] }, 'invalid_list'],
+        [{ listIds: ['00000000-0000-4000-8000-0000000000ee'] }, 'invalid_list'],
+        [{ tagIds: [bobTag.id] }, 'invalid_tags'],
+        [{ tagIds: ['00000000-0000-4000-8000-0000000000ee'] }, 'invalid_tags'],
+      ];
+      for (const [rules, code] of cases) {
+        const created = await api(user, 'POST', '/api/filters', { name: 'x', rules });
+        expect(created.statusCode, JSON.stringify(rules)).toBe(400);
+        expect(created.json()).toMatchObject({ error: { code } });
+        const patched = await api(user, 'PATCH', `/api/filters/${filter.id}`, { rules });
+        expect(patched.statusCode, JSON.stringify(rules)).toBe(400);
+      }
+    });
+  });
+
   describe('全局搜索', () => {
     let user: TestUser;
     const search = async (u: TestUser, q: string) =>
