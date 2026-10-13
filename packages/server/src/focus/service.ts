@@ -203,8 +203,8 @@ export function createFocusService(deps: { db: Db; sync: SyncWriter; clock: Cloc
     });
   }
 
-  async function finishedFocus(ex: Executor, userId: string) {
-    return ex
+  async function finishedFocus(ex: Executor, userId: string, limit?: number) {
+    const query = ex
       .select({ session: focusSessions, title: tasks.title })
       .from(focusSessions)
       .leftJoin(tasks, eq(tasks.id, focusSessions.taskId))
@@ -218,6 +218,7 @@ export function createFocusService(deps: { db: Db; sync: SyncWriter; clock: Cloc
         ),
       )
       .orderBy(desc(focusSessions.startedAt), desc(focusSessions.id));
+    return limit === undefined ? query : query.limit(limit);
   }
 
   async function notify(userId: string, item: { session: Row; breakPhase: BreakPhase }, result: FocusTickResult) {
@@ -343,7 +344,7 @@ export function createFocusService(deps: { db: Db; sync: SyncWriter; clock: Cloc
     },
 
     async records(userId) {
-      const rows = (await finishedFocus(db, userId)).slice(0, FOCUS_RECORDS_LIMIT);
+      const rows = await finishedFocus(db, userId, FOCUS_RECORDS_LIMIT);
       return rows.map(({ session, title }) => ({
         id: session.id,
         mode: session.mode,

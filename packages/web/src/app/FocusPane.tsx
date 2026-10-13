@@ -287,7 +287,12 @@ function FocusSide({ epoch, timeZone, today, onError }: { epoch: number; timeZon
           <span className="focus-period-label" aria-live="polite">
             {periodLabel}
           </span>
-          <IconButton icon="chevronRight" label="下一个周期" onClick={() => setDate(stepFocusPeriod(unit, date, 1))} />
+          <IconButton
+            icon="chevronRight"
+            label="下一个周期"
+            disabled={period.to >= today}
+            onClick={() => setDate(stepFocusPeriod(unit, date, 1))}
+          />
           {date !== today && (
             <button type="button" className="focus-period-today" onClick={() => setDate(today)}>
               今天
