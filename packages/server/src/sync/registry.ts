@@ -1,3 +1,4 @@
+import { tags } from '../db/schema/tags.js';
 import { userSettings } from '../db/schema/settings.js';
 import { notificationChannels } from '../db/schema/channels.js';
 import { channelToApi } from '../notify/notifier.js';
@@ -16,4 +17,5 @@ export const syncEntities: readonly SyncEntity[] = [
   // Credentials stay out of the sync feed: only the masked API form is sent.
   { type: 'notificationChannel', table: notificationChannels, serialize: channelToApi },
   { type: 'checklistItem', table: checklistItems },
+  { type: 'tag', table: tags },
 ];

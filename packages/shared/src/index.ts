@@ -7,6 +7,7 @@ export * from './lists.js';
 export * from './sidebar-order.js';
 export * from './sort-key.js';
 export * from './task-tree.js';
+export * from './tags.js';
 export * from './tasks.js';
 export * from './settings.js';
 export * from './task-dates.js';

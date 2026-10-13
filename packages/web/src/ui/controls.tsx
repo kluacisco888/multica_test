@@ -7,6 +7,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
+import type { Priority } from '@dida/shared';
 import { Icon, type IconName } from './Icon.js';
 
 /*
@@ -39,14 +40,19 @@ export function IconButton({
   );
 }
 
-/** Square task checkbox (spec 完成 / 取消完成). `label` names the task. */
+/**
+ * Square task checkbox (spec 完成 / 取消完成). `label` names the task; the
+ * outline takes the 优先级 colour like the reference.
+ */
 export function TaskCheckbox({
   checked,
   label,
+  priority = 'none',
   onChange,
 }: {
   checked: boolean;
   label: string;
+  priority?: Priority;
   onChange: (checked: boolean) => void;
 }) {
   return (
@@ -55,7 +61,7 @@ export function TaskCheckbox({
       role="checkbox"
       aria-checked={checked}
       aria-label={label}
-      className="ui-task-checkbox"
+      className={`ui-task-checkbox ui-priority-${priority}`}
       onClick={(e) => {
         e.stopPropagation();
         onChange(!checked);
@@ -72,8 +78,35 @@ export interface MenuItem {
   onSelect: () => void;
   danger?: boolean;
   disabled?: boolean;
-  /** Marks the current choice (menuitemradio). */
+  /** Marks the current choice (menuitemradio, or menuitemcheckbox in a `multiple` menu). */
   checked?: boolean;
+  /** Extra class on the item, e.g. a 优先级 colour for its icon. */
+  className?: string;
+}
+
+/** Shared ↑/↓ (and ←/→ for item rows), Home/End, Esc and Tab handling of a menu. */
+function menuKeyDown(event: KeyboardEvent<HTMLElement>, menu: HTMLElement | null, close: (focusOpener: boolean) => void) {
+  const entries = [...(menu?.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]:not([disabled])') ?? [])];
+  const index = entries.indexOf(document.activeElement as HTMLButtonElement);
+  const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[event.key];
+  if (step !== undefined) {
+    event.preventDefault();
+    entries[(index + step + entries.length) % entries.length]?.focus();
+  } else if (event.key === 'Home' || event.key === 'End') {
+    event.preventDefault();
+    (event.key === 'Home' ? entries[0] : entries.at(-1))?.focus();
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    close(true);
+  } else if (event.key === 'Tab') {
+    close(false);
+  }
+}
+
+function itemRole(item: MenuItem, multiple: boolean): 'menuitem' | 'menuitemradio' | 'menuitemcheckbox' {
+  if (item.checked === undefined) return 'menuitem';
+  return multiple ? 'menuitemcheckbox' : 'menuitemradio';
 }
 
 /**
@@ -86,7 +119,9 @@ export function MenuButton({
   items,
   children,
   className,
+  triggerClassName,
   align = 'end',
+  multiple = false,
 }: {
   label: string;
   icon?: IconName;
@@ -94,13 +129,15 @@ export function MenuButton({
   /** Visible content; omitted means an icon-only button. */
   children?: ReactNode;
   className?: string;
+  triggerClassName?: string;
   align?: 'start' | 'end';
+  /** Items with `checked` are independent checkboxes instead of one radio group. */
+  multiple?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
   const menuId = useId();
-  const radio = items.some((i) => i.checked !== undefined);
 
   useEffect(() => {
     if (!open) return;
@@ -120,22 +157,7 @@ export function MenuButton({
   }
 
   function onMenuKeyDown(event: KeyboardEvent<HTMLUListElement>) {
-    const entries = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]:not([disabled])') ?? [])];
-    const index = entries.indexOf(document.activeElement as HTMLButtonElement);
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      const step = event.key === 'ArrowDown' ? 1 : -1;
-      entries[(index + step + entries.length) % entries.length]?.focus();
-    } else if (event.key === 'Home' || event.key === 'End') {
-      event.preventDefault();
-      (event.key === 'Home' ? entries[0] : entries.at(-1))?.focus();
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      close(true);
-    } else if (event.key === 'Tab') {
-      setOpen(false);
-    }
+    menuKeyDown(event, menuRef.current, (focus) => (focus ? close(true) : setOpen(false)));
   }
 
   return (
@@ -143,7 +165,7 @@ export function MenuButton({
       <button
         ref={buttonRef}
         type="button"
-        className={children ? 'ui-menu-trigger' : 'ui-icon-button'}
+        className={`${children ? 'ui-menu-trigger' : 'ui-icon-button'} ${triggerClassName ?? ''}`}
         aria-label={label}
         title={children ? undefined : label}
         aria-haspopup="menu"
@@ -175,9 +197,9 @@ export function MenuButton({
             <li key={item.label} role="none">
               <button
                 type="button"
-                role={radio ? 'menuitemradio' : 'menuitem'}
-                aria-checked={radio ? item.checked === true : undefined}
-                className={`ui-menu-item ${item.danger ? 'ui-menu-item-danger' : ''}`}
+                role={itemRole(item, multiple)}
+                aria-checked={item.checked}
+                className={`ui-menu-item ${item.danger ? 'ui-menu-item-danger' : ''} ${item.className ?? ''}`}
                 disabled={item.disabled}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -193,6 +215,123 @@ export function MenuButton({
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+export interface ContextMenuSection {
+  /** Visible heading and accessible name of the group. */
+  label?: string;
+  /** `row`: icon-only items side by side (the reference's 优先级 flags). */
+  layout?: 'row' | 'column';
+  multiple?: boolean;
+  items: MenuItem[];
+}
+
+/**
+ * A menu opened at a point (right click, long press, or the ContextMenu key /
+ * Shift+F10 from the focused element). Focus moves into it; Esc, Tab, a click
+ * outside or choosing an item closes it and returns focus to `returnFocus`.
+ */
+export function ContextMenu({
+  label,
+  x,
+  y,
+  sections,
+  onClose,
+  returnFocus,
+}: {
+  label: string;
+  x: number;
+  y: number;
+  sections: ContextMenuSection[];
+  onClose: () => void;
+  returnFocus?: HTMLElement | null;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: x, top: y });
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
+  useEffect(() => {
+    const menu = ref.current;
+    if (!menu) return;
+    // Keep the menu inside the viewport.
+    const rect = menu.getBoundingClientRect();
+    const margin = 8;
+    setPosition({
+      left: Math.max(margin, Math.min(x, window.innerWidth - rect.width - margin)),
+      top: Math.max(margin, Math.min(y, window.innerHeight - rect.height - margin)),
+    });
+    menu.querySelector<HTMLButtonElement>('[role^="menuitem"]:not([disabled])')?.focus();
+    function onPointerDown(event: PointerEvent) {
+      if (!menu?.contains(event.target as Node)) onCloseRef.current();
+    }
+    function onScroll() {
+      onCloseRef.current();
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [x, y]);
+
+  function close(focusOpener: boolean) {
+    onClose();
+    if (focusOpener) returnFocus?.focus();
+  }
+
+  return (
+    <div
+      ref={ref}
+      role="menu"
+      aria-label={label}
+      className="ui-menu ui-context-menu"
+      style={{ left: position.left, top: position.top }}
+      onKeyDown={(e) => menuKeyDown(e, ref.current, close)}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {sections.map((section, i) => (
+        <div
+          key={section.label ?? i}
+          role="group"
+          aria-label={section.label}
+          className={`ui-context-section ${section.layout === 'row' ? 'ui-context-row' : ''}`}
+        >
+          {section.label && (
+            <div className="ui-context-heading" aria-hidden="true">
+              {section.label}
+            </div>
+          )}
+          <div className="ui-context-items">
+            {section.items.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                role={itemRole(item, section.multiple === true)}
+                aria-checked={item.checked}
+                aria-label={section.layout === 'row' ? item.label : undefined}
+                title={section.layout === 'row' ? item.label : undefined}
+                className={`ui-menu-item ${item.danger ? 'ui-menu-item-danger' : ''} ${item.className ?? ''}`}
+                disabled={item.disabled}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  close(true);
+                  item.onSelect();
+                }}
+              >
+                {item.icon && <Icon name={item.icon} size={section.layout === 'row' ? 20 : 16} />}
+                {section.layout !== 'row' && <span className="ui-menu-item-label">{item.label}</span>}
+                {section.layout !== 'row' && item.checked && <Icon name="check" size={16} className="ui-menu-item-check" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

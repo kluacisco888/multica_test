@@ -10,6 +10,9 @@ export const idTaken = (reply: FastifyReply) => sendError(reply, 409, 'conflict'
 export const inboxProtected = (reply: FastifyReply, action: string) =>
   sendError(reply, 400, 'inbox_protected', `收件箱不能${action}`);
 export const invalidFolder = (reply: FastifyReply) => sendError(reply, 400, 'invalid_folder', '文件夹不存在');
+export const invalidTags = (reply: FastifyReply) => sendError(reply, 400, 'invalid_tags', '标签不存在');
+export const invalidParentTag = (reply: FastifyReply, message: string) => sendError(reply, 400, 'invalid_parent', message);
+export const tagNameTaken = (reply: FastifyReply) => sendError(reply, 409, 'tag_name_taken', '已有同名标签');
 export const invalidList = (reply: FastifyReply) => sendError(reply, 400, 'invalid_list', '清单不存在');
 export const invalidParent = (reply: FastifyReply) =>
   sendError(reply, 400, 'invalid_parent', '父任务不存在，或不能移到自己的子任务下面');

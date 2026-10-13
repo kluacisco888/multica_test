@@ -37,7 +37,7 @@ export const lists = pgTable(
 );
 
 /**
- * 任务, including 子任务 (`parent_id`). Priority, tags etc. are added by later tasks.
+ * 任务, including 子任务 (`parent_id`), 优先级 and 标签.
  *
  * Dates (spec 用户故事 23–26): `all_day` null means no date. All-day tasks use
  * the calendar-date columns (no time zone); timed tasks store UTC instants plus
@@ -67,11 +67,16 @@ export const tasks = pgTable(
     startAt: timestamp({ withTimezone: true }),
     dueAt: timestamp({ withTimezone: true }),
     timeZone: text(),
+    /** 优先级 */
+    priority: text({ enum: ['none', 'low', 'medium', 'high'] }).notNull().default('none'),
+    /** 标签 ids (no FK on array elements; routes only store live, own 标签 and deleting a 标签 strips it). */
+    tagIds: uuid().array().notNull().default(sql`'{}'::uuid[]`),
   },
   (t) => [
     syncIndex('tasks', t),
     index('tasks_user_list_idx').on(t.userId, t.listId),
     index('tasks_parent_idx').on(t.parentId),
+    index('tasks_tag_ids_idx').using('gin', t.tagIds),
     check('tasks_status_check', sql`${t.status} IN ('open', 'completed', 'abandoned')`),
     check(
       'tasks_dates_check',
@@ -82,6 +87,7 @@ export const tasks = pgTable(
       END`,
     ),
     check('tasks_kind_check', sql`${t.kind} IN ('text', 'checklist')`),
+    check('tasks_priority_check', sql`${t.priority} IN ('none', 'low', 'medium', 'high')`),
   ],
 );
 

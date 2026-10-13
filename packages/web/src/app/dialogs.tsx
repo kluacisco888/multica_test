@@ -1,4 +1,4 @@
-import { LIST_COLORS, LIST_ICONS, type Folder, type TaskList } from '@dida/shared';
+import { LIST_COLORS, LIST_ICONS, type Folder, type Tag, type TaskList } from '@dida/shared';
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Button, Dialog } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
@@ -147,6 +147,121 @@ function SwatchOption({
       <input type="radio" name={group} className="picker-input" checked={checked} onChange={onChange} aria-label={label} />
       {children}
     </label>
+  );
+}
+
+export interface TagDraft {
+  name: string;
+  color: string | null;
+  parentId: string | null;
+}
+
+/**
+ * Create or edit a 标签: name, colour and 父标签 (spec 用户故事 18、19).
+ * Nesting is one level: only top-level 标签 can be parents, and a 标签 with
+ * children stays top level.
+ */
+export function TagDialog({
+  tag,
+  tags,
+  defaultParentId = null,
+  onCancel,
+  onSave,
+}: {
+  tag: Tag | null;
+  tags: Tag[];
+  defaultParentId?: string | null;
+  onCancel: () => void;
+  onSave: (draft: TagDraft) => Promise<void>;
+}) {
+  const id = useId();
+  const [name, setName] = useState(tag?.name ?? '');
+  const [color, setColor] = useState<string | null>(tag?.color ?? null);
+  const [parentId, setParentId] = useState<string | null>(tag ? tag.parentId : defaultParentId);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const hasChildren = tag !== null && tags.some((t) => t.parentId === tag.id);
+  const parents = tags.filter((t) => t.parentId === null && t.id !== tag?.id);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError('请输入标签名称');
+      return;
+    }
+    if (/[\s#]/.test(trimmed)) {
+      setError('标签名称不能包含空格或 #');
+      return;
+    }
+    setSaving(true);
+    await onSave({ name: trimmed, color, parentId });
+    setSaving(false);
+  }
+
+  return (
+    <Dialog title={tag ? '编辑标签' : '添加标签'} onClose={onCancel}>
+      <form className="form" onSubmit={submit} noValidate>
+        <div className="field">
+          <label htmlFor={`${id}-name`}>名称</label>
+          <input
+            id={`${id}-name`}
+            value={name}
+            maxLength={64}
+            autoFocus
+            onChange={(e) => setName(e.target.value)}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? `${id}-error` : undefined}
+          />
+          {error && (
+            <p id={`${id}-error`} className="form-error" role="alert">
+              {error}
+            </p>
+          )}
+        </div>
+        <fieldset className="field picker">
+          <legend>颜色</legend>
+          <div className="picker-options">
+            <SwatchOption group={`${id}-color`} label="无颜色" checked={color === null} onChange={() => setColor(null)}>
+              <span className="swatch swatch-none" />
+            </SwatchOption>
+            {LIST_COLORS.map((c) => (
+              <SwatchOption key={c} group={`${id}-color`} label={COLOR_NAMES[c]} checked={color === c} onChange={() => setColor(c)}>
+                <span className="swatch" style={{ background: c }} />
+              </SwatchOption>
+            ))}
+          </div>
+        </fieldset>
+        <div className="field">
+          <label htmlFor={`${id}-parent`}>父标签</label>
+          <select
+            id={`${id}-parent`}
+            value={parentId ?? ''}
+            disabled={hasChildren}
+            aria-describedby={hasChildren ? `${id}-parent-hint` : undefined}
+            onChange={(e) => setParentId(e.target.value || null)}
+          >
+            <option value="">无</option>
+            {parents.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          {hasChildren && (
+            <p id={`${id}-parent-hint`} className="field-hint">
+              这个标签下有子标签，不能再放进其他标签
+            </p>
+          )}
+        </div>
+        <div className="ui-dialog-footer">
+          <Button onClick={onCancel}>取消</Button>
+          <Button type="submit" variant="primary" disabled={saving}>
+            {saving ? '正在保存…' : '保存'}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 

@@ -3,13 +3,16 @@ import {
   DEPTH_EXCEEDED_MESSAGE,
   planIndent,
   planOutdent,
+  orderTags,
   planSidebarDrop,
+  tagWithChildren,
   type CurrentUser,
   type DropPosition,
   type Folder,
   type SidebarItemRef,
   type Settings,
   type SidebarResponse,
+  type Tag,
   type Task,
   type TaskList,
   type UpdateSettingsRequest,
@@ -18,13 +21,13 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as api from '../api.js';
 import { useNow } from './clock.js';
-import { ConfirmDialog, FolderDialog, ListDialog, type ListDraft } from './dialogs.js';
+import { ConfirmDialog, FolderDialog, ListDialog, TagDialog, type ListDraft, type TagDraft } from './dialogs.js';
 import { Rail } from './Rail.js';
 import { SettingsDialog, type SettingsTab } from './SettingsDialog.js';
 import { MOBILE_QUERY, useMediaQuery, useRoute } from './route.js';
 import { Sidebar } from './Sidebar.js';
 import { TaskDetail } from './TaskDetail.js';
-import { TaskListPane } from './TaskListPane.js';
+import { TaskListPane, type ListPaneView } from './TaskListPane.js';
 
 type DialogState =
   | { kind: 'none' }
@@ -32,7 +35,12 @@ type DialogState =
   | { kind: 'list'; list: TaskList | null; folderId: string | null }
   | { kind: 'folder'; folder: Folder | null }
   | { kind: 'delete-list'; list: TaskList }
-  | { kind: 'delete-folder'; folder: Folder };
+  | { kind: 'delete-folder'; folder: Folder }
+  | { kind: 'tag'; tag: Tag | null; parentId: string | null }
+  | { kind: 'delete-tag'; tag: Tag };
+
+/** Key of the task set on screen: one 清单 or one 标签. */
+const scopeKey = (view: ListPaneView) => (view.kind === 'list' ? `list:${view.list.id}` : `tag:${view.tag.id}`);
 
 /**
  * The application shell (spec 用户故事 65): rail | sidebar | task list | task
@@ -43,7 +51,10 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const [route, navigate] = useRoute();
   const isMobile = useMediaQuery(MOBILE_QUERY);
   const [sidebar, setSidebar] = useState<SidebarResponse | null>(null);
-  const [tasks, setTasks] = useState<{ listId: string; items: Task[] } | null>(null);
+  const [tags, setTags] = useState<Tag[] | null>(null);
+  const [tasks, setTasks] = useState<{ scope: string; items: Task[] } | null>(null);
+  /** Bumped to refetch the task set on screen (e.g. after a 标签 was deleted). */
+  const [tasksEpoch, setTasksEpoch] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -64,12 +75,21 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     }
   }, [fail]);
 
+  const reloadTags = useCallback(async () => {
+    try {
+      setTags(orderTags(await api.fetchTags()));
+    } catch (e) {
+      fail(e);
+    }
+  }, [fail]);
+
   useEffect(() => {
     let cancelled = false;
-    api
-      .fetchSidebar()
-      .then((data) => {
-        if (!cancelled) setSidebar(data);
+    Promise.all([api.fetchSidebar(), api.fetchTags()])
+      .then(([data, tagList]) => {
+        if (cancelled) return;
+        setSidebar(data);
+        setTags(orderTags(tagList));
       })
       .catch((e: unknown) => {
         if (!cancelled) fail(e);
@@ -105,26 +125,31 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   }
 
   const inbox = sidebar?.lists.find((l) => l.isInbox) ?? null;
+  const currentTag = route.tagId ? (tags?.find((t) => t.id === route.tagId) ?? null) : null;
   const currentList = useMemo(() => {
-    if (!sidebar) return null;
+    if (!sidebar || route.tagId) return null;
     return (route.listId ? sidebar.lists.find((l) => l.id === route.listId) : inbox) ?? null;
-  }, [sidebar, route.listId, inbox]);
+  }, [sidebar, route.listId, route.tagId, inbox]);
+  const view: ListPaneView | null = useMemo(() => {
+    if (currentTag) return { kind: 'tag', tag: currentTag, inbox };
+    return currentList ? { kind: 'list', list: currentList } : null;
+  }, [currentTag, currentList, inbox]);
 
-  // An unknown or deleted 清单 in the URL falls back to the 收件箱.
+  // An unknown or deleted 清单 / 标签 in the URL falls back to the 收件箱.
   useEffect(() => {
-    if (sidebar && route.listId && !sidebar.lists.some((l) => l.id === route.listId)) {
-      navigate({ listId: null, taskId: null }, { replace: true });
-    }
-  }, [sidebar, route.listId, navigate]);
+    const unknownList = sidebar && route.listId && !sidebar.lists.some((l) => l.id === route.listId);
+    const unknownTag = tags && route.tagId && !tags.some((t) => t.id === route.tagId);
+    if (unknownList || unknownTag) navigate({ listId: null, taskId: null }, { replace: true });
+  }, [sidebar, tags, route.listId, route.tagId, navigate]);
 
-  const currentListId = currentList?.id ?? null;
+  const currentScope = view ? scopeKey(view) : null;
   useEffect(() => {
-    if (!currentListId) return;
+    if (!view || !currentScope) return;
     let cancelled = false;
     api
-      .fetchTasks(currentListId)
+      .fetchTasks(view.kind === 'list' ? { listId: view.list.id } : { tagId: view.tag.id })
       .then((items) => {
-        if (!cancelled) setTasks({ listId: currentListId, items });
+        if (!cancelled) setTasks({ scope: currentScope, items });
       })
       .catch((e: unknown) => {
         if (!cancelled) fail(e);
@@ -132,10 +157,12 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     return () => {
       cancelled = true;
     };
-  }, [currentListId, fail]);
+    // `view` changes identity with every sidebar reload; refetch only when the scope does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentScope, tasksEpoch, fail]);
 
   // Dates are shown in the user's time zone, so wait for the settings too.
-  const listTasks = settings && tasks && tasks.listId === currentListId ? tasks.items : null;
+  const listTasks = settings && tasks && tasks.scope === currentScope ? tasks.items : null;
   const timeZone = settings?.timeZone ?? DEFAULT_TIME_ZONE;
   const selectedTask = listTasks?.find((t) => t.id === route.taskId) ?? null;
 
@@ -144,24 +171,40 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     setDrawerOpen(false);
   }
 
-  function selectTask(taskId: string | null) {
-    navigate({ listId: route.listId, taskId });
+  function openTag(tagId: string) {
+    navigate({ listId: null, tagId, taskId: null });
+    setDrawerOpen(false);
   }
 
-  /** Replace a task in the current list (or drop it when it left the list). */
+  function selectTask(taskId: string | null) {
+    navigate({ listId: route.listId, tagId: route.tagId ?? null, taskId });
+  }
+
+  /** Does `task` belong to the task set on screen? */
+  function inView(task: Task): boolean {
+    if (!view) return false;
+    if (view.kind === 'list') return task.listId === view.list.id;
+    const ids = tagWithChildren(tags ?? [], view.tag.id);
+    return task.tagIds.some((id) => ids.includes(id));
+  }
+
+  /** Replace a task on screen (or drop it when it left the 清单 / 标签). */
   function putTask(task: Task) {
+    const keep = inView(task);
     setTasks((prev) => {
-      if (!prev) return prev;
+      if (!prev || prev.scope !== currentScope) return prev;
       const others = prev.items.filter((t) => t.id !== task.id);
-      const items = task.listId === prev.listId ? sortTasks([...others, task]) : others;
-      return { ...prev, items };
+      return { ...prev, items: keep ? sortTasks([...others, task]) : others };
     });
   }
 
   async function addTask(title: string) {
-    if (!currentList) return false;
+    if (!view) return false;
     try {
-      const task = await api.createTask({ listId: currentList.id, title });
+      // In a 标签 view the task goes to the 收件箱 carrying that 标签.
+      const task = await api.createTask(
+        view.kind === 'list' ? { listId: view.list.id, title } : { title, tagIds: [view.tag.id] },
+      );
       putTask(task);
       void reloadSidebar();
       return true;
@@ -171,13 +214,13 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     }
   }
 
-  /** Re-read the current 清单: a change may have cascaded to 子任务 / ancestors. */
+  /** Re-read the tasks on screen: a change may have cascaded to 子任务 / ancestors. */
   async function reloadTasks() {
-    if (!currentListId) return;
-    const listId = currentListId;
+    if (!view || !currentScope) return;
+    const scope = currentScope;
     try {
-      const items = await api.fetchTasks(listId);
-      setTasks((prev) => (prev && prev.listId !== listId ? prev : { listId, items }));
+      const items = await api.fetchTasks(view.kind === 'list' ? { listId: view.list.id } : { tagId: view.tag.id });
+      setTasks((prev) => (prev && prev.scope !== scope ? prev : { scope, items }));
     } catch (e) {
       fail(e);
     }
@@ -215,7 +258,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       putTask(updated);
       if (patch.status !== undefined || patch.listId !== undefined || patch.parentId !== undefined) void reloadTasks();
       if (patch.status !== undefined || patch.listId !== undefined) void reloadSidebar();
-      if (updated.listId !== currentList?.id && route.taskId === task.id) selectTask(null);
+      if (!inView(updated) && route.taskId === task.id) selectTask(null);
       return updated;
     } catch (e) {
       fail(e);
@@ -274,6 +317,37 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     }
   }
 
+  async function saveTag(draft: TagDraft, existing: Tag | null) {
+    try {
+      if (existing) {
+        await api.updateTag(existing.id, draft);
+        await reloadTags();
+        // A changed parent changes which tasks a parent 标签 view covers.
+        if (draft.parentId !== existing.parentId) setTasksEpoch((n) => n + 1);
+      } else {
+        const created = await api.createTag(draft);
+        await reloadTags();
+        openTag(created.id);
+      }
+      setDialog({ kind: 'none' });
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  async function removeTag(tag: Tag) {
+    try {
+      await api.deleteTag(tag.id);
+      setDialog({ kind: 'none' });
+      if (route.tagId === tag.id) navigate({ listId: null, taskId: null });
+      await reloadTags();
+      // Tasks on screen lost the 标签: refetch them.
+      setTasksEpoch((n) => n + 1);
+    } catch (e) {
+      fail(e);
+    }
+  }
+
   async function toggleFolder(folder: Folder) {
     // Optimistic: collapsing should feel instant.
     setSidebar((s) => s && { ...s, folders: s.folders.map((f) => (f.id === folder.id ? { ...f, collapsed: !f.collapsed } : f)) });
@@ -320,7 +394,9 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       {sidebarVisible && (
         <Sidebar
           sidebar={sidebar}
+          tags={tags ?? []}
           currentListId={currentList?.id ?? null}
+          currentTagId={currentTag?.id ?? null}
           isDrawer={isMobile}
           user={user}
           onOpenAccount={() => setDialog({ kind: 'settings', tab: 'account' })}
@@ -335,12 +411,18 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onDeleteFolder={(folder) => setDialog({ kind: 'delete-folder', folder })}
           onToggleFolder={toggleFolder}
           onMove={moveSidebarItem}
+          onOpenTag={openTag}
+          onAddTag={(parentId) => setDialog({ kind: 'tag', tag: null, parentId })}
+          onEditTag={(tag) => setDialog({ kind: 'tag', tag, parentId: tag.parentId })}
+          onDeleteTag={(tag) => setDialog({ kind: 'delete-tag', tag })}
         />
       )}
       {!(isMobile && selectedTask) && (
         <TaskListPane
-          list={currentList}
+          view={view}
           tasks={listTasks}
+          tags={tags ?? []}
+          lists={sidebar?.lists ?? []}
           selectedTaskId={route.taskId}
           sidebarVisible={sidebarVisible}
           timeZone={timeZone}
@@ -350,6 +432,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onSelectTask={selectTask}
           onToggleTask={(task) => changeTask(task, { status: task.status === 'completed' ? 'open' : 'completed' })}
           onIndent={indentTask}
+          onChangeTask={(task, patch) => void changeTask(task, patch)}
           onEditList={currentList && !currentList.isInbox ? () => setDialog({ kind: 'list', list: currentList, folderId: currentList.folderId }) : null}
         />
       )}
@@ -359,6 +442,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           task={selectedTask}
           tasks={listTasks ?? []}
           lists={sidebar?.lists ?? []}
+          tags={tags ?? []}
           isMobile={isMobile}
           timeZone={timeZone}
           now={now}
@@ -422,6 +506,26 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           confirmLabel="删除"
           onCancel={() => setDialog({ kind: 'none' })}
           onConfirm={() => removeFolder(dialog.folder)}
+        />
+      )}
+      {dialog.kind === 'tag' && (
+        <TagDialog
+          tag={dialog.tag}
+          tags={tags ?? []}
+          defaultParentId={dialog.parentId}
+          onCancel={() => setDialog({ kind: 'none' })}
+          onSave={(draft) => saveTag(draft, dialog.tag)}
+        />
+      )}
+      {dialog.kind === 'delete-tag' && (
+        <ConfirmDialog
+          title="删除标签"
+          message={`删除标签「${dialog.tag.name}」后，任务上的这个标签会被移除，任务本身不受影响。${
+            (tags ?? []).some((t) => t.parentId === dialog.tag.id) ? '它的子标签会移到顶层。' : ''
+          }`}
+          confirmLabel="删除"
+          onCancel={() => setDialog({ kind: 'none' })}
+          onConfirm={() => removeTag(dialog.tag)}
         />
       )}
     </div>

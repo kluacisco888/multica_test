@@ -5,12 +5,14 @@ import {
   keyBetween,
   type ChecklistItem,
   type Folder,
+  type Tag,
   type Task,
   type TaskDates,
   type TaskDatesInput,
   type TaskList,
 } from '@dida/shared';
 import type { Executor } from './db/client.js';
+import { tags } from './db/schema/tags.js';
 import type { checklistItems } from './db/schema/tasks.js';
 import { folders, lists, tasks } from './db/schema/tasks.js';
 import type { SyncWriter } from './sync/sync.js';
@@ -24,6 +26,7 @@ export type ListRow = typeof lists.$inferSelect;
 export type FolderRow = typeof folders.$inferSelect;
 export type TaskRow = typeof tasks.$inferSelect;
 export type ChecklistItemRow = typeof checklistItems.$inferSelect;
+export type TagRow = typeof tags.$inferSelect;
 
 /** Advisory-lock namespace for creating a user's 收件箱 (second key: hash of the user id). */
 const INBOX_LOCK = 0x696e_6278; // "inbx"
@@ -125,6 +128,8 @@ export function taskToApi(row: TaskRow): Task {
     completedAt: row.completedAt ? iso(row.completedAt) : null,
     sortOrder: row.sortOrder,
     dates: taskDatesToApi(row),
+    priority: row.priority,
+    tagIds: row.tagIds,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
     revision: row.revision,
@@ -160,6 +165,34 @@ export function taskDateColumns(dates: TaskDatesInput | null, timeZone: string |
     dueAt: new Date(dates.dueAt),
     timeZone,
   };
+}
+
+export function tagToApi(row: TagRow): Tag {
+  return {
+    id: row.id,
+    name: row.name,
+    color: row.color,
+    parentId: row.parentId,
+    sortOrder: row.sortOrder,
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt),
+    revision: row.revision,
+  };
+}
+
+/** Key at the end of a 标签 level: the top level (`parentId` null) or one parent's children. */
+export async function endOfTagLevel(db: Executor, userId: string, parentId: string | null): Promise<string> {
+  const rows = await db
+    .select({ key: tags.sortOrder })
+    .from(tags)
+    .where(
+      and(
+        eq(tags.userId, userId),
+        isNull(tags.deletedAt),
+        parentId === null ? isNull(tags.parentId) : eq(tags.parentId, parentId),
+      ),
+    );
+  return keyBetween(maxKey(rows.map((r) => r.key)), null);
 }
 
 /** List order: open tasks by sort key, then completed ones, most recently completed first. */

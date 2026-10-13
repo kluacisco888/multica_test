@@ -137,6 +137,20 @@ const paths = {
     </>
   ),
   grip: <path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" strokeWidth={2.75} />,
+  /** 优先级 */
+  flag: (
+    <>
+      <path d="M6 20.5V4.5" />
+      <path d="M6 5h11.5l-2.5 4.25L17.5 13.5H6" fill="currentColor" fillOpacity={0.15} />
+    </>
+  ),
+  /** 标签 */
+  tag: (
+    <>
+      <path d="M4.5 5.9V11a1.5 1.5 0 0 0 .44 1.06l7 7a1.5 1.5 0 0 0 2.12 0l5-5a1.5 1.5 0 0 0 0-2.12l-7-7A1.5 1.5 0 0 0 11 4.5H5.9a1.4 1.4 0 0 0-1.4 1.4Z" />
+      <circle cx="8.6" cy="8.6" r="1.3" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof paths;
