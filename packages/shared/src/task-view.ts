@@ -21,7 +21,17 @@ export type GroupBy = z.infer<typeof groupBySchema>;
 export const SORT_LABELS: Record<SortBy, string> = { custom: '自定义', date: '日期', priority: '优先级', title: '标题' };
 export const GROUP_LABELS: Record<GroupBy, string> = { none: '不分组', list: '清单', date: '日期', priority: '优先级', tag: '标签' };
 
-export const viewOptionsSchema = z.object({ sortBy: sortBySchema, groupBy: groupBySchema }).strict();
+/**
+ * How a view shows its tasks: `list` (the default) or `timeline` (时间线, spec
+ * 用户故事 68, see `timeline.ts`). Missing means `list`, so layouts saved
+ * before 时间线 existed stay valid.
+ */
+export const VIEW_LAYOUTS = ['list', 'timeline'] as const;
+export const viewLayoutSchema = z.enum(VIEW_LAYOUTS);
+export type ViewLayout = z.infer<typeof viewLayoutSchema>;
+export const VIEW_LAYOUT_LABELS: Record<ViewLayout, string> = { list: '列表', timeline: '时间线' };
+
+export const viewOptionsSchema = z.object({ sortBy: sortBySchema, groupBy: groupBySchema, layout: viewLayoutSchema.optional() }).strict();
 export type ViewOptions = z.infer<typeof viewOptionsSchema>;
 
 /** `list:<id>`, `tag:<id>`, `smart:<id>`, `filter:<id>` or `search`. */

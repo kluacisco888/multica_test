@@ -18,6 +18,8 @@ import {
   type TaskSection,
   type UpdateTaskRequest,
   type ViewOptions,
+  VIEW_LAYOUT_LABELS,
+  VIEW_LAYOUTS,
 } from '@dida/shared';
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { ContextMenu, IconButton, MenuButton, TaskCheckbox, type ContextMenuSection } from '../ui/controls.js';
@@ -164,24 +166,7 @@ export function TaskListPane(props: TaskListPaneProps) {
     onOpenMenu: (task: Task, x: number, y: number, opener: HTMLElement | null) => setMenu({ task, x, y, opener }),
   };
 
-  const layoutSections: ContextMenuSection[] = [
-    {
-      label: '排序',
-      items: SORT_OPTIONS.map((sortBy) => ({
-        label: SORT_LABELS[sortBy],
-        checked: viewOptions.sortBy === sortBy,
-        onSelect: () => props.onChangeViewOptions({ ...viewOptions, sortBy }),
-      })),
-    },
-    {
-      label: '分组',
-      items: GROUP_OPTIONS.map((groupBy) => ({
-        label: GROUP_LABELS[groupBy],
-        checked: viewOptions.groupBy === groupBy,
-        onSelect: () => props.onChangeViewOptions({ ...viewOptions, groupBy }),
-      })),
-    },
-  ];
+  const layoutSections = layoutMenuSections(viewOptions, props.onChangeViewOptions, view?.kind !== 'search');
 
   const isSearch = view?.kind === 'search';
   const emptyQuery = view?.kind === 'search' && view.query === '';
@@ -305,6 +290,48 @@ export function TaskListPane(props: TaskListPaneProps) {
       )}
     </main>
   );
+}
+
+/**
+ * The 排序和分组 menu (shared with the 时间线): 视图 (列表 / 时间线, not for
+ * 搜索), 排序 and 分组 of the view on screen.
+ */
+export function layoutMenuSections(
+  viewOptions: ViewOptions,
+  onChange: (options: ViewOptions) => void,
+  canSwitchLayout: boolean,
+): ContextMenuSection[] {
+  const layout = viewOptions.layout ?? 'list';
+  return [
+    ...(canSwitchLayout
+      ? [
+          {
+            label: '视图',
+            items: VIEW_LAYOUTS.map((next) => ({
+              label: VIEW_LAYOUT_LABELS[next],
+              checked: layout === next,
+              onSelect: () => onChange({ ...viewOptions, layout: next }),
+            })),
+          },
+        ]
+      : []),
+    {
+      label: '排序',
+      items: SORT_OPTIONS.map((sortBy) => ({
+        label: SORT_LABELS[sortBy],
+        checked: viewOptions.sortBy === sortBy,
+        onSelect: () => onChange({ ...viewOptions, sortBy }),
+      })),
+    },
+    {
+      label: '分组',
+      items: GROUP_OPTIONS.map((groupBy) => ({
+        label: GROUP_LABELS[groupBy],
+        checked: viewOptions.groupBy === groupBy,
+        onSelect: () => onChange({ ...viewOptions, groupBy }),
+      })),
+    },
+  ];
 }
 
 /** A titled, collapsible group of rows: 已过期, a day, a 清单, 已完成 … */

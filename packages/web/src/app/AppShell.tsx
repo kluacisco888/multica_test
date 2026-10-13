@@ -18,6 +18,8 @@ import {
   type SidebarResponse,
   type Tag,
   type Task,
+  type TaskDates,
+  type TaskDatesInput,
   type TaskList,
   type TrashedTask,
   type UpdateSettingsRequest,
@@ -42,6 +44,7 @@ import { MOBILE_QUERY, useMediaQuery, useRoute } from './route.js';
 import { activeSidebar, Sidebar } from './Sidebar.js';
 import { TaskDetail } from './TaskDetail.js';
 import { TaskListPane } from './TaskListPane.js';
+import { TimelinePane } from './TimelinePane.js';
 import { TrashPane } from './TrashPane.js';
 import { belongsToView, quickAddTarget, scopeKey, tasksQuery, viewOptionsFor, viewKey, type ListPaneView } from './views.js';
 
@@ -377,6 +380,15 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     }
   }
 
+  /** 时间线 drag: show the new dates at once, then save them (a failure re-reads the tasks). */
+  async function moveTask(task: Task, dates: TaskDatesInput) {
+    const shown: TaskDates = dates.allDay
+      ? { allDay: true, startDate: dates.startDate ?? null, dueDate: dates.dueDate }
+      : { allDay: false, startAt: dates.startAt ?? null, dueAt: dates.dueAt, timeZone };
+    putTask({ ...task, dates: shown });
+    await changeTask(task, { dates });
+  }
+
   /** 删除: the task and its 子任务 go to the 回收站. */
   async function deleteTask(task: Task) {
     try {
@@ -584,7 +596,9 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     await reloadSidebar();
   }
 
-  const showDetail = !isMobile || selectedTask !== null;
+  // 时间线 (spec 用户故事 68) uses the whole width until a task is opened, like the reference.
+  const timeline = view !== null && view.kind !== 'search' && viewOptions?.layout === 'timeline';
+  const showDetail = (!isMobile && !timeline) || selectedTask !== null;
   const sidebarVisible = isMobile ? drawerOpen : sidebarOpen;
 
   return (
@@ -654,7 +668,26 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onEmpty={() => setDialog({ kind: 'empty-trash' })}
         />
       )}
-      {!route.trash && !(isMobile && selectedTask) && (
+      {!route.trash && !(isMobile && selectedTask) && timeline && view && (
+        <TimelinePane
+          key={viewKey(view)}
+          view={view}
+          tasks={listTasks}
+          viewOptions={viewOptions ?? { sortBy: 'custom', groupBy: 'none' }}
+          onChangeViewOptions={changeViewOptions}
+          tags={tags ?? []}
+          lists={sidebar?.lists ?? []}
+          selectedTaskId={route.taskId}
+          sidebarVisible={sidebarVisible}
+          timeZone={timeZone}
+          now={now}
+          onToggleSidebar={() => (isMobile ? setDrawerOpen((v) => !v) : setSidebarOpen((v) => !v))}
+          onSelectTask={selectTask}
+          onMoveTask={(task, dates) => void moveTask(task, dates)}
+          onEditList={currentList && !currentList.isInbox ? () => setDialog({ kind: 'list', list: currentList, folderId: currentList.folderId }) : null}
+        />
+      )}
+      {!route.trash && !(isMobile && selectedTask) && !timeline && (
         <TaskListPane
           // A new view starts with its sections expanded.
           key={view ? viewKey(view) : 'none'}
