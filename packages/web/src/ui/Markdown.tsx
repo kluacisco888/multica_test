@@ -3,8 +3,9 @@ import { useMemo } from 'react';
 
 /*
  * Task descriptions are Markdown (spec 用户故事 21). Raw HTML in the source is
- * escaped (`html: false`) and markdown-it rejects javascript:/vbscript:/data:
- * links, so rendering user text with innerHTML is safe here.
+ * escaped (`html: false`), and markdown-it's link validation drops
+ * javascript:/vbscript:/file: URLs and data: URLs other than images, so the
+ * only markup in the output is markdown-it's own: safe for innerHTML.
  */
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
 
