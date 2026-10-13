@@ -1843,3 +1843,312 @@ span.task-row-expand {
     opacity: 1;
   }
 }
+
+/* ---- 附件 in the detail pane (spec 用户故事 38) ---- */
+
+.attachments {
+  margin-top: var(--space-4);
+}
+
+.attachments-input {
+  display: none;
+}
+
+.attachments-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.attachment {
+  position: relative;
+  max-width: 100%;
+}
+
+.attachment-image {
+  flex: 0 1 auto;
+}
+
+.attachment-file {
+  flex: 1 1 100%;
+}
+
+.attachment-thumb {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: zoom-in;
+}
+
+.attachment-thumb img {
+  display: block;
+  max-width: 100%;
+  max-height: var(--attachment-thumb-height);
+  object-fit: contain;
+}
+
+.attachment-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--attachment-card-height);
+  padding: var(--space-2) var(--space-3);
+  padding-right: 72px; /* room for the actions */
+  font: inherit;
+  color: var(--color-text);
+  text-align: left;
+  text-decoration: none;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+}
+
+.attachment-card:hover {
+  background: var(--color-bg-hover);
+}
+
+.attachment-icon {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 36px;
+  color: var(--color-brand-text);
+}
+
+.attachment-ext {
+  position: absolute;
+  bottom: 2px;
+  font-size: 8px;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+}
+
+.attachment-meta {
+  display: grid;
+  min-width: 0;
+}
+
+.attachment-name {
+  overflow: hidden;
+  font-size: var(--font-size-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-size {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.attachment-actions {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+}
+
+.attachment-image .attachment-actions {
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.attachment-file .attachment-actions {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.attachment:hover .attachment-actions,
+.attachment:focus-within .attachment-actions {
+  opacity: 1;
+}
+
+.attachment-actions .ui-icon-button {
+  color: var(--color-text-secondary);
+}
+
+.attachment-uploading .attachment-card {
+  cursor: progress;
+}
+
+.attachment-preview {
+  width: min(var(--attachment-preview-width), calc(100vw - 2 * var(--space-4)));
+}
+
+.attachment-preview .ui-dialog-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-preview-image {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  margin: 0 auto;
+  object-fit: contain;
+}
+
+.attachment-preview-pdf {
+  display: block;
+  width: 100%;
+  height: 70vh;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.attachment-preview .ui-dialog-footer a {
+  text-decoration: none;
+}
+
+/* ---- 评论 in the detail pane (spec 用户故事 39) ---- */
+
+.comments {
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-divider);
+}
+
+.comments-heading {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.comments-count {
+  margin-left: var(--space-1);
+  font-weight: var(--font-weight-regular);
+}
+
+.comments-list {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.comment {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.comment-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--comment-avatar-size);
+  height: var(--comment-avatar-size);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-on-brand);
+  background: var(--color-button-primary);
+  border-radius: 50%;
+}
+
+.comment-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.comment-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--comment-avatar-size);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.comment-author {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+.comment-menu {
+  margin-left: auto;
+  opacity: 0;
+}
+
+.comment:hover .comment-menu,
+.comment:focus-within .comment-menu {
+  opacity: 1;
+}
+
+.comment-content {
+  margin: 2px 0 0;
+  font-size: var(--font-size-md);
+  line-height: 1.6;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.comment-composer,
+.comment-editor {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.comment-editor {
+  flex-direction: column;
+  align-items: stretch;
+  margin-top: var(--space-1);
+}
+
+.comment-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.comment-input {
+  flex: 1;
+  min-height: var(--input-height);
+  max-height: 160px;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--font-size-md);
+  line-height: 1.4;
+  color: var(--color-text);
+  resize: vertical;
+  background: var(--color-bg-input);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  outline: none;
+}
+
+.comment-input:focus {
+  border-color: var(--color-focus);
+}
+
+.comment-input::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+@media (max-width: 767px) {
+  /* No hover on touch: actions stay visible. */
+  .attachment-actions,
+  .comment-menu {
+    opacity: 1;
+  }
+
+  .attachment-preview-pdf {
+    height: 60vh;
+  }
+}

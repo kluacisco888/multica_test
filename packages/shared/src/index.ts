@@ -16,3 +16,5 @@ export * from './workday-calendar.js';
 export * from './holidays.js';
 export * from './admin.js';
 export * from './repeat-rule.js';
+export * from './attachments.js';
+export * from './comments.js';

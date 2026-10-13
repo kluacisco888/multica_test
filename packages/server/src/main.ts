@@ -17,6 +17,8 @@ const app = await buildApp({
   db: database.db,
   logger: { level: config.logLevel },
 });
+// Partial uploads from a crash are never finished; drop them so backups stay clean.
+await app.attachmentStore.cleanIncoming();
 
 if (!config.encryptionKey) {
   app.log.warn('APP_ENCRYPTION_KEY is not set: 通知渠道 cannot be saved or used (generate one with `openssl rand -base64 32`)');

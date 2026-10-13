@@ -554,6 +554,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           tasks={listTasks ?? []}
           lists={sidebar?.lists ?? []}
           tags={tags ?? []}
+          userName={user.username}
           isMobile={isMobile}
           timeZone={timeZone}
           now={now}

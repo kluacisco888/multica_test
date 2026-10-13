@@ -15,6 +15,8 @@ import { IconButton, MenuButton, TaskCheckbox } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { Markdown } from '../ui/Markdown.js';
 import { ChecklistEditor } from './ChecklistEditor.js';
+import { TaskAttachments } from './TaskAttachments.js';
+import { TaskComments } from './TaskComments.js';
 import { chipStyle, priorityItems, tagItems, tagsOf, taskActionItems } from './taskMeta.js';
 
 interface TaskDetailProps {
@@ -24,6 +26,8 @@ interface TaskDetailProps {
   lists: TaskList[];
   /** Every 标签 in display order. */
   tags: Tag[];
+  /** Shown as the author of 评论. */
+  userName: string;
   isMobile: boolean;
   timeZone: string;
   now: Date;
@@ -45,6 +49,7 @@ export function TaskDetail({
   tasks,
   lists,
   tags,
+  userName,
   isMobile,
   timeZone,
   now,
@@ -58,6 +63,16 @@ export function TaskDetail({
   onError,
 }: TaskDetailProps) {
   const addSubtaskRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const focusComposerOnOpen = useRef(false);
+  useEffect(() => {
+    if (composerOpen && focusComposerOnOpen.current) {
+      focusComposerOnOpen.current = false;
+      composerRef.current?.focus();
+    }
+  }, [composerOpen]);
   if (!task) {
     return (
       <aside className="detail detail-empty" aria-label="任务详情">
@@ -147,6 +162,7 @@ export function TaskDetail({
         ) : (
           <DescriptionEditor key={`${task.id}-${task.kind}`} task={task} onSave={(description) => onChange(task, { description })} />
         )}
+        <TaskAttachments taskId={task.id} inputRef={fileInputRef} onError={onError} />
         <Subtasks
           parent={task}
           tasks={tasks}
@@ -155,6 +171,14 @@ export function TaskDetail({
           onSelectTask={onSelectTask}
           onToggle={(child) => void onChange(child, { status: child.status !== 'open' ? 'open' : 'completed' })}
           onAdd={(title) => onAddSubtask(task, title)}
+        />
+        <TaskComments
+          taskId={task.id}
+          userName={userName}
+          timeZone={timeZone}
+          composerOpen={composerOpen}
+          composerRef={composerRef}
+          onError={onError}
         />
       </div>
       <footer className="detail-footer">
@@ -178,6 +202,17 @@ export function TaskDetail({
         </MenuButton>
         <span className="detail-footer-spacer" />
         <IconButton
+          icon="comment"
+          label="评论"
+          onClick={() => {
+            if (composerOpen) composerRef.current?.focus();
+            else {
+              focusComposerOnOpen.current = true;
+              setComposerOpen(true);
+            }
+          }}
+        />
+        <IconButton
           icon={checklist ? 'text' : 'checklist'}
           label={checklist ? '切换为描述' : '切换为检查清单'}
           onClick={() => void onChange(task, { kind: checklist ? 'text' : 'checklist' })}
@@ -186,6 +221,7 @@ export function TaskDetail({
           label="任务更多操作"
           items={[
             { label: '添加子任务', icon: 'subtask', onSelect: () => addSubtaskRef.current?.focus() },
+            { label: '上传附件', icon: 'attachment', onSelect: () => fileInputRef.current?.click() },
             { label: '缩进（Tab）', icon: 'indent', disabled: !canIndent, onSelect: () => onIndent(task, false) },
             { label: '取消缩进（Shift+Tab）', icon: 'outdent', disabled: !canOutdent, onSelect: () => onIndent(task, true) },
             ...taskActionItems(task, change, () => onDelete(task)),
