@@ -144,6 +144,9 @@ CI 定义在 `ci/github-actions.yml`：lint、类型检查、四层测试，再�
 | `POST/PATCH/DELETE /api/lists[/:id]` | 清单：名称、颜色、图标、`folderId`、`sortOrder`。收件箱不能改、不能删（400 `inbox_protected`）；删除清单会一起删除其中的任务 |
 | `POST/PATCH/DELETE /api/folders[/:id]` | 文件夹（只有一层）：名称、`collapsed`、`sortOrder`。删除文件夹时，其中的清单移到文件夹原来的位置 |
 | `GET /api/tasks?listId=` | 未完成任务按排序键，已完成任务在后、最近完成的在前 |
-| `GET/POST/PATCH /api/tasks[/:id]` | 不指定清单进收件箱；新建和移入的任务排在最前；`status` 在 `open` / `completed` 之间切换 |
+| `GET/POST/PATCH /api/tasks[/:id]` | 不指定清单进收件箱；新建和移入的任务排在最前；`status` 在 `open` / `completed` 之间切换；`dates` 见下 |
+| `GET/PATCH /api/settings` | 设置：`timeZone`（IANA 名称，默认 `Asia/Shanghai`）。第一次修改时才建行，同步类型 `settings` |
+
+任务的 `dates`（`packages/shared/src/task-dates.ts`）：`null` 是不设日期；全天是 `{ allDay: true, startDate, dueDate }`，按日历日期存，不随时区换算；带时间是 `{ allDay: false, startAt, dueAt, timeZone }`，存 UTC 时间点，`timeZone` 由服务端按用户当时的设置写入，显示时一律用用户**当前**时区。`startDate` / `startAt` 为 null 就是只有截止日期。列表上的「今天 / 明天 / 周几 / 已过期」由 `describeTaskDates()` 算。
 
 排序键是分数索引（`packages/shared/src/sort-key.ts`），拖拽只改被拖动的那一条；侧栏拖放规则在 `packages/shared/src/sidebar-order.ts`。界面的设计 token 和组件约定见 `packages/web/src/ui/README.md`。

@@ -124,6 +124,7 @@ export function todayIn(now: Date, timeZone: string): string {
 function offsetAt(instant: number, timeZone: string): number {
   const w = wallClock(new Date(instant), timeZone);
   const asUtc = Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute, w.second);
+  // The wall clock has whole seconds, so drop the instant's milliseconds too.
   return asUtc - Math.floor(instant / 1000) * 1000;
 }
 
