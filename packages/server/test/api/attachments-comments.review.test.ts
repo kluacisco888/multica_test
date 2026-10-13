@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { readdir } from 'node:fs/promises';
+import { readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import {
@@ -59,6 +59,20 @@ describe('附件 / 评论 review edge cases', () => {
     // Owner's 201 attachment must still be downloadable with the bytes that were accepted.
     expect(res.statusCode).toBe(200);
     expect(res.rawPayload.equals(winner)).toBe(true);
+    // Neither request leaves its temp file behind (the 409 one nor the 201 one).
+    expect(await readdir(path.join(t.config.dataDir, 'attachments', '.incoming'))).toEqual([]);
+  });
+
+  it('cleanIncoming() drops crash leftovers in .incoming and keeps finished 附件', async () => {
+    const task = await createTask(alice, '启动清理');
+    const kept = attachmentSchema.parse((await upload(alice, task.id, 'kept.bin', Buffer.from('kept'))).json());
+    const incoming = path.join(t.config.dataDir, 'attachments', '.incoming');
+    await writeFile(path.join(incoming, randomUUID()), 'partial');
+    await t.app.attachmentStore.cleanIncoming();
+    expect(await readdir(incoming).catch(() => [])).toEqual([]);
+    expect((await download(alice, kept.id)).rawPayload.toString()).toBe('kept');
+    // Uploads still work afterwards (.incoming is recreated on demand).
+    expect((await upload(alice, task.id, 'after.bin', Buffer.from('after'))).statusCode).toBe(201);
   });
 
   it('a chunked body between 50MB and 100MB is rejected and leaves no partial file behind', async () => {
