@@ -76,6 +76,9 @@ test('screenshot.mjs lets no write request or websocket reach the server', { ski
     assert.ok(seen.includes('GET /'), `page loaded: ${seen}`);
     const writes = seen.filter((s) => !/^(GET|HEAD|OPTIONS) /.test(s));
     assert.deepEqual(writes, [], `requests that reached the server: ${writes.join(', ')}`);
+    const { blockedRequests } = JSON.parse(r.out);
+    assert.ok(blockedRequests.some((b) => /^WS ws:\/\/127\.0\.0\.1:\d+\/ws$/.test(b)), `websocket recorded: ${blockedRequests}`);
+    assert.ok(blockedRequests.some((b) => b.startsWith('POST ')), `post recorded: ${blockedRequests}`);
   } finally {
     server.close();
     rmSync(home, { recursive: true, force: true });

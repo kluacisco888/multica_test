@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 只读截图工具：加载参照浏览器配置目录（维护者在 noVNC 里登录的那份），打开 url 并截图。
-// 只导航和截图，不点击、不输入；所有非 GET/HEAD/OPTIONS 请求都被拦截，防止改动参照账号的数据。
+// 只导航和截图，不点击、不输入；所有非 GET/HEAD/OPTIONS 请求和全部 WebSocket 连接都被拦截，防止改动参照账号的数据。
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -54,6 +54,11 @@ async function main() {
     if (isReadOnlyMethod(req.method())) return route.continue();
     blocked.push(`${req.method()} ${req.url()}`);
     return route.abort('blockedbyclient');
+  });
+  // context.route 拦不到 WebSocket；WS 握手是 GET，但建立后可以双向写数据，所以全部拦掉。
+  await context.routeWebSocket(/.*/, (ws) => {
+    blocked.push(`WS ${ws.url()}`);
+    return ws.close();
   });
 
   try {

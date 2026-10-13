@@ -45,7 +45,22 @@ main_pid() {
     [[ "$pid" != 0 && -n "$pid" ]] && echo "$pid" && return 0
     return 1
   fi
-  local f="$RUN_DIR/$1.pid"; [[ -f "$f" ]] && kill -0 "$(cat "$f")" 2>/dev/null && cat "$f"
+  local f="$RUN_DIR/$1.pid" pid
+  [[ -f "$f" ]] || return 1
+  pid="$(cut -d' ' -f1 "$f")"
+  if [[ "$(cat "$f")" == "$(proc_identity "$pid")" ]]; then echo "$pid"; return 0; fi
+  return 1
+}
+
+# 进程身份 "<pid> <启动时间> <boot_id>"。只有 pid 文件里记的身份和 /proc 里的一致，才认为是自己启动的进程；
+# 否则（服务器重启过、pid 被别的进程复用、旧格式文件）一律当作没在运行，绝不去 kill 它。
+proc_identity() {
+  local pid="$1" stat
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  stat="$(cat "/proc/$pid/stat" 2>/dev/null)" || return 1
+  stat="${stat##*) }"                       # 去掉 "pid (comm) "，comm 里可能有空格或括号
+  local -a f; read -ra f <<<"$stat"         # f[0] 是第 3 个字段，启动时间是第 22 个字段
+  echo "$pid ${f[19]} $(cat /proc/sys/kernel/random/boot_id)"
 }
 
 pid_alive() { main_pid "$1" >/dev/null; }
@@ -57,7 +72,10 @@ ensure_state_dir() {
   mkdir -p "$STATE_DIR" "$PROFILE_DIR" "$RUN_DIR" "$LOG_DIR"
   chmod 700 "$STATE_DIR" "$PROFILE_DIR" "$RUN_DIR" "$LOG_DIR"
   if [[ ! -f "$STATE_DIR/vncpasswd" ]]; then
-    local pw; pw="$(head -c 64 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 8)"
+    local pw=""
+    # VNC 密码最多 8 位；循环补足，保证一定是 8 位字母数字。
+    while (( ${#pw} < 8 )); do pw+="$(head -c 64 /dev/urandom | tr -dc 'A-Za-z0-9')"; done
+    pw="${pw:0:8}"
     printf '%s\n' "$pw" > "$STATE_DIR/vncpasswd.txt"
     x11vnc -storepasswd "$pw" "$STATE_DIR/vncpasswd" >/dev/null 2>&1
     chmod 600 "$STATE_DIR/vncpasswd" "$STATE_DIR/vncpasswd.txt"
@@ -78,7 +96,7 @@ spawn() {
     pid_alive "$name" || die "$name 启动失败，见 $LOG_DIR/$name.log"
   else
     setsid nohup "$@" >>"$LOG_DIR/$name.log" 2>&1 < /dev/null &
-    echo $! > "$RUN_DIR/$name.pid"
+    proc_identity $! > "$RUN_DIR/$name.pid" || die "$name 启动后立刻退出，见 $LOG_DIR/$name.log"
   fi
   log "已启动 $name (pid $(main_pid "$name"))"
 }
@@ -125,12 +143,13 @@ stop_one() {
   fi
   local f="$RUN_DIR/$name.pid"
   [[ -f "$f" ]] || return 0
-  pid="$(cat "$f")"
-  if kill -0 "$pid" 2>/dev/null; then
+  if pid="$(main_pid "$name")"; then
     kill "$pid"
-    for i in $(seq 1 50); do kill -0 "$pid" 2>/dev/null || break; sleep 0.2; done
-    kill -0 "$pid" 2>/dev/null && kill -9 "$pid"
+    for i in $(seq 1 50); do pid_alive "$name" || break; sleep 0.2; done
+    pid_alive "$name" && kill -9 "$pid"
     log "已停止 $name (pid $pid)"
+  elif [[ -s "$f" ]]; then
+    log "$name 的 pid 文件已失效（$(cat "$f")），只删除文件，不发信号"
   fi
   rm -f "$f"
 }

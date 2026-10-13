@@ -5,7 +5,8 @@
 ## 只读规则
 
 - 只截图。不在参照账号里新建、修改或删除任何东西，包括任务、清单、标签、设置。需要看某个状态时，请维护者在小号里准备好，不要自己动手。
-- 截图工具只导航和截图，不点击、不输入，并且拦截所有非 GET/HEAD/OPTIONS 请求（输出里的 `blockedRequests` 会列出被拦截的请求）。不要绕开这个工具去驱动已登录的浏览器。
+- 截图工具只导航和截图，不点击、不输入，并且拦截所有非 GET/HEAD/OPTIONS 请求，以及全部 WebSocket 连接（WS 握手虽然是 GET，但连上后可以写数据）。输出里的 `blockedRequests` 会列出被拦截的请求，WebSocket 记为 `WS <地址>`。不要绕开这个工具去驱动已登录的浏览器。
+- 不要在 noVNC 里的浏览器设置中开启「启动时继续浏览上次打开的网页」。截图工具在浏览器启动后才开始拦截，恢复出来的页面在这之前发出的请求拦不到。
 - 截图里有个人数据，登录态在配置目录里，这两样都不提交进仓库。截图工具拒绝把文件写进仓库；配置目录默认在 `~/.dida-reference`（权限 700）。
 - 全部验收结束后，运行 `./reference-env.sh purge --yes` 删除配置目录。
 
@@ -34,7 +35,7 @@ cd tools/reference-env
 ./reference-env.sh purge --yes    # 停止并删除配置目录（验收结束后）
 ```
 
-有免密 sudo 时，四个进程用 `systemd-run` 起成临时单元 `dida-reference-{xvfb,chromium,x11vnc,novnc}.service`（不写任何配置文件，`systemctl status dida-reference-novnc` 可查），因此不会落在调用者的 cgroup 里，例如从 Multica 智能体启动时不会挂在 `multica-daemon.service` 下。没有 sudo 时退回 `setsid nohup`，pid 记在 `~/.dida-reference/run/`；也可以用 `DIDA_REF_NO_SYSTEMD=1` 强制这种方式。
+有免密 sudo 时，四个进程用 `systemd-run` 起成临时单元 `dida-reference-{xvfb,chromium,x11vnc,novnc}.service`（不写任何配置文件，`systemctl status dida-reference-novnc` 可查），因此不会落在调用者的 cgroup 里，例如从 Multica 智能体启动时不会挂在 `multica-daemon.service` 下。没有 sudo 时退回 `setsid nohup`，pid 记在 `~/.dida-reference/run/`；也可以用 `DIDA_REF_NO_SYSTEMD=1` 强制这种方式。pid 文件里同时记了进程启动时间和 boot_id，和 `/proc` 对不上（服务器重启过、pid 被复用）就当作没在运行，`stop` 只删文件、不发信号。
 
 临时单元在服务器重启后不会自动恢复。重启后手动运行一次 `./reference-env.sh start` 即可；登录态在配置目录里，一般不需要重新登录。
 
