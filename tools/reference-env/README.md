@@ -49,6 +49,8 @@ cd tools/reference-env
 
 ## 截图
 
+截图工具依赖 `node_modules`（被 gitignore）。新检出或报 `Cannot find package 'playwright'` 时，先在本目录运行 `npm ci`。
+
 截图工具和 noVNC 里的浏览器不能同时使用配置目录，先停浏览器：
 
 ```bash
