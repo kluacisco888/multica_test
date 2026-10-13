@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { sortKeySchema } from './lists.js';
+import { taskDatesInputSchema, taskDatesSchema } from './task-dates.js';
 
 /*
- * 任务 basics (spec 用户故事 20、21、27、31、40). Dates, priority, tags and
- * subtasks come with later tasks. `abandoned` (放弃) is reserved in the status
+ * 任务 basics (spec 用户故事 20、21、27、31、40) and dates (23–26, see
+ * `task-dates.ts`). Priority, tags and subtasks come with later tasks. `abandoned` (放弃) is reserved in the status
  * enum; this version only moves between `open` and `completed`.
  */
 
@@ -25,6 +26,8 @@ export const taskSchema = z.object({
   status: taskStatusSchema,
   completedAt: z.iso.datetime().nullable(),
   sortOrder: z.string(),
+  /** null: no date. */
+  dates: taskDatesSchema.nullable(),
 });
 export type Task = z.infer<typeof taskSchema>;
 
@@ -37,6 +40,8 @@ export const createTaskRequestSchema = z.object({
   listId: z.uuid().nullable().optional(),
   title: titleSchema,
   description: descriptionSchema.optional(),
+  /** Omitted or null: no date. */
+  dates: taskDatesInputSchema.nullable().optional(),
   /** Defaults to the top of the 清单 (new tasks appear first). */
   sortOrder: sortKeySchema.optional(),
 });
@@ -51,6 +56,8 @@ export const updateTaskRequestSchema = z
     /** Move to another 清单; lands at the top unless `sortOrder` is given. */
     listId: z.uuid(),
     sortOrder: sortKeySchema,
+    /** Replace the dates; null clears them. */
+    dates: taskDatesInputSchema.nullable(),
   })
   .partial()
   .strict();

@@ -12,6 +12,7 @@ import { authRoutes } from './routes/auth.js';
 import { changesRoutes } from './routes/changes.js';
 import { healthRoutes } from './routes/health.js';
 import { listRoutes } from './routes/lists.js';
+import { settingsRoutes } from './routes/settings.js';
 import { taskRoutes } from './routes/tasks.js';
 import { createSessionStore, type SessionStore } from './sessions.js';
 import type { SyncEntity } from './sync/columns.js';
@@ -81,6 +82,7 @@ export async function buildApp(deps: AppDeps) {
   changesRoutes(app, { db, syncEntities: deps.syncEntities ?? registeredSyncEntities });
   listRoutes(app);
   taskRoutes(app);
+  settingsRoutes(app);
   deps.routes?.(app);
 
   if (config.webDistDir) {

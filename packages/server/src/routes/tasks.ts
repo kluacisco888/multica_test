@@ -1,16 +1,30 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { createTaskRequestSchema, tasksQuerySchema, updateTaskRequestSchema, type TasksResponse } from '@dida/shared';
+import {
+  createTaskRequestSchema,
+  tasksQuerySchema,
+  updateTaskRequestSchema,
+  type TaskDatesInput,
+  type TasksResponse,
+} from '@dida/shared';
 import { sessionUser } from '../auth.js';
+import type { Executor } from '../db/client.js';
 import { lists, tasks } from '../db/schema/tasks.js';
 import { sendValidationError } from '../http-errors.js';
-import { compareTasks, ensureInbox, taskToApi, topOfList } from '../organize.js';
+import { compareTasks, ensureInbox, taskDateColumns, taskToApi, topOfList } from '../organize.js';
+import { readSettings } from '../settings.js';
 import { findOwned } from '../sync/sync.js';
 import { invalidList, notFound, Rejection, respond } from './respond.js';
 
 type Params = { Params: { id: string } };
 
-/** 任务 basics: quick add, edit, Markdown description, complete, move (spec 用户故事 20、21、27、31、40). */
+/** Columns for the requested dates; timed dates get the user's current time zone. */
+async function dateColumns(tx: Executor, userId: string, dates: TaskDatesInput | null) {
+  const timeZone = dates?.allDay === false ? (await readSettings(tx, userId)).timeZone : null;
+  return taskDateColumns(dates, timeZone);
+}
+
+/** 任务 basics: quick add, edit, Markdown description, complete, move, dates (spec 用户故事 20、21、23–27、31、40). */
 export function taskRoutes(app: FastifyInstance) {
   app.get('/api/tasks', async (request, reply) => {
     const query = tasksQuerySchema.safeParse(request.query);
@@ -36,7 +50,7 @@ export function taskRoutes(app: FastifyInstance) {
     const body = createTaskRequestSchema.safeParse(request.body);
     if (!body.success) return sendValidationError(reply, body.error);
     const userId = sessionUser(request).id;
-    const { id, listId, title, description = '', sortOrder } = body.data;
+    const { id, listId, title, description = '', sortOrder, dates = null } = body.data;
     // No 清单 given: the 收件箱.
     const list = listId ? await findOwned(app.db, lists, userId, listId) : await ensureInbox(app.db, app.sync, userId);
     if (!list) return invalidList(reply);
@@ -46,6 +60,7 @@ export function taskRoutes(app: FastifyInstance) {
         app.sync.transaction(userId, async (ops, tx) =>
           ops.insert(tasks, {
             ...(id ? { id } : {}),
+            ...(await dateColumns(tx, userId, dates)),
             listId: list.id,
             title,
             description,
@@ -64,7 +79,7 @@ export function taskRoutes(app: FastifyInstance) {
     if (!task) return notFound(reply);
     const body = updateTaskRequestSchema.safeParse(request.body);
     if (!body.success) return sendValidationError(reply, body.error);
-    const { status, listId, sortOrder, ...fields } = body.data;
+    const { status, listId, sortOrder, dates, ...fields } = body.data;
     return respond(
       reply,
       () =>
@@ -74,6 +89,7 @@ export function taskRoutes(app: FastifyInstance) {
           const target = listId ?? task.listId;
           const row = await ops.update(tasks, task.id, {
             ...fields,
+            ...(dates !== undefined ? await dateColumns(tx, userId, dates) : {}),
             ...(moved ? { listId: target } : {}),
             ...(sortOrder ? { sortOrder } : moved ? { sortOrder: await topOfList(tx, userId, target) } : {}),
             ...(status === 'completed' ? { status, completedAt: task.completedAt ?? app.clock.now() } : {}),

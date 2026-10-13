@@ -1,19 +1,23 @@
 import {
+  DEFAULT_TIME_ZONE,
   planSidebarDrop,
   type CurrentUser,
   type DropPosition,
   type Folder,
   type SidebarItemRef,
+  type Settings,
   type SidebarResponse,
   type Task,
   type TaskList,
+  type UpdateSettingsRequest,
   type UpdateTaskRequest,
 } from '@dida/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as api from '../api.js';
-import { AccountDialog } from './AccountDialog.js';
+import { useNow } from './clock.js';
 import { ConfirmDialog, FolderDialog, ListDialog, type ListDraft } from './dialogs.js';
 import { Rail } from './Rail.js';
+import { SettingsDialog } from './SettingsDialog.js';
 import { MOBILE_QUERY, useMediaQuery, useRoute } from './route.js';
 import { Sidebar } from './Sidebar.js';
 import { TaskDetail } from './TaskDetail.js';
@@ -21,7 +25,7 @@ import { TaskListPane } from './TaskListPane.js';
 
 type DialogState =
   | { kind: 'none' }
-  | { kind: 'account' }
+  | { kind: 'settings' }
   | { kind: 'list'; list: TaskList | null; folderId: string | null }
   | { kind: 'folder'; folder: Folder | null }
   | { kind: 'delete-list'; list: TaskList }
@@ -41,6 +45,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [dialog, setDialog] = useState<DialogState>({ kind: 'none' });
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const now = useNow();
 
   const fail = useCallback((e: unknown) => {
     console.error(e);
@@ -69,6 +75,31 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       cancelled = true;
     };
   }, [fail]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .fetchSettings()
+      .then((data) => {
+        if (!cancelled) setSettings(data);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) fail(e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fail]);
+
+  async function saveSettings(patch: UpdateSettingsRequest) {
+    try {
+      setSettings(await api.updateSettings(patch));
+      return true;
+    } catch (e) {
+      fail(e);
+      return false;
+    }
+  }
 
   const inbox = sidebar?.lists.find((l) => l.isInbox) ?? null;
   const currentList = useMemo(() => {
@@ -100,7 +131,9 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     };
   }, [currentListId, fail]);
 
-  const listTasks = tasks && tasks.listId === currentListId ? tasks.items : null;
+  // Dates are shown in the user's time zone, so wait for the settings too.
+  const listTasks = settings && tasks && tasks.listId === currentListId ? tasks.items : null;
+  const timeZone = settings?.timeZone ?? DEFAULT_TIME_ZONE;
   const selectedTask = listTasks?.find((t) => t.id === route.taskId) ?? null;
 
   function openList(listId: string) {
@@ -231,7 +264,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
 
   return (
     <div className={`shell ${sidebarVisible ? 'shell-sidebar-open' : 'shell-sidebar-closed'} ${selectedTask ? 'shell-has-task' : ''}`}>
-      {!isMobile && <Rail user={user} onOpenAccount={() => setDialog({ kind: 'account' })} onHome={() => navigate({ listId: null, taskId: null })} />}
+      {!isMobile && <Rail user={user} onOpenAccount={() => setDialog({ kind: 'settings' })} onHome={() => navigate({ listId: null, taskId: null })} />}
       {isMobile && drawerOpen && <div className="shell-scrim" aria-hidden="true" onClick={() => setDrawerOpen(false)} />}
       {sidebarVisible && (
         <Sidebar
@@ -239,7 +272,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           currentListId={currentList?.id ?? null}
           isDrawer={isMobile}
           user={user}
-          onOpenAccount={() => setDialog({ kind: 'account' })}
+          onOpenAccount={() => setDialog({ kind: 'settings' })}
           onClose={() => setDrawerOpen(false)}
           onOpenList={openList}
           onAddList={(folderId) => setDialog({ kind: 'list', list: null, folderId })}
@@ -258,6 +291,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           tasks={listTasks}
           selectedTaskId={route.taskId}
           sidebarVisible={sidebarVisible}
+          timeZone={timeZone}
+          now={now}
           onToggleSidebar={() => (isMobile ? setDrawerOpen((v) => !v) : setSidebarOpen((v) => !v))}
           onAddTask={addTask}
           onSelectTask={selectTask}
@@ -271,6 +306,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           task={selectedTask}
           lists={sidebar?.lists ?? []}
           isMobile={isMobile}
+          timeZone={timeZone}
+          now={now}
           onBack={() => selectTask(null)}
           onChange={changeTask}
         />
@@ -285,7 +322,15 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
         </div>
       )}
 
-      {dialog.kind === 'account' && <AccountDialog user={user} onClose={() => setDialog({ kind: 'none' })} onLoggedOut={onLoggedOut} />}
+      {dialog.kind === 'settings' && (
+        <SettingsDialog
+          user={user}
+          settings={settings}
+          onClose={() => setDialog({ kind: 'none' })}
+          onLoggedOut={onLoggedOut}
+          onSaveSettings={saveSettings}
+        />
+      )}
       {dialog.kind === 'list' && (
         <ListDialog
           list={dialog.list}

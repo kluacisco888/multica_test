@@ -767,7 +767,421 @@ body {
 
 /* ================= Mobile ================= */
 
+/* ---- Task dates (spec 用户故事 23–26) ---- */
+
+.task-row-date {
+  display: inline-flex;
+  flex: none;
+  align-self: stretch;
+  align-items: center;
+  margin-left: -4px;
+  padding: 0 0 0 var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-date);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.task-row-done .task-row-date {
+  color: var(--color-text-secondary);
+}
+
+.date-overdue,
+.task-row-date.date-overdue {
+  color: var(--color-danger);
+}
+
+.detail-header-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--color-border);
+}
+
+.date-anchor {
+  position: relative;
+  min-width: 0;
+}
+
+.date-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  height: 30px;
+  padding: 0 var(--space-2);
+  font: inherit;
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.date-trigger:hover {
+  background: var(--color-bg-hover);
+}
+
+.date-trigger-set {
+  color: var(--color-date);
+}
+
+.date-trigger.date-overdue {
+  color: var(--color-danger);
+}
+
+.date-popover {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  z-index: 30;
+  display: grid;
+  gap: var(--space-3);
+  width: var(--date-popover-width);
+  padding: var(--space-3);
+  color: var(--color-text);
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popover);
+}
+
+.date-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 2px;
+  background: var(--color-segment-bg);
+  border-radius: var(--radius-md);
+}
+
+.date-tab {
+  height: 28px;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.date-tab[aria-selected='true'] {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-card);
+}
+
+.date-panel {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.date-quick {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-1);
+}
+
+.date-quick-button,
+.date-range-end {
+  height: 30px;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.date-quick-button:hover,
+.date-range-end:hover {
+  background: var(--color-bg-hover);
+}
+
+.date-range-ends {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.date-range-end {
+  display: grid;
+  height: auto;
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+  background: var(--color-bg-input);
+  border: 1px solid transparent;
+}
+
+.date-range-end[aria-pressed='true'] {
+  border-color: var(--color-brand);
+}
+
+.date-range-end-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.date-calendar-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-left: var(--space-1);
+}
+
+.date-calendar-title {
+  flex: 1;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+}
+
+.date-grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.date-grid th {
+  height: 28px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+}
+
+.date-grid td {
+  padding: 1px 0;
+  text-align: center;
+}
+
+.date-day {
+  width: var(--date-day-size);
+  height: var(--date-day-size);
+  padding: 0;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.date-day:hover {
+  background: var(--color-bg-hover);
+}
+
+.date-day-outside {
+  color: var(--color-text-secondary);
+}
+
+.date-day-today {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-date);
+}
+
+.date-day-in-range {
+  background: var(--color-date-range);
+  border-radius: var(--radius-sm);
+}
+
+.date-day-selected,
+.date-day-selected:hover {
+  color: var(--color-on-brand);
+  background: var(--color-button-primary);
+}
+
+.date-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: 0 var(--space-1);
+  font-size: var(--font-size-sm);
+  border-top: 1px solid var(--color-divider);
+}
+
+.date-row svg {
+  color: var(--color-text-secondary);
+}
+
+.date-row label {
+  flex: none;
+}
+
+.date-row-times {
+  flex-wrap: wrap;
+  border-top: 0;
+}
+
+.date-time-input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 var(--space-2);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  background: var(--color-bg-input);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+}
+
+.date-allday {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-button-primary);
+}
+
+.date-error {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-danger);
+}
+
+.date-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.date-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+  background: var(--color-bg-overlay);
+}
+
+/* ---- Settings dialog ---- */
+
+.ui-dialog.settings-dialog {
+  width: min(var(--settings-dialog-width), calc(100vw - 2 * var(--space-4)));
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: var(--settings-nav-width) 1fr;
+  gap: var(--space-5);
+  min-height: 420px;
+}
+
+.settings-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: var(--space-3);
+  border-right: 1px solid var(--color-divider);
+}
+
+.settings-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 36px;
+  padding: 0 var(--space-3);
+  font: inherit;
+  font-size: var(--font-size-md);
+  color: var(--color-text);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+}
+
+.settings-tab:hover {
+  background: var(--color-bg-hover);
+}
+
+.settings-tab[aria-selected='true'] {
+  background: var(--color-segment-bg);
+}
+
+.settings-panel {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.settings-panel > .account-section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.settings-card {
+  padding: 0 var(--space-4);
+  background: var(--color-bg-input);
+  border-radius: var(--radius-lg);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 48px;
+  font-size: var(--font-size-md);
+}
+
+.settings-select {
+  min-width: 0;
+  max-width: 60%;
+  height: 32px;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
 @media (max-width: 767px) {
+  .date-popover.date-popover-sheet {
+    position: fixed;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    padding: var(--space-4) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom));
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  }
+
+  .date-day {
+    width: var(--date-day-size-touch);
+    height: var(--date-day-size-touch);
+  }
+
+  .settings-layout {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .settings-tabs {
+    flex-direction: row;
+    padding: 0 0 var(--space-2);
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .settings-tab {
+    flex: none;
+  }
+
+  .settings-row {
+    flex-wrap: wrap;
+    padding: var(--space-2) 0;
+  }
+
+  .settings-select {
+    max-width: 100%;
+    width: 100%;
+  }
+
   .list-pane {
     flex: 1 1 auto;
     max-width: none;

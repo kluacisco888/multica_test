@@ -1,4 +1,5 @@
 import { INBOX_NAME, type Task, type TaskList, type UpdateTaskRequest } from '@dida/shared';
+import { TaskDateButton } from './DatePicker.js';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { IconButton, MenuButton, TaskCheckbox } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
@@ -8,12 +9,14 @@ interface TaskDetailProps {
   task: Task | null;
   lists: TaskList[];
   isMobile: boolean;
+  timeZone: string;
+  now: Date;
   onBack: () => void;
   onChange: (task: Task, patch: UpdateTaskRequest) => Promise<Task | null>;
 }
 
-/** Right-hand pane (desktop) or full page (mobile) for one 任务 (spec 用户故事 21、27、31). */
-export function TaskDetail({ task, lists, isMobile, onBack, onChange }: TaskDetailProps) {
+/** Right-hand pane (desktop) or full page (mobile) for one 任务 (spec 用户故事 21、23–27、31). */
+export function TaskDetail({ task, lists, isMobile, timeZone, now, onBack, onChange }: TaskDetailProps) {
   if (!task) {
     return (
       <aside className="detail detail-empty" aria-label="任务详情">
@@ -33,6 +36,14 @@ export function TaskDetail({ task, lists, isMobile, onBack, onChange }: TaskDeta
           checked={done}
           label={task.title}
           onChange={() => void onChange(task, { status: done ? 'open' : 'completed' })}
+        />
+        <span className="detail-header-divider" aria-hidden="true" />
+        <TaskDateButton
+          dates={task.dates}
+          timeZone={timeZone}
+          now={now}
+          isMobile={isMobile}
+          onSave={(dates) => void onChange(task, { dates })}
         />
         <span className="detail-status">{done ? '已完成' : ''}</span>
       </header>

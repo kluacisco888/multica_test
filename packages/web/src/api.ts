@@ -3,6 +3,7 @@ import {
   folderSchema,
   listSchema,
   meResponseSchema,
+  settingsSchema,
   sidebarResponseSchema,
   taskSchema,
   tasksResponseSchema,
@@ -13,11 +14,13 @@ import {
   type CurrentUser,
   type Folder,
   type LoginRequest,
+  type Settings,
   type SidebarResponse,
   type Task,
   type TaskList,
   type UpdateFolderRequest,
   type UpdateListRequest,
+  type UpdateSettingsRequest,
   type UpdateTaskRequest,
 } from '@dida/shared';
 
@@ -109,6 +112,14 @@ export async function createTask(request: CreateTaskRequest): Promise<Task> {
 
 export async function updateTask(id: string, patch: UpdateTaskRequest): Promise<Task> {
   return taskSchema.parse(await (await call('PATCH', `/api/tasks/${encodeURIComponent(id)}`, patch)).json());
+}
+
+export async function fetchSettings(): Promise<Settings> {
+  return settingsSchema.parse(await (await call('GET', '/api/settings')).json());
+}
+
+export async function updateSettings(patch: UpdateSettingsRequest): Promise<Settings> {
+  return settingsSchema.parse(await (await call('PATCH', '/api/settings', patch)).json());
 }
 
 export function errorMessage(error: unknown): string {

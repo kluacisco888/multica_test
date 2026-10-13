@@ -1,5 +1,14 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { compareSortKeys, INBOX_NAME, keyBetween, type Folder, type Task, type TaskList } from '@dida/shared';
+import {
+  compareSortKeys,
+  INBOX_NAME,
+  keyBetween,
+  type Folder,
+  type Task,
+  type TaskDates,
+  type TaskDatesInput,
+  type TaskList,
+} from '@dida/shared';
 import type { Executor } from './db/client.js';
 import { folders, lists, tasks } from './db/schema/tasks.js';
 import type { SyncWriter } from './sync/sync.js';
@@ -110,9 +119,41 @@ export function taskToApi(row: TaskRow): Task {
     status: row.status,
     completedAt: row.completedAt ? iso(row.completedAt) : null,
     sortOrder: row.sortOrder,
+    dates: taskDatesToApi(row),
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
     revision: row.revision,
+  };
+}
+
+function taskDatesToApi(row: TaskRow): TaskDates | null {
+  if (row.allDay === null) return null;
+  if (row.allDay) return { allDay: true, startDate: row.startDate, dueDate: row.dueDate as string };
+  return {
+    allDay: false,
+    startAt: row.startAt ? iso(row.startAt) : null,
+    dueAt: iso(row.dueAt as Date),
+    timeZone: row.timeZone as string,
+  };
+}
+
+type TaskDateColumns = Pick<TaskRow, 'allDay' | 'startDate' | 'dueDate' | 'startAt' | 'dueAt' | 'timeZone'>;
+
+/**
+ * Columns for validated dates (`null`: no date). Timed dates get the user's
+ * current `timeZone`; all-day dates are calendar dates and carry none.
+ */
+export function taskDateColumns(dates: TaskDatesInput | null, timeZone: string | null): TaskDateColumns {
+  const none = { allDay: null, startDate: null, dueDate: null, startAt: null, dueAt: null, timeZone: null };
+  if (!dates) return none;
+  if (dates.allDay) return { ...none, allDay: true, startDate: dates.startDate ?? null, dueDate: dates.dueDate };
+  if (!timeZone) throw new Error('timed dates need a time zone');
+  return {
+    ...none,
+    allDay: false,
+    startAt: dates.startAt ? new Date(dates.startAt) : null,
+    dueAt: new Date(dates.dueAt),
+    timeZone,
   };
 }
 
