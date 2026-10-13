@@ -168,7 +168,7 @@ CI 定义在 `ci/github-actions.yml`：lint、类型检查、四层测试，再�
 | `kind`（PATCH） | `text` ⇄ `checklist`：描述每个非空行变成一个检查项（去掉 `- `、`1. `、`[x]` 等列表标记，`[x]` 记为已勾选），描述清空；切回时每个检查项变成一行描述（勾选状态不保留），检查项删除（墓碑） |
 | `GET/POST /api/tasks/:id/checklist-items` | 检查项列表 / 新建（只能加到检查清单模式的任务上，否则 400 `not_checklist`），默认排在最后 |
 | `PATCH/DELETE /api/checklist-items/:id` | 勾选、改文字、`sortOrder` 排序；删除是软删除。检查项在 `/api/changes` 里的实体类型是 `checklistItem` |
-| `GET/PATCH /api/settings` | 设置：`timeZone`（IANA 名称，默认 `Asia/Shanghai`）、`hiddenSmartLists`（侧栏隐藏的智能清单）、`viewOptions`（每个视图的排序 / 分组，按视图合并，传 `null` 恢复默认）。第一次修改时才建行，同步类型 `settings` |
+| `GET/PATCH /api/settings` | 设置：`timeZone`（IANA 名称，默认 `Asia/Shanghai`）、`hiddenSmartLists`（侧栏隐藏的智能清单）、`viewOptions`（每个视图的排序 / 分组和 `layout`：`list` 列表、`timeline` 时间线，不写就是列表；按视图合并，传 `null` 恢复默认）。第一次修改时才建行，同步类型 `settings` |
 | `GET /api/tasks?smart=` | 智能清单：`today` / `tomorrow` / `week` / `completed` / `notImportant`，规则在 `packages/shared/src/smart-lists.ts`。`excludeFromSmartLists`（不进智能清单）的清单和归档的清单不参与，判断只在 `listInSmartLists()` 一处，服务端和前端共用 |
 | `GET /api/smart-lists` | 侧栏数量：今天 / 明天 / 最近7天的未完成任务数 |
 | `GET/POST/PATCH/DELETE /api/filters[/:id]`、`GET /api/tasks?filterId=` | 过滤器：`rules` 是 `listIds`、`tagIds`（父标签含子标签）、`untagged`、`dates`（`overdue`/`today`/`tomorrow`/`week`/`noDate`）、`priorities`；同一项内任一满足，不同项全部满足，空项不限制。不进智能清单的清单照样能被选中。只能引用自己的清单和标签（400 `invalid_list` / `invalid_tags`），同步类型 `filter` |
@@ -211,6 +211,8 @@ const result = await app.notifier.send(userId, channelId, { title: '提醒：交
 ```
 
 `retryable` 为 true 表示网络错误、超时、HTTP 5xx、SMTP 4xx 这类可以稍后重试的失败；授权码错误、签名错误等需要用户改配置的为 false。
+
+时间线（`packages/shared/src/timeline.ts`）：横条从开始日画到截止日（含两端），只有截止日期就是截止那一天的一格，没有日期的任务不画横条，放在右侧「待安排」里，拖到某一天就设成那天截止的全天任务。拖动整条两个日期一起移，拖动两端只改开始或截止日期，一端越过另一端时收成只有截止日期；带时间的任务按整天移动、保留当天钟点（按用户当前时区）。改日期仍走 `PATCH /api/tasks/:id`，没有新接口。键盘：横条上 ←/→ 移一天，Shift 改截止日期，Alt 改开始日期。
 
 排序键是分数索引（`packages/shared/src/sort-key.ts`），拖拽只改被拖动的那一条；侧栏拖放规则在 `packages/shared/src/sidebar-order.ts`。界面的设计 token 和组件约定见 `packages/web/src/ui/README.md`。
 
