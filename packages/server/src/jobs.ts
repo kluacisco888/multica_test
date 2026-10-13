@@ -2,6 +2,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { PgBoss } from 'pg-boss';
 import type { HolidayService } from './holidays/service.js';
 import type { FocusService } from './focus/service.js';
+import type { HabitReminderService } from './reminders/habits.js';
 import type { ReminderService } from './reminders/scheduler.js';
 import type { TrashService } from './trash.js';
 
@@ -50,12 +51,14 @@ export interface BackgroundJobsDeps {
   trash: TrashService;
   reminders: ReminderService;
   focus: FocusService;
+  /** 习惯提醒: checked on every 提醒 tick (at least once a minute). */
+  habitReminders?: HabitReminderService;
   /** Time zone the daily schedules run in. */
   timezone: string;
   log: FastifyBaseLogger;
 }
 
-export async function startBackgroundJobs({ databaseUrl, holidays, trash, reminders, focus, timezone, log }: BackgroundJobsDeps): Promise<BackgroundJobs> {
+export async function startBackgroundJobs({ databaseUrl, holidays, trash, reminders, focus, habitReminders, timezone, log }: BackgroundJobsDeps): Promise<BackgroundJobs> {
   const boss = new PgBoss({ connectionString: databaseUrl, max: 4 });
   boss.on('error', (err) => log.error({ err }, 'pg-boss error'));
   await boss.start();
@@ -84,6 +87,10 @@ export async function startBackgroundJobs({ databaseUrl, holidays, trash, remind
   await boss.work(REMINDER_TICK_QUEUE, { pollingIntervalSeconds: 1 }, async () => {
     const result = await reminders.tick();
     if (result.fired + result.retrying + result.failed + result.missed > 0) log.info(result, '提醒: tick');
+    if (habitReminders) {
+      const habitResult = await habitReminders.tick();
+      if (habitResult.fired + habitResult.retrying + habitResult.failed > 0) log.info(habitResult, '习惯提醒: tick');
+    }
     const next = await reminders.nextDueAt();
     if (next) wakeReminders(next);
   });
