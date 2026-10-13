@@ -2,7 +2,7 @@ import type { CurrentUser } from '@dida/shared';
 import { Icon, type IconName } from '../ui/Icon.js';
 
 /** Module shown in the main area, highlighted in the rail. */
-export type RailModule = 'tasks' | 'calendar' | 'matrix' | 'focus' | 'countdowns' | 'search';
+export type RailModule = 'tasks' | 'calendar' | 'matrix' | 'focus' | 'countdowns' | 'habits' | 'search';
 
 /**
  * The narrow blue bar on the far left (desktop only): account at the top,
@@ -18,6 +18,7 @@ export function Rail({
   onFocus,
   onCountdowns,
   onSearch,
+  onHabits,
   active,
 }: {
   user: CurrentUser;
@@ -34,6 +35,8 @@ export function Rail({
   onCountdowns: () => void;
   /** 全局搜索 (spec 用户故事 63). */
   onSearch: () => void;
+  /** 习惯打卡 (spec 用户故事 93–98). */
+  onHabits: () => void;
   active: RailModule;
 }) {
   const items: { module: RailModule; href: string; label: string; icon: IconName; onOpen: () => void }[] = [
@@ -42,6 +45,7 @@ export function Rail({
     { module: 'matrix', href: '/matrix', label: '四象限', icon: 'matrix', onOpen: onMatrix },
     { module: 'focus', href: '/focus', label: '番茄专注', icon: 'focus', onOpen: onFocus },
     { module: 'countdowns', href: '/countdowns', label: '倒数日', icon: 'countdown', onOpen: onCountdowns },
+    { module: 'habits', href: '/habits', label: '习惯打卡', icon: 'habit', onOpen: onHabits },
     { module: 'search', href: '/search', label: '搜索', icon: 'search', onOpen: onSearch },
   ];
   return (

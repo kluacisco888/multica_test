@@ -180,6 +180,12 @@
   --color-calendar-bar-text: #34394a;
   --color-calendar-bar-done-text: #5f6470; /* reference #9096a7 */
   --calendar-detail-width: 400px;
+
+  /* 习惯 (EURO-25): reference 习惯 page, 1440px — list 890px wide, detail 500px. */
+  --habits-detail-width: 500px;
+  --color-habit-ring-track: #e8eaef; /* empty / hatched day circles (reference #e3e5ea) */
+  --color-habit-hatch: #f4f5f8;
+  --color-habit-art-bg: #eef0f5;
   --calendar-gutter: 68px; /* hour labels of the time grid */
   --calendar-hour-height: 60px; /* CalendarPane HOUR_HEIGHT */
   --calendar-lane-height: 20px; /* CalendarPane LANE_HEIGHT */
@@ -417,6 +423,9 @@
   --color-calendar-bg: color-mix(in srgb, var(--accent) 3%, #1c1c1e);
   --color-countdown-card: #252528;
   --color-countdown-figure: var(--accent-on-dark);
+  --color-habit-ring-track: #3a3a3e;
+  --color-habit-hatch: #2a2a2e;
+  --color-habit-art-bg: #2a2a2e;
   --color-calendar-outside: #18181a;
   --color-calendar-line: #2c2c2f;
   --color-calendar-cell-hover: color-mix(in srgb, var(--accent) 10%, #1c1c1e);

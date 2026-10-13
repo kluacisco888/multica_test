@@ -305,6 +305,20 @@ const paths = {
       <circle cx="12" cy="12" r="3" fill="currentColor" />
     </>
   ),
+  habit: (
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 7.5V12l3 2" />
+    </>
+  ),
+  grid: (
+    <>
+      <rect x="4.5" y="4.5" width="6" height="6" rx="1.5" />
+      <rect x="13.5" y="4.5" width="6" height="6" rx="1.5" />
+      <rect x="4.5" y="13.5" width="6" height="6" rx="1.5" />
+      <rect x="13.5" y="13.5" width="6" height="6" rx="1.5" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof paths;

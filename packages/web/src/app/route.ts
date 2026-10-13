@@ -12,12 +12,13 @@ import { useCallback, useEffect, useState } from 'react';
  *   /filters/<filterId>            → a 过滤器
  *   /search/<query>                → 全局搜索 results (`/search` alone: the empty search box)
  *   /trash                         → the 回收站
+ *   /habits                        → 习惯打卡 (`/habits/<habitId>` with a 习惯 open)
  *   /calendar                      → 日历 (last used view, today)
  *   /calendar/<mode>/<YYYY-MM-DD>  → 日历 in 月 / 周 / 日 / 多日 (`month` / `week` / `day` / `multiDay`) around a date
  *   /matrix                        → 四象限
  *   /focus                         → 番茄专注
  *   /countdowns                    → 倒数日 (记录中); /countdowns/archived → 已归档
- * Each but /trash, /focus and /countdowns takes `/tasks/<taskId>` for an open 任务.
+ * Each but /trash, /focus, /countdowns and /habits takes `/tasks/<taskId>` for an open 任务.
  */
 
 /** 日历 route: null mode / date mean "last used view" / "today". */
@@ -44,9 +45,13 @@ export interface Route {
   focus?: boolean;
   /** Non-null: the 倒数日 page, showing 记录中 or 已归档 ones. */
   countdowns?: 'active' | 'archived' | null;
+  /** The 习惯 page. */
+  habits?: boolean;
+  /** The open 习惯 on the 习惯 page. */
+  habitId?: string | null;
 }
 
-const EMPTY: Required<Route> = { listId: null, tagId: null, smartId: null, filterId: null, search: null, taskId: null, trash: false, calendar: null, matrix: false, focus: false, countdowns: null };
+const EMPTY: Required<Route> = { listId: null, tagId: null, smartId: null, filterId: null, search: null, taskId: null, trash: false, calendar: null, matrix: false, focus: false, countdowns: null, habits: false, habitId: null };
 
 export function parseRoute(pathname: string): Route {
   if (/^\/trash\/?$/.test(pathname)) return { ...EMPTY, trash: true };
@@ -56,6 +61,8 @@ export function parseRoute(pathname: string): Route {
   if (/^\/focus\/?$/.test(pathname)) return { ...EMPTY, focus: true };
   const countdowns = /^\/countdowns(\/archived)?\/?$/.exec(pathname);
   if (countdowns) return { ...EMPTY, countdowns: countdowns[1] ? 'archived' : 'active' };
+  const habits = /^\/habits(?:\/([^/]+))?\/?$/.exec(pathname);
+  if (habits) return { ...EMPTY, habits: true, habitId: habits[1] ? safeDecode(habits[1]) : null };
   const calendar = /^\/calendar(?:\/([^/]+)\/([^/]+))?(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
   if (calendar) {
     const mode = calendarModeSchema.safeParse(calendar[1]);
@@ -98,10 +105,11 @@ function safeDecode(value: string): string | null {
   }
 }
 
-export function routePath({ listId, tagId, smartId, filterId, search, taskId, trash, calendar, matrix, focus, countdowns }: Route): string {
+export function routePath({ listId, tagId, smartId, filterId, search, taskId, trash, calendar, matrix, focus, countdowns, habits, habitId }: Route): string {
   if (trash) return '/trash';
   if (focus) return '/focus';
   if (countdowns) return countdowns === 'archived' ? '/countdowns/archived' : '/countdowns';
+  if (habits) return habitId ? `/habits/${encodeURIComponent(habitId)}` : '/habits';
   let base: string;
   if (matrix) base = '/matrix';
   else if (calendar) base = calendar.mode && calendar.date ? `/calendar/${calendar.mode}/${calendar.date}` : '/calendar';

@@ -9,6 +9,7 @@ import './app/calendar.css';
 import './app/focus.css';
 import './app/matrix.css';
 import './app/countdown.css';
+import './app/habits.css';
 import { restoreCachedTheme } from './app/theme.js';
 
 restoreCachedTheme();
