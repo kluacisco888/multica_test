@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { sortKeySchema } from './lists.js';
 import { repeatRuleSchema } from './repeat-rule.js';
+import { smartListIdSchema } from './smart-lists.js';
 import { taskDatesInputSchema, taskDatesSchema } from './task-dates.js';
 
 /*
@@ -128,10 +129,15 @@ export const updateTaskRequestSchema = z
   .strict();
 export type UpdateTaskRequest = z.input<typeof updateTaskRequestSchema>;
 
-/** Either one 清单, or one 标签 across 清单 (a parent 标签 includes its children's tasks). */
+/**
+ * One 清单, one 标签 across 清单 (a parent 标签 includes its children's
+ * tasks), one 智能清单 (see smart-lists.ts) or one 过滤器 (see filters.ts).
+ */
 export const tasksQuerySchema = z.union([
   z.object({ listId: z.uuid() }).strict(),
   z.object({ tagId: z.uuid() }).strict(),
+  z.object({ smart: smartListIdSchema }).strict(),
+  z.object({ filterId: z.uuid() }).strict(),
 ]);
 export type TasksQuery = z.infer<typeof tasksQuerySchema>;
 

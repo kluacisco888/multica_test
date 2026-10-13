@@ -1,3 +1,4 @@
+import { smartListIdSchema, type SmartListId } from '@dida/shared';
 import { useCallback, useEffect, useState } from 'react';
 
 /*
@@ -7,32 +8,66 @@ import { useCallback, useEffect, useState } from 'react';
  *   /lists/<listId>/tasks/<taskId> → a 清单 with a 任务 open in the detail pane
  *   /tags/<tagId>                  → a 标签 (a parent 标签 includes its children)
  *   /tags/<tagId>/tasks/<taskId>   → a 标签 with a 任务 open
+ *   /smart/<id>                    → a 智能清单 (today, tomorrow, week, completed, notImportant)
+ *   /filters/<filterId>            → a 过滤器
+ *   /search/<query>                → 全局搜索 results (`/search` alone: the empty search box)
  *   /trash                         → the 回收站
+ * Each but /trash takes `/tasks/<taskId>` for an open 任务.
  */
 
 export interface Route {
   listId: string | null;
   tagId?: string | null;
+  smartId?: SmartListId | null;
+  filterId?: string | null;
+  /** Non-null: the search view; '' is the empty search box. */
+  search?: string | null;
   taskId: string | null;
   /** The 回收站 smart list. */
   trash?: boolean;
 }
 
+const EMPTY: Required<Route> = { listId: null, tagId: null, smartId: null, filterId: null, search: null, taskId: null, trash: false };
+
 export function parseRoute(pathname: string): Route {
-  if (/^\/trash\/?$/.test(pathname)) return { listId: null, tagId: null, taskId: null, trash: true };
-  const match = /^\/(lists|tags)\/([^/]+)(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
-  if (!match) return { listId: null, tagId: null, taskId: null };
-  const id = decodeURIComponent(match[2] as string);
+  if (/^\/trash\/?$/.test(pathname)) return { ...EMPTY, trash: true };
+  if (/^\/search\/?$/.test(pathname)) return { ...EMPTY, search: '' };
+  const match = /^\/(lists|tags|smart|filters|search)\/([^/]+)(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
+  if (!match) return { ...EMPTY };
+  let id: string;
+  try {
+    id = decodeURIComponent(match[2] as string);
+  } catch {
+    return { ...EMPTY };
+  }
   const taskId = match[3] ? decodeURIComponent(match[3]) : null;
-  return match[1] === 'tags' ? { listId: null, tagId: id, taskId } : { listId: id, tagId: null, taskId };
+  switch (match[1]) {
+    case 'tags':
+      return { ...EMPTY, tagId: id, taskId };
+    case 'smart': {
+      const smart = smartListIdSchema.safeParse(id);
+      return smart.success ? { ...EMPTY, smartId: smart.data, taskId } : { ...EMPTY };
+    }
+    case 'filters':
+      return { ...EMPTY, filterId: id, taskId };
+    case 'search':
+      return { ...EMPTY, search: id, taskId };
+    default:
+      return { ...EMPTY, listId: id, taskId };
+  }
 }
 
-export function routePath({ listId, tagId, taskId, trash }: Route): string {
+export function routePath({ listId, tagId, smartId, filterId, search, taskId, trash }: Route): string {
   if (trash) return '/trash';
   let base: string;
-  if (tagId) base = `/tags/${encodeURIComponent(tagId)}`;
+  if (search !== null && search !== undefined) base = search ? `/search/${encodeURIComponent(search)}` : '/search';
+  else if (smartId) base = `/smart/${smartId}`;
+  else if (filterId) base = `/filters/${encodeURIComponent(filterId)}`;
+  else if (tagId) base = `/tags/${encodeURIComponent(tagId)}`;
   else if (listId) base = `/lists/${encodeURIComponent(listId)}`;
   else return '/';
+  // The empty search box cannot hold an open task.
+  if (base === '/search') return base;
   return taskId ? `${base}/tasks/${encodeURIComponent(taskId)}` : base;
 }
 
@@ -51,7 +86,7 @@ export function useRoute(): [Route, (next: Route, options?: { replace?: boolean 
       if (options?.replace) window.history.replaceState(null, '', path);
       else window.history.pushState(null, '', path);
     }
-    setRoute({ tagId: null, trash: false, ...next });
+    setRoute({ ...EMPTY, ...next });
   }, []);
 
   return [route, navigate];

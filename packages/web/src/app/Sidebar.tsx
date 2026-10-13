@@ -1,5 +1,8 @@
 import {
+  SMART_LIST_NAMES,
   sidebarOutline,
+  type Filter,
+  type SmartListId,
   type CurrentUser,
   type DropPosition,
   type Folder,
@@ -11,7 +14,7 @@ import {
 } from '@dida/shared';
 import { useState, type DragEvent, type ReactNode } from 'react';
 import { MenuButton, IconButton, type MenuItem } from '../ui/controls.js';
-import { Icon } from '../ui/Icon.js';
+import { Icon, type IconName } from '../ui/Icon.js';
 
 interface SidebarProps {
   sidebar: SidebarResponse | null;
@@ -42,7 +45,31 @@ interface SidebarProps {
   onAddTag: (parentId: string | null) => void;
   onEditTag: (tag: Tag) => void;
   onDeleteTag: (tag: Tag) => void;
+  /** 智能清单 shown above / below the 收件箱 (hidden ones left out). */
+  hiddenSmartLists: readonly SmartListId[];
+  smartCounts: Record<string, number>;
+  currentSmartId: SmartListId | null;
+  onOpenSmart: (id: SmartListId) => void;
+  onHideSmart: (id: SmartListId) => void;
+  filters: Filter[];
+  currentFilterId: string | null;
+  onOpenFilter: (filterId: string) => void;
+  onAddFilter: () => void;
+  onEditFilter: (filter: Filter) => void;
+  onDeleteFilter: (filter: Filter) => void;
+  onOpenSearch: () => void;
 }
+
+/** Order of the built-in rows, like the reference: date lists, then 收件箱, then the rest. */
+const SMART_BEFORE_INBOX: readonly SmartListId[] = ['today', 'tomorrow', 'week'];
+const SMART_AFTER_INBOX: readonly SmartListId[] = ['completed', 'notImportant'];
+const SMART_ICONS: Record<SmartListId, IconName> = {
+  today: 'today',
+  tomorrow: 'tomorrow',
+  week: 'week',
+  completed: 'doneAll',
+  notImportant: 'lowPriority',
+};
 
 type DropHint = { key: string; position: DropPosition } | null;
 
@@ -323,6 +350,71 @@ export function Sidebar(props: SidebarProps) {
     );
   }
 
+  function smartRow(id: SmartListId): ReactNode {
+    if (props.hiddenSmartLists.includes(id)) return null;
+    const active = id === props.currentSmartId;
+    const n = props.smartCounts[id] ?? 0;
+    const name = SMART_LIST_NAMES[id];
+    return (
+      <li key={id} className="sidebar-row">
+        <a
+          href={`/smart/${id}`}
+          className={`sidebar-item ${active ? 'sidebar-item-active' : ''}`}
+          aria-current={active ? 'page' : undefined}
+          onClick={(e) => {
+            e.preventDefault();
+            props.onOpenSmart(id);
+          }}
+        >
+          <span className="sidebar-item-icon">
+            <Icon name={SMART_ICONS[id]} />
+          </span>
+          <span className="sidebar-item-name">{name}</span>
+          {n > 0 && (
+            <span className="sidebar-count" aria-label={`${n} 个未完成`}>
+              {n}
+            </span>
+          )}
+        </a>
+        <MenuButton
+          className="sidebar-row-menu"
+          label={`智能清单操作：${name}`}
+          items={[{ label: '隐藏', icon: 'close', onSelect: () => props.onHideSmart(id) }]}
+        />
+      </li>
+    );
+  }
+
+  function filterRow(filter: Filter): ReactNode {
+    const active = filter.id === props.currentFilterId;
+    return (
+      <li key={filter.id} className="sidebar-row">
+        <a
+          href={`/filters/${filter.id}`}
+          className={`sidebar-item ${active ? 'sidebar-item-active' : ''}`}
+          aria-current={active ? 'page' : undefined}
+          onClick={(e) => {
+            e.preventDefault();
+            props.onOpenFilter(filter.id);
+          }}
+        >
+          <span className="sidebar-item-icon">
+            <Icon name="filter" />
+          </span>
+          <span className="sidebar-item-name">{filter.name}</span>
+        </a>
+        <MenuButton
+          className="sidebar-row-menu"
+          label={`过滤器操作：${filter.name}`}
+          items={[
+            { label: '编辑', icon: 'edit', onSelect: () => props.onEditFilter(filter) },
+            { label: '删除', icon: 'trash', danger: true, onSelect: () => props.onDeleteFilter(filter) },
+          ]}
+        />
+      </li>
+    );
+  }
+
   const tagIds = new Set(props.tags.map((t) => t.id));
   const topTags = props.tags.filter((t) => t.parentId === null || !tagIds.has(t.parentId));
 
@@ -337,12 +429,14 @@ export function Sidebar(props: SidebarProps) {
             <span>{props.user.username}</span>
           </button>
           <span className="sidebar-drawer-actions">
+            <IconButton icon="search" label="搜索" onClick={props.onOpenSearch} />
             <IconButton icon="settings" label="设置" onClick={props.onOpenSettings} />
             <IconButton icon="close" label="关闭侧栏" onClick={props.onClose} />
           </span>
         </div>
       )}
-      <ul className="sidebar-tree sidebar-smart">
+      <ul className="sidebar-tree sidebar-smart" aria-label="智能清单">
+        {SMART_BEFORE_INBOX.map(smartRow)}
         {inbox && (
           <li className="sidebar-row">
             <a
@@ -366,6 +460,24 @@ export function Sidebar(props: SidebarProps) {
             </a>
           </li>
         )}
+        {SMART_AFTER_INBOX.map(smartRow)}
+        {/* 回收站 sits with the 智能清单, after 已完成 / 不重要的. */}
+        <li className="sidebar-row">
+          <a
+            href="/trash"
+            className={`sidebar-item ${props.trashActive ? 'sidebar-item-active' : ''}`}
+            aria-current={props.trashActive ? 'page' : undefined}
+            onClick={(e) => {
+              e.preventDefault();
+              props.onOpenTrash();
+            }}
+          >
+            <span className="sidebar-item-icon">
+              <Icon name="trash" />
+            </span>
+            <span className="sidebar-item-name">回收站</span>
+          </a>
+        </li>
       </ul>
       <hr className="sidebar-divider" />
       <div className="sidebar-section-head">
@@ -416,6 +528,20 @@ export function Sidebar(props: SidebarProps) {
       )}
       <hr className="sidebar-divider" />
       <div className="sidebar-section-head">
+        <h2 className="sidebar-section-title">过滤器</h2>
+        <div className="sidebar-section-actions">
+          <IconButton icon="plus" label="添加过滤器" size={16} onClick={props.onAddFilter} />
+        </div>
+      </div>
+      {props.filters.length === 0 ? (
+        <p className="sidebar-hint">根据清单、时间、优先级、标签等过滤出特定的任务</p>
+      ) : (
+        <ul className="sidebar-tree" aria-label="过滤器">
+          {props.filters.map(filterRow)}
+        </ul>
+      )}
+      <hr className="sidebar-divider" />
+      <div className="sidebar-section-head">
         <h2 className="sidebar-section-title">标签</h2>
         <div className="sidebar-section-actions">
           <IconButton icon="plus" label="添加标签" size={16} onClick={() => props.onAddTag(null)} />
@@ -428,25 +554,6 @@ export function Sidebar(props: SidebarProps) {
           {topTags.map(tagRow)}
         </ul>
       )}
-      <hr className="sidebar-divider" />
-      <ul className="sidebar-tree sidebar-smart" aria-label="智能清单">
-        <li className="sidebar-row">
-          <a
-            href="/trash"
-            className={`sidebar-item ${props.trashActive ? 'sidebar-item-active' : ''}`}
-            aria-current={props.trashActive ? 'page' : undefined}
-            onClick={(e) => {
-              e.preventDefault();
-              props.onOpenTrash();
-            }}
-          >
-            <span className="sidebar-item-icon">
-              <Icon name="trash" />
-            </span>
-            <span className="sidebar-item-name">回收站</span>
-          </a>
-        </li>
-      </ul>
     </nav>
   );
 }

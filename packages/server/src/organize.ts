@@ -43,7 +43,15 @@ export async function ensureInbox(db: Executor, sync: SyncWriter, userId: string
     await tx.execute(sql`SELECT pg_advisory_xact_lock(${INBOX_LOCK}, hashtext(${userId}))`);
     const [raced] = await tx.select().from(lists).where(liveInboxWhere(userId));
     if (raced) return raced;
-    return ops.insert(lists, { name: INBOX_NAME, isInbox: true, sortOrder: 'V', folderId: null, color: null, icon: null });
+    return ops.insert(lists, {
+      name: INBOX_NAME,
+      isInbox: true,
+      sortOrder: 'V',
+      folderId: null,
+      color: null,
+      icon: null,
+      excludeFromSmartLists: false,
+    });
   });
 }
 
@@ -111,6 +119,7 @@ export function listToApi(row: ListRow): TaskList {
     sortOrder: row.sortOrder,
     isInbox: row.isInbox,
     archivedAt: row.archivedAt ? iso(row.archivedAt) : null,
+    excludeFromSmartLists: row.excludeFromSmartLists,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
     revision: row.revision,

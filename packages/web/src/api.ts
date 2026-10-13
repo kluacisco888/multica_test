@@ -9,6 +9,14 @@ import {
   commentsResponseSchema,
   type Attachment,
   type Comment,
+  filterSchema,
+  filtersResponseSchema,
+  searchResponseSchema,
+  smartListCountsResponseSchema,
+  type CreateFilterRequest,
+  type Filter,
+  type SearchResponse,
+  type UpdateFilterRequest,
   apiErrorSchema,
   type AdminUser,
   type CreateUserRequest,
@@ -140,9 +148,9 @@ export async function deleteFolder(id: string): Promise<void> {
   await call('DELETE', `/api/folders/${encodeURIComponent(id)}`);
 }
 
-/** Tasks of one 清单 or one 标签 (a parent 标签 includes its children's tasks). */
+/** Tasks of one 清单, 标签 (a parent 标签 includes its children's tasks), 智能清单 or 过滤器. */
 export async function fetchTasks(query: TasksQuery): Promise<Task[]> {
-  const res = await call('GET', `/api/tasks?${new URLSearchParams(query).toString()}`);
+  const res = await call('GET', `/api/tasks?${new URLSearchParams(query as Record<string, string>).toString()}`);
   return tasksResponseSchema.parse(await res.json()).tasks;
 }
 
@@ -316,4 +324,30 @@ export async function setUserDisabled(id: string, disabled: boolean): Promise<Ad
 
 export async function resetUserPassword(id: string, password: string): Promise<void> {
   await call('POST', `/api/admin/users/${encodeURIComponent(id)}/password`, { password });
+}
+
+/** Open-task counts of 今天 / 明天 / 最近7天 for the sidebar. */
+export async function fetchSmartListCounts(): Promise<Record<string, number>> {
+  return smartListCountsResponseSchema.parse(await (await call('GET', '/api/smart-lists')).json()).counts;
+}
+
+export async function fetchFilters(): Promise<Filter[]> {
+  return filtersResponseSchema.parse(await (await call('GET', '/api/filters')).json()).filters;
+}
+
+export async function createFilter(request: CreateFilterRequest): Promise<Filter> {
+  return filterSchema.parse(await (await call('POST', '/api/filters', request)).json());
+}
+
+export async function updateFilter(id: string, patch: UpdateFilterRequest): Promise<Filter> {
+  return filterSchema.parse(await (await call('PATCH', `/api/filters/${encodeURIComponent(id)}`, patch)).json());
+}
+
+export async function deleteFilter(id: string): Promise<void> {
+  await call('DELETE', `/api/filters/${encodeURIComponent(id)}`);
+}
+
+/** 全局搜索 over title, 描述, 检查项 (and 评论 once they exist). */
+export async function searchTasks(q: string): Promise<SearchResponse> {
+  return searchResponseSchema.parse(await (await call('GET', `/api/search?${new URLSearchParams({ q }).toString()}`)).json());
 }

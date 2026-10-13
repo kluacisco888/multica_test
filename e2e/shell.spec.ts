@@ -113,7 +113,7 @@ test('收件箱: quick add with Enter, edit title and Markdown description, comp
   // Un-complete it again from the 已完成 section.
   await completedTasks(page).getByRole('checkbox', { name: '买牛奶' }).click();
   await expect(openTasks(page).getByRole('checkbox', { name: '买牛奶' })).not.toBeChecked();
-  await expect(page.getByRole('button', { name: /已完成/ })).toHaveCount(0);
+  await expect(page.getByRole('main').getByRole('button', { name: /已完成/ })).toHaveCount(0);
 
   // Collapse / expand the 已完成 section.
   await openTasks(page).getByRole('checkbox', { name: '取快递' }).click();

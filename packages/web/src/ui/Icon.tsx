@@ -207,6 +207,50 @@ const paths = {
       <circle cx="8.6" cy="8.6" r="1.3" />
     </>
   ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="6" />
+      <path d="m15.5 15.5 4 4" />
+    </>
+  ),
+  /** 排序 / 分组: up and down arrows like the reference's ⇅. */
+  sort: <path d="M8 4.5v15M4.5 8 8 4.5 11.5 8M16 19.5v-15M12.5 16l3.5 3.5 3.5-3.5" />,
+  /** 过滤器 */
+  filter: <path d="M4.5 5.5h15l-5.75 7v5.25l-3.5 1.75v-7Z" />,
+  /** 智能清单 今天: a calendar page. */
+  today: (
+    <>
+      <rect x="4" y="5" width="16" height="15" rx="2.5" />
+      <path d="M4 9.5h16M8.5 3.5v3M15.5 3.5v3M10 13h2.25v4.5" />
+    </>
+  ),
+  /** 明天: a sunrise. */
+  tomorrow: (
+    <>
+      <path d="M7.5 15.5a4.5 4.5 0 0 1 9 0M4 18.5h16M12 5.5v3M5.6 9.1l1.8 1.8M18.4 9.1l-1.8 1.8" />
+    </>
+  ),
+  /** 最近 7 天 */
+  week: (
+    <>
+      <rect x="4" y="5" width="16" height="15" rx="2.5" />
+      <path d="M4 9.5h16M8.5 3.5v3M15.5 3.5v3M9.5 13H14l-2.5 4.5" />
+    </>
+  ),
+  /** 已完成 */
+  doneAll: (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="3" />
+      <path d="m8 12.25 2.75 2.75L16 9.5" />
+    </>
+  ),
+  /** 不重要的: a flag drawn down to the baseline. */
+  lowPriority: (
+    <>
+      <path d="M6 20.5V4.5M6 5h11.5l-2.5 4.25L17.5 13.5H6" />
+      <path d="M14 18h6" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof paths;

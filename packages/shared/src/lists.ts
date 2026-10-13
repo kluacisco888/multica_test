@@ -65,6 +65,8 @@ export const listSchema = z.object({
   isInbox: z.boolean(),
   /** 归档: set while archived (hidden from the sidebar tree, its tasks out of every 智能清单). */
   archivedAt: z.iso.datetime().nullable(),
+  /** 不进智能清单 (spec 用户故事 17): its tasks stay out of every 智能清单 but are still searched and filtered. */
+  excludeFromSmartLists: z.boolean(),
 });
 export type TaskList = z.infer<typeof listSchema>;
 
@@ -84,6 +86,7 @@ export const createListRequestSchema = z.object({
   color: colorSchema.nullable().optional(),
   icon: iconSchema.nullable().optional(),
   folderId: z.uuid().nullable().optional(),
+  excludeFromSmartLists: z.boolean().optional(),
   /** Defaults to the end of its sidebar level. */
   sortOrder: sortKeySchema.optional(),
 });
@@ -98,6 +101,7 @@ export const updateListRequestSchema = z
     sortOrder: sortKeySchema,
     /** 归档 / 取消归档. */
     archived: z.boolean(),
+    excludeFromSmartLists: z.boolean(),
   })
   .partial()
   .strict();

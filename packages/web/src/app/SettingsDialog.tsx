@@ -1,4 +1,12 @@
-import { PASSWORD_MIN_LENGTH, type CurrentUser, type Settings, type UpdateSettingsRequest } from '@dida/shared';
+import {
+  PASSWORD_MIN_LENGTH,
+  SMART_LIST_IDS,
+  SMART_LIST_NAMES,
+  type CurrentUser,
+  type SmartListId,
+  type Settings,
+  type UpdateSettingsRequest,
+} from '@dida/shared';
 import { useId, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { changePassword, errorMessage, logout } from '../api.js';
 import { Button, Dialog } from '../ui/controls.js';
@@ -7,12 +15,13 @@ import { HolidaySettings } from './HolidaySettings.js';
 import { NotificationSettings } from './settings/NotificationSettings.js';
 import { UserAdmin } from './settings/UserAdmin.js';
 
-export type SettingsTab = 'account' | 'datetime' | 'notifications' | 'users';
+export type SettingsTab = 'account' | 'smart' | 'datetime' | 'notifications' | 'users';
 
 const TABS: { id: SettingsTab; label: string; icon: IconName }[] = [
   { id: 'account', label: '账户与安全', icon: 'user' },
   { id: 'datetime', label: '日期与时间', icon: 'clock' },
   { id: 'notifications', label: '提醒与通知', icon: 'bell' },
+  { id: 'smart', label: '智能清单', icon: 'today' },
 ];
 /** The 后台, last in the list and only for 管理员 (others never see the entry). */
 const ADMIN_TAB: (typeof TABS)[number] = { id: 'users', label: '用户管理', icon: 'users' };
@@ -20,7 +29,7 @@ const ADMIN_TAB: (typeof TABS)[number] = { id: 'users', label: '用户管理', i
 /**
  * 设置, laid out like 滴答's settings dialog: a tab list on the left, the
  * panel on the right. 账户与安全: who is signed in, change password, log out
- * (spec 用户故事 7、8). 日期与时间: the time zone (用户故事 26) and the
+ * (spec 用户故事 7、8). 智能清单: show / hide each one in the sidebar (60). 日期与时间: the time zone (用户故事 26) and the
  * 节假日数据 card (用户故事 114). 提醒与通知: 通知渠道 (用户故事 74–77、85).
  * 用户管理 (管理员 only): the 后台 (用户故事 9).
  */
@@ -82,6 +91,7 @@ export function SettingsDialog({
         </div>
         <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-tab-${tab}`} className="settings-panel">
           {tab === 'account' && <AccountPanel user={user} onLoggedOut={onLoggedOut} />}
+          {tab === 'smart' && <SmartListsPanel settings={settings} onSave={onSaveSettings} />}
           {tab === 'datetime' && <DateTimePanel settings={settings} onSave={onSaveSettings} />}
           {tab === 'notifications' && <NotificationsPanel />}
           {tab === 'users' && user.isAdmin && <UsersPanel user={user} />}
@@ -125,6 +135,48 @@ function AccountPanel({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut: (
         </Button>
       </div>
     </>
+  );
+}
+
+function SmartListsPanel({
+  settings,
+  onSave,
+}: {
+  settings: Settings | null;
+  onSave: (patch: UpdateSettingsRequest) => Promise<boolean>;
+}) {
+  const id = useId();
+  // Local copy so the switch flips at once; the saved value wins when it comes back.
+  const [hidden, setHidden] = useState(settings?.hiddenSmartLists ?? []);
+  async function toggle(smart: SmartListId, visible: boolean) {
+    const previous = hidden;
+    const next = visible ? hidden.filter((h) => h !== smart) : [...hidden, smart];
+    setHidden(next);
+    if (!(await onSave({ hiddenSmartLists: next }))) setHidden(previous);
+  }
+  return (
+    <section className="account-section" aria-labelledby={`${id}-title`}>
+      <h3 id={`${id}-title`} className="account-section-title">
+        智能清单
+      </h3>
+      <p className="field-hint">关闭的智能清单不在侧栏显示。</p>
+      <ul className="smart-settings">
+        {SMART_LIST_IDS.map((smart) => (
+          <li key={smart} className="smart-settings-row">
+            <label htmlFor={`${id}-${smart}`}>{SMART_LIST_NAMES[smart]}</label>
+            <input
+              id={`${id}-${smart}`}
+              type="checkbox"
+              role="switch"
+              className="ui-switch"
+              checked={!hidden.includes(smart)}
+              disabled={!settings}
+              onChange={(e) => void toggle(smart, e.target.checked)}
+            />
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

@@ -18,3 +18,7 @@ export * from './admin.js';
 export * from './repeat-rule.js';
 export * from './attachments.js';
 export * from './comments.js';
+export * from './smart-lists.js';
+export * from './filters.js';
+export * from './task-view.js';
+export * from './search.js';

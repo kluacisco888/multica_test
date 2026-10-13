@@ -1,11 +1,14 @@
 import {
   DEFAULT_TIME_ZONE,
+  type Filter,
+  type SearchMatchField,
+  type SmartListId,
+  type ViewOptions,
   DEPTH_EXCEEDED_MESSAGE,
   planIndent,
   planOutdent,
   orderTags,
   planSidebarDrop,
-  tagWithChildren,
   TRASH_RETENTION_DAYS,
   type CurrentUser,
   type DropPosition,
@@ -23,14 +26,24 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as api from '../api.js';
 import { useNow } from './clock.js';
-import { ConfirmDialog, FolderDialog, ListDialog, TagDialog, type ListDraft, type TagDraft } from './dialogs.js';
+import {
+  ConfirmDialog,
+  FilterDialog,
+  FolderDialog,
+  ListDialog,
+  TagDialog,
+  type FilterDraft,
+  type ListDraft,
+  type TagDraft,
+} from './dialogs.js';
 import { Rail } from './Rail.js';
 import { SettingsDialog, type SettingsTab } from './SettingsDialog.js';
 import { MOBILE_QUERY, useMediaQuery, useRoute } from './route.js';
 import { activeSidebar, Sidebar } from './Sidebar.js';
 import { TaskDetail } from './TaskDetail.js';
-import { TaskListPane, type ListPaneView } from './TaskListPane.js';
+import { TaskListPane } from './TaskListPane.js';
 import { TrashPane } from './TrashPane.js';
+import { belongsToView, quickAddTarget, scopeKey, tasksQuery, viewOptionsFor, viewKey, type ListPaneView } from './views.js';
 
 type DialogState =
   | { kind: 'none' }
@@ -42,10 +55,11 @@ type DialogState =
   | { kind: 'tag'; tag: Tag | null; parentId: string | null }
   | { kind: 'delete-tag'; tag: Tag }
   | { kind: 'purge-task'; task: TrashedTask }
-  | { kind: 'empty-trash' };
+  | { kind: 'empty-trash' }
+  | { kind: 'filter'; filter: Filter | null }
+  | { kind: 'delete-filter'; filter: Filter };
 
-/** Key of the task set on screen: one 清单 or one 标签. */
-const scopeKey = (view: ListPaneView) => (view.kind === 'list' ? `list:${view.list.id}` : `tag:${view.tag.id}`);
+type ScreenTasks = { scope: string; items: Task[]; matches?: Record<string, SearchMatchField[]> };
 
 /**
  * The application shell (spec 用户故事 65): rail | sidebar | task list | task
@@ -57,7 +71,9 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const isMobile = useMediaQuery(MOBILE_QUERY);
   const [sidebar, setSidebar] = useState<SidebarResponse | null>(null);
   const [tags, setTags] = useState<Tag[] | null>(null);
-  const [tasks, setTasks] = useState<{ scope: string; items: Task[] } | null>(null);
+  const [tasks, setTasks] = useState<ScreenTasks | null>(null);
+  const [filters, setFilters] = useState<Filter[] | null>(null);
+  const [smartCounts, setSmartCounts] = useState<Record<string, number>>({});
   /** Bumped to refetch the task set on screen (e.g. after a 标签 was deleted). */
   const [tasksEpoch, setTasksEpoch] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -74,9 +90,20 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     setError(api.errorMessage(e));
   }, []);
 
+  /** The sidebar: 清单, 文件夹, their counts and the 智能清单 counts. */
   const reloadSidebar = useCallback(async () => {
     try {
-      setSidebar(await api.fetchSidebar());
+      const [data, counts] = await Promise.all([api.fetchSidebar(), api.fetchSmartListCounts()]);
+      setSidebar(data);
+      setSmartCounts(counts);
+    } catch (e) {
+      fail(e);
+    }
+  }, [fail]);
+
+  const reloadFilters = useCallback(async () => {
+    try {
+      setFilters(await api.fetchFilters());
     } catch (e) {
       fail(e);
     }
@@ -92,11 +119,13 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api.fetchSidebar(), api.fetchTags()])
-      .then(([data, tagList]) => {
+    Promise.all([api.fetchSidebar(), api.fetchTags(), api.fetchFilters(), api.fetchSmartListCounts()])
+      .then(([data, tagList, filterList, counts]) => {
         if (cancelled) return;
         setSidebar(data);
         setTags(orderTags(tagList));
+        setFilters(filterList);
+        setSmartCounts(counts);
       })
       .catch((e: unknown) => {
         if (!cancelled) fail(e);
@@ -133,15 +162,20 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
 
   const inbox = sidebar?.lists.find((l) => l.isInbox) ?? null;
   const currentTag = route.tagId ? (tags?.find((t) => t.id === route.tagId) ?? null) : null;
+  const currentFilter = route.filterId ? (filters?.find((f) => f.id === route.filterId) ?? null) : null;
+  const crossListRoute = Boolean(route.trash || route.tagId || route.smartId || route.filterId || (route.search !== null && route.search !== undefined));
   const currentList = useMemo(() => {
-    if (!sidebar || route.tagId || route.trash) return null;
+    if (!sidebar || crossListRoute) return null;
     return (route.listId ? sidebar.lists.find((l) => l.id === route.listId) : inbox) ?? null;
-  }, [sidebar, route.listId, route.tagId, route.trash, inbox]);
+  }, [sidebar, route.listId, crossListRoute, inbox]);
   const view: ListPaneView | null = useMemo(() => {
     if (route.trash) return null;
+    if (route.search !== null && route.search !== undefined) return { kind: 'search', query: route.search };
+    if (route.smartId) return sidebar ? { kind: 'smart', id: route.smartId, inbox } : null;
+    if (currentFilter) return { kind: 'filter', filter: currentFilter, inbox };
     if (currentTag) return { kind: 'tag', tag: currentTag, inbox };
     return currentList ? { kind: 'list', list: currentList } : null;
-  }, [currentTag, currentList, inbox, route.trash]);
+  }, [route.trash, route.search, route.smartId, sidebar, currentFilter, currentTag, currentList, inbox]);
 
   const reloadTrash = useCallback(async () => {
     try {
@@ -167,21 +201,34 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     };
   }, [route.trash, fail]);
 
-  // An unknown or deleted 清单 / 标签 in the URL falls back to the 收件箱.
+  // An unknown or deleted 清单 / 标签 / 过滤器 in the URL falls back to the 收件箱.
   useEffect(() => {
     const unknownList = sidebar && route.listId && !sidebar.lists.some((l) => l.id === route.listId);
     const unknownTag = tags && route.tagId && !tags.some((t) => t.id === route.tagId);
-    if (unknownList || unknownTag) navigate({ listId: null, tagId: null, taskId: null }, { replace: true });
-  }, [sidebar, tags, route.listId, route.tagId, navigate]);
+    const unknownFilter = filters && route.filterId && !filters.some((f) => f.id === route.filterId);
+    if (unknownList || unknownTag || unknownFilter) navigate({ listId: null, taskId: null }, { replace: true });
+  }, [sidebar, tags, filters, route.listId, route.tagId, route.filterId, navigate]);
 
   const currentScope = view ? scopeKey(view) : null;
+
+  /** Fetch the task set of `target`: one call per view kind. */
+  const fetchScreen = useCallback(async (target: ListPaneView): Promise<ScreenTasks | null> => {
+    const scope = scopeKey(target);
+    if (target.kind === 'search') {
+      if (!target.query) return { scope, items: [], matches: {} };
+      const found = await api.searchTasks(target.query);
+      return { scope, items: found.tasks, matches: found.matches };
+    }
+    const query = tasksQuery(target);
+    return query ? { scope, items: await api.fetchTasks(query) } : null;
+  }, []);
+
   useEffect(() => {
     if (!view || !currentScope) return;
     let cancelled = false;
-    api
-      .fetchTasks(view.kind === 'list' ? { listId: view.list.id } : { tagId: view.tag.id })
-      .then((items) => {
-        if (!cancelled) setTasks({ scope: currentScope, items });
+    fetchScreen(view)
+      .then((next) => {
+        if (!cancelled && next) setTasks(next);
       })
       .catch((e: unknown) => {
         if (!cancelled) fail(e);
@@ -189,14 +236,19 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     return () => {
       cancelled = true;
     };
-    // `view` changes identity with every sidebar reload; refetch only when the scope does.
+    // `view` changes identity with every sidebar reload; refetch only when the scope does
+    // (a 过滤器 also when its rules change).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentScope, tasksEpoch, fail]);
+  }, [currentScope, currentFilter?.revision, tasksEpoch, fail, fetchScreen]);
 
   // Dates are shown in the user's time zone, so wait for the settings too.
   const listTasks = settings && tasks && tasks.scope === currentScope ? tasks.items : null;
   const timeZone = settings?.timeZone ?? DEFAULT_TIME_ZONE;
   const selectedTask = listTasks?.find((t) => t.id === route.taskId) ?? null;
+  const viewOptions = view ? viewOptionsFor(view, settings?.viewOptions) : null;
+  // Tab / Shift+Tab only make sense in a 清单 shown in its own order.
+  const indentable = view?.kind === 'list' && viewOptions?.sortBy === 'custom' && viewOptions.groupBy === 'none';
+  const addTarget = view ? quickAddTarget(view, { now, timeZone }) : null;
 
   function openList(listId: string) {
     navigate({ listId: listId === inbox?.id ? null : listId, taskId: null });
@@ -214,16 +266,30 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     setDrawerOpen(false);
   }
 
+  function openSmart(smartId: SmartListId) {
+    navigate({ listId: null, smartId, taskId: null });
+    setDrawerOpen(false);
+  }
+
+  function openFilter(filterId: string) {
+    navigate({ listId: null, filterId, taskId: null });
+    setDrawerOpen(false);
+  }
+
+  function openSearch(query = '') {
+    // Typing refines the same search: replace the history entry instead of piling them up.
+    navigate({ listId: null, search: query, taskId: null }, { replace: route.search !== null && route.search !== undefined });
+    setDrawerOpen(false);
+  }
+
   function selectTask(taskId: string | null) {
-    navigate({ listId: route.listId, tagId: route.tagId ?? null, taskId });
+    navigate({ ...route, taskId });
   }
 
   /** Does `task` belong to the task set on screen? */
   function inView(task: Task): boolean {
     if (!view) return false;
-    if (view.kind === 'list') return task.listId === view.list.id;
-    const ids = tagWithChildren(tags ?? [], view.tag.id);
-    return task.tagIds.some((id) => ids.includes(id));
+    return belongsToView(view, task, { now, timeZone, lists: sidebar?.lists ?? [], tags: tags ?? [] });
   }
 
   /** Replace a task on screen (or drop it when it left the 清单 / 标签). */
@@ -237,12 +303,11 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   }
 
   async function addTask(title: string) {
-    if (!view) return false;
+    if (!view || !addTarget) return false;
     try {
-      // In a 标签 view the task goes to the 收件箱 carrying that 标签.
-      const task = await api.createTask(
-        view.kind === 'list' ? { listId: view.list.id, title } : { title, tagIds: [view.tag.id] },
-      );
+      // Outside a 清单 the task goes to the 收件箱, with what makes it show here
+      // (the 标签, today's date in 今天, 低优先级 in 不重要的 …).
+      const task = await api.createTask({ ...addTarget.request, title });
       putTask(task);
       void reloadSidebar();
       return true;
@@ -257,8 +322,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     if (!view || !currentScope) return;
     const scope = currentScope;
     try {
-      const items = await api.fetchTasks(view.kind === 'list' ? { listId: view.list.id } : { tagId: view.tag.id });
-      setTasks((prev) => (prev && prev.scope !== scope ? prev : { scope, items }));
+      const next = await fetchScreen(view);
+      if (next) setTasks((prev) => (prev && prev.scope !== scope ? prev : next));
     } catch (e) {
       fail(e);
     }
@@ -277,9 +342,9 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
 
   /** Tab / Shift+Tab (spec 用户故事 36). False when nothing can move, so Tab keeps moving focus. */
   function indentTask(task: Task, outdent: boolean): boolean {
-    // A 标签 view mixes 清单 and flattens trees: indenting there could move the task
-    // into another 清单, so Tab keeps its default meaning (move focus).
-    if (view?.kind !== 'list') return false;
+    // Cross-清单 views and other orders flatten trees: indenting there could move the
+    // task into another 清单 or somewhere unseen, so Tab keeps its default meaning (move focus).
+    if (!indentable) return false;
     if (!listTasks || task.status !== 'open') return false;
     const plan = outdent ? planOutdent(listTasks, task.id) : planIndent(listTasks, task.id, (t) => t.status === 'open');
     if (plan.kind === 'none') return false;
@@ -298,7 +363,10 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       const updated = await api.updateTask(task.id, patch);
       putTask(updated);
       if (patch.status !== undefined || patch.listId !== undefined || patch.parentId !== undefined) void reloadTasks();
-      if (patch.status !== undefined || patch.listId !== undefined) void reloadSidebar();
+      // Counts of 清单 and 智能清单 follow status, 清单, dates and 优先级.
+      if (patch.status !== undefined || patch.listId !== undefined || patch.dates !== undefined || patch.priority !== undefined) {
+        void reloadSidebar();
+      }
       if (!inView(updated) && route.taskId === task.id) selectTask(null);
       return updated;
     } catch (e) {
@@ -366,6 +434,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       if (existing) {
         await api.updateList(existing.id, draft);
         await reloadSidebar();
+        // 不进智能清单 changes which tasks a 智能清单 shows.
+        if (draft.excludeFromSmartLists !== existing.excludeFromSmartLists) setTasksEpoch((n) => n + 1);
       } else {
         const created = await api.createList(draft);
         // Load the sidebar first: an unknown 清单 in the URL would fall back to the 收件箱.
@@ -394,7 +464,9 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       await api.deleteList(list.id);
       setDialog({ kind: 'none' });
       if (currentList?.id === list.id) navigate({ listId: null, taskId: null });
-      await reloadSidebar();
+      // 过滤器 that named the 清单 no longer apply it.
+      await Promise.all([reloadSidebar(), reloadFilters()]);
+      setTasksEpoch((n) => n + 1);
     } catch (e) {
       fail(e);
     }
@@ -433,12 +505,54 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       await api.deleteTag(tag.id);
       setDialog({ kind: 'none' });
       if (route.tagId === tag.id) navigate({ listId: null, tagId: null, taskId: null });
-      await reloadTags();
+      await Promise.all([reloadTags(), reloadFilters()]);
       // Tasks on screen lost the 标签: refetch them.
       setTasksEpoch((n) => n + 1);
     } catch (e) {
       fail(e);
     }
+  }
+
+  async function saveFilter(draft: FilterDraft, existing: Filter | null) {
+    try {
+      if (existing) {
+        const updated = await api.updateFilter(existing.id, draft);
+        setFilters((prev) => prev?.map((f) => (f.id === updated.id ? updated : f)) ?? prev);
+      } else {
+        const created = await api.createFilter(draft);
+        setFilters((prev) => [...(prev ?? []), created]);
+        openFilter(created.id);
+      }
+      setDialog({ kind: 'none' });
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  async function removeFilter(filter: Filter) {
+    try {
+      await api.deleteFilter(filter.id);
+      setDialog({ kind: 'none' });
+      if (route.filterId === filter.id) navigate({ listId: null, taskId: null });
+      await reloadFilters();
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  function changeViewOptions(options: ViewOptions) {
+    if (!view || !settings) return;
+    const key = viewKey(view);
+    // Optimistic: the layout changes at once; saving failure shows a toast.
+    setSettings({ ...settings, viewOptions: { ...settings.viewOptions, [key]: options } });
+    void saveSettings({ viewOptions: { [key]: options } });
+  }
+
+  function hideSmartList(id: SmartListId) {
+    if (!settings) return;
+    const hiddenSmartLists = [...settings.hiddenSmartLists.filter((h) => h !== id), id];
+    setSettings({ ...settings, hiddenSmartLists });
+    void saveSettings({ hiddenSmartLists });
   }
 
   async function toggleFolder(folder: Folder) {
@@ -481,6 +595,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onOpenAccount={() => setDialog({ kind: 'settings', tab: 'account' })}
           onOpenSettings={() => setDialog({ kind: 'settings', tab: 'notifications' })}
           onHome={() => navigate({ listId: null, taskId: null })}
+          onSearch={() => openSearch()}
+          searchActive={view?.kind === 'search'}
         />
       )}
       {isMobile && drawerOpen && <div className="shell-scrim" aria-hidden="true" onClick={() => setDrawerOpen(false)} />}
@@ -511,6 +627,18 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onAddTag={(parentId) => setDialog({ kind: 'tag', tag: null, parentId })}
           onEditTag={(tag) => setDialog({ kind: 'tag', tag, parentId: tag.parentId })}
           onDeleteTag={(tag) => setDialog({ kind: 'delete-tag', tag })}
+          hiddenSmartLists={settings?.hiddenSmartLists ?? []}
+          smartCounts={smartCounts}
+          currentSmartId={route.smartId ?? null}
+          onOpenSmart={openSmart}
+          onHideSmart={hideSmartList}
+          filters={filters ?? []}
+          currentFilterId={currentFilter?.id ?? null}
+          onOpenFilter={openFilter}
+          onAddFilter={() => setDialog({ kind: 'filter', filter: null })}
+          onEditFilter={(filter) => setDialog({ kind: 'filter', filter })}
+          onDeleteFilter={(filter) => setDialog({ kind: 'delete-filter', filter })}
+          onOpenSearch={() => openSearch()}
         />
       )}
       {route.trash && (
@@ -528,8 +656,16 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       )}
       {!route.trash && !(isMobile && selectedTask) && (
         <TaskListPane
+          // A new view starts with its sections expanded.
+          key={view ? viewKey(view) : 'none'}
           view={view}
-          tasks={listTasks}
+          tasks={view?.kind === 'search' && !view.query ? [] : listTasks}
+          viewOptions={viewOptions ?? { sortBy: 'custom', groupBy: 'none' }}
+          onChangeViewOptions={changeViewOptions}
+          addTarget={addTarget?.name ?? null}
+          searchMatches={tasks?.scope === currentScope ? tasks?.matches : undefined}
+          onSearch={(q) => openSearch(q)}
+          indentable={indentable}
           tags={tags ?? []}
           lists={sidebar?.lists ?? []}
           selectedTaskId={route.taskId}
@@ -564,7 +700,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onAddSubtask={addSubtask}
           onIndent={indentTask}
           onDelete={(task) => void deleteTask(task)}
-          indentable={view?.kind === 'list'}
+          indentable={indentable}
           onError={fail}
         />
       )}
@@ -647,6 +783,24 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           defaultParentId={dialog.parentId}
           onCancel={() => setDialog({ kind: 'none' })}
           onSave={(draft) => saveTag(draft, dialog.tag)}
+        />
+      )}
+      {dialog.kind === 'filter' && (
+        <FilterDialog
+          filter={dialog.filter}
+          lists={sidebar?.lists ?? []}
+          tags={tags ?? []}
+          onCancel={() => setDialog({ kind: 'none' })}
+          onSave={(draft) => saveFilter(draft, dialog.filter)}
+        />
+      )}
+      {dialog.kind === 'delete-filter' && (
+        <ConfirmDialog
+          title="删除过滤器"
+          message={`删除过滤器「${dialog.filter.name}」后，其中的任务不受影响。`}
+          confirmLabel="删除"
+          onCancel={() => setDialog({ kind: 'none' })}
+          onConfirm={() => removeFilter(dialog.filter)}
         />
       )}
       {dialog.kind === 'delete-tag' && (

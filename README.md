@@ -155,7 +155,7 @@ CI 定义在 `ci/github-actions.yml`：lint、类型检查、四层测试，再�
 | 接口 | 说明 |
 | --- | --- |
 | `GET /api/lists` | 侧栏：`lists`（收件箱在最前，首次访问时自动创建）、`folders`、`openTaskCounts` |
-| `POST/PATCH/DELETE /api/lists[/:id]` | 清单：名称、颜色、图标、`folderId`、`sortOrder`。收件箱不能改、不能删、不能归档（400 `inbox_protected`）；`archived: true/false` 归档 / 取消归档（响应里的 `archivedAt`），归档的清单仍在 `GET /api/lists` 里返回，由前端放进「已归档的清单」，其中的任务不进任何智能清单（`src/smart-lists.ts`）；删除清单会把其中的任务移进回收站，还原时回到收件箱 |
+| `POST/PATCH/DELETE /api/lists[/:id]` | 清单：名称、颜色、图标、`folderId`、`sortOrder`。收件箱不能改、不能删、不能归档（400 `inbox_protected`）；`archived: true/false` 归档 / 取消归档（响应里的 `archivedAt`），归档的清单仍在 `GET /api/lists` 里返回，由前端放进「已归档的清单」，其中的任务不进任何智能清单（`listInSmartLists()`，见下）；删除清单会把其中的任务移进回收站，还原时回到收件箱 |
 | `POST/PATCH/DELETE /api/folders[/:id]` | 文件夹（只有一层）：名称、`collapsed`、`sortOrder`。删除文件夹时，其中的清单移到文件夹原来的位置 |
 | `GET /api/tasks?listId=` 或 `?tagId=` | 未完成任务按排序键，已完成任务在后、最近完成的在前；按标签查看时跨清单，父标签包含子标签的任务 |
 | `GET/POST/PATCH /api/tasks[/:id]` | 不指定清单进收件箱；新建和移入的任务排在最前；`status`：`open` / `completed` / `abandoned`（放弃，`abandonedAt` 记时间，`completedAt` 为空，不算完成）；`priority`：`high` / `medium` / `low` / `none`；`tagIds` 整体替换，只能用自己未删除的标签（否则 400 `invalid_tags`）；`dates` 见下 |
@@ -168,7 +168,11 @@ CI 定义在 `ci/github-actions.yml`：lint、类型检查、四层测试，再�
 | `kind`（PATCH） | `text` ⇄ `checklist`：描述每个非空行变成一个检查项（去掉 `- `、`1. `、`[x]` 等列表标记，`[x]` 记为已勾选），描述清空；切回时每个检查项变成一行描述（勾选状态不保留），检查项删除（墓碑） |
 | `GET/POST /api/tasks/:id/checklist-items` | 检查项列表 / 新建（只能加到检查清单模式的任务上，否则 400 `not_checklist`），默认排在最后 |
 | `PATCH/DELETE /api/checklist-items/:id` | 勾选、改文字、`sortOrder` 排序；删除是软删除。检查项在 `/api/changes` 里的实体类型是 `checklistItem` |
-| `GET/PATCH /api/settings` | 设置：`timeZone`（IANA 名称，默认 `Asia/Shanghai`）。第一次修改时才建行，同步类型 `settings` |
+| `GET/PATCH /api/settings` | 设置：`timeZone`（IANA 名称，默认 `Asia/Shanghai`）、`hiddenSmartLists`（侧栏隐藏的智能清单）、`viewOptions`（每个视图的排序 / 分组，按视图合并，传 `null` 恢复默认）。第一次修改时才建行，同步类型 `settings` |
+| `GET /api/tasks?smart=` | 智能清单：`today` / `tomorrow` / `week` / `completed` / `notImportant`，规则在 `packages/shared/src/smart-lists.ts`。`excludeFromSmartLists`（不进智能清单）的清单和归档的清单不参与，判断只在 `listInSmartLists()` 一处，服务端和前端共用 |
+| `GET /api/smart-lists` | 侧栏数量：今天 / 明天 / 最近7天的未完成任务数 |
+| `GET/POST/PATCH/DELETE /api/filters[/:id]`、`GET /api/tasks?filterId=` | 过滤器：`rules` 是 `listIds`、`tagIds`（父标签含子标签）、`untagged`、`dates`（`overdue`/`today`/`tomorrow`/`week`/`noDate`）、`priorities`；同一项内任一满足，不同项全部满足，空项不限制。不进智能清单的清单照样能被选中。只能引用自己的清单和标签（400 `invalid_list` / `invalid_tags`），同步类型 `filter` |
+| `GET /api/search?q=` | 全局搜索：标题、描述、检查项、评论（不分大小写，`%` `_` 按字面），返回 `tasks`、`matches`（每个任务在哪些字段命中）、`truncated`（最多 200 条）。每个字段是 `src/search.ts` 里 `searchSources` 的一项；不按清单过滤，所以不进智能清单和归档的清单都能搜到 |
 | `GET/POST/PATCH/DELETE /api/tags[/:id]` | 标签：名称（不含空格和 `#`，同一用户内不分大小写唯一，重名 409 `tag_name_taken`）、颜色、`parentId`、`sortOrder`。只嵌套一层：父标签必须在顶层，有子标签的标签不能再放进别的标签（400 `invalid_parent`）。删除标签会把它从所有任务上去掉（任务本身不变），子标签移到顶层原来的位置 |
 
 任务的 `dates`（`packages/shared/src/task-dates.ts`）：`null` 是不设日期；全天是 `{ allDay: true, startDate, dueDate }`，按日历日期存，不随时区换算；带时间是 `{ allDay: false, startAt, dueAt, timeZone }`，存 UTC 时间点，`timeZone` 由服务端按用户当时的设置写入，显示时一律用用户**当前**时区。`startDate` / `startAt` 为 null 就是只有截止日期。列表上的「今天 / 明天 / 周几 / 已过期」由 `describeTaskDates()` 算。

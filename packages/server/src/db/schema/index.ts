@@ -5,3 +5,4 @@ export * from './users.js';
 export * from './settings.js';
 export * from './holidays.js';
 export * from './attachments.js';
+export * from './filters.js';

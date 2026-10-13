@@ -1,35 +1,51 @@
 import {
+  arrangeTasks,
   buildTaskTree,
   describeRepeatFrequency,
   describeTaskDates,
   dueDayOf,
+  GROUP_LABELS,
+  GROUP_OPTIONS,
   planIndent,
   PRIORITY_LABELS,
+  SORT_LABELS,
+  SORT_OPTIONS,
+  type SearchMatchField,
   type Tag,
   type Task,
   type TaskList,
   type TaskNode,
+  type TaskSection,
   type UpdateTaskRequest,
+  type ViewOptions,
 } from '@dida/shared';
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react';
-import { ContextMenu, IconButton, MenuButton, TaskCheckbox } from '../ui/controls.js';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { ContextMenu, IconButton, MenuButton, TaskCheckbox, type ContextMenuSection } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { chipStyle, tagsOf, taskContextSections } from './taskMeta.js';
+import { scopeKey, viewTitle, type ListPaneView } from './views.js';
 
-/** What the middle column shows: one 清单, or one 标签 across 清单. */
-export type ListPaneView = { kind: 'list'; list: TaskList } | { kind: 'tag'; tag: Tag; inbox: TaskList | null };
+export type { ListPaneView } from './views.js';
 
 interface TaskListPaneProps {
   view: ListPaneView | null;
   tasks: Task[] | null;
   /** Every 标签 in display order. */
   tags: Tag[];
-  /** Every 清单 (the 标签 view names each task's 清单). */
+  /** Every 清单 in sidebar order (cross-清单 views name each task's 清单). */
   lists: TaskList[];
   selectedTaskId: string | null;
   sidebarVisible: boolean;
   timeZone: string;
   now: Date;
+  /** 排序 / 分组 of this view (spec 用户故事 64). */
+  viewOptions: ViewOptions;
+  onChangeViewOptions: (options: ViewOptions) => void;
+  /** Where quick add puts tasks (shown in the placeholder); null: no quick add. */
+  addTarget: string | null;
+  /** 搜索: where each result matched. */
+  searchMatches?: Record<string, SearchMatchField[]>;
+  onSearch?: (query: string) => void;
   onToggleSidebar: () => void;
   onAddTask: (title: string) => Promise<boolean>;
   onSelectTask: (taskId: string) => void;
@@ -39,6 +55,8 @@ interface TaskListPaneProps {
    * happen, so the key keeps its default meaning (move focus).
    */
   onIndent: (task: Task, outdent: boolean) => boolean;
+  /** Tab indents only in a 清单 in its own order (no other sort or grouping). */
+  indentable: boolean;
   onChangeTask: (task: Task, patch: UpdateTaskRequest) => void;
   /** 删除: into the 回收站. */
   onDeleteTask: (task: Task) => void;
@@ -48,29 +66,54 @@ interface TaskListPaneProps {
 }
 
 type MenuState = { task: Task; x: number; y: number; opener: HTMLElement | null } | null;
+type LayoutMenuState = { x: number; y: number; opener: HTMLElement | null } | null;
 
 const isOpen = (t: Task) => t.status === 'open';
 
+const MATCH_LABELS: Record<SearchMatchField, string> = { title: '标题', description: '描述', checklist: '检查项', comment: '评论' };
+
+const EMPTY_HINTS: Record<ListPaneView['kind'], string> = {
+  list: '在上方输入任务标题，按回车添加',
+  tag: '在上方输入任务标题，按回车添加',
+  smart: '这里会显示符合条件的任务',
+  filter: '没有符合过滤条件的任务',
+  search: '',
+};
+
 /**
- * The middle column: list title, quick add, the open 任务 tree, then the 已完成
- * section with completed and 放弃 tasks (spec 用户故事 16、18、20、22、23–29、35、36、40、65). 子任务 are nested
- * lists; Tab / Shift+Tab on the selected task indents / outdents it; right-click
- * (or the ContextMenu key / Shift+F10) opens the task menu.
+ * The middle column: title, quick add, then the tasks laid out by the view's
+ * 排序 / 分组 (spec 用户故事 16、18、20、22、23–29、35、36、40、59–65). In a
+ * 清单's own order 子任务 are nested lists and Tab / Shift+Tab on the selected
+ * task indents / outdents it; other layouts show flat rows in sections (已过期,
+ * each day, each 清单 …), the 已完成 section (completed and 放弃 tasks) last.
+ * Right-click (or the ContextMenu key / Shift+F10) opens the task menu.
  */
 export function TaskListPane(props: TaskListPaneProps) {
-  const { view, tasks } = props;
-  const [showCompleted, setShowCompleted] = useState(true);
+  const { view, tasks, viewOptions } = props;
+  const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<string>>(new Set());
   const [menu, setMenu] = useState<MenuState>(null);
+  const [layoutMenu, setLayoutMenu] = useState<LayoutMenuState>(null);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const focusAfterMove = useRef<string | null>(null);
   const paneRef = useRef<HTMLElement>(null);
-  const open = tasks?.filter(isOpen) ?? [];
-  const completed = tasks?.filter((t) => !isOpen(t)) ?? [];
-  const title = view ? (view.kind === 'list' ? view.list.name : view.tag.name) : '';
+  const title = view ? viewTitle(view) : '';
   const archived = view?.kind === 'list' && view.list.archivedAt !== null;
-  // Tasks added in a 标签 view go to the 收件箱 with that 标签.
-  const addTarget = view ? (view.kind === 'list' ? view.list.name : (view.inbox?.name ?? '')) : '';
-  const listName = (task: Task) => (view?.kind === 'tag' ? props.lists.find((l) => l.id === task.listId)?.name : undefined);
+  const crossList = view !== null && view.kind !== 'list';
+  const listName = (task: Task) => (crossList ? props.lists.find((l) => l.id === task.listId)?.name : undefined);
+  const sections: TaskSection[] =
+    tasks && view
+      ? arrangeTasks(tasks, viewOptions, {
+          now: props.now,
+          timeZone: props.timeZone,
+          lists: props.lists,
+          tags: props.tags,
+          completedView: view.kind === 'smart' && view.id === 'completed',
+        })
+      : [];
+  // The custom order keeps 子任务 nested; other orders show flat rows.
+  const nested = viewOptions.sortBy === 'custom';
+  const nodesOf = (items: Task[]): TaskNode<Task>[] =>
+    nested ? buildTaskTree(items) : items.map((task) => ({ task, depth: 1, children: [] }));
 
   // A moved row is re-mounted under its new parent: give it focus back.
   useEffect(() => {
@@ -83,8 +126,8 @@ export function TaskListPane(props: TaskListPaneProps) {
     }
   }, [tasks]);
 
-  function toggleCollapsed(id: string) {
-    setCollapsed((prev) => {
+  function toggleIn(setter: typeof setCollapsed, id: string) {
+    setter((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -108,20 +151,43 @@ export function TaskListPane(props: TaskListPaneProps) {
   const rowProps = {
     selectedTaskId: props.selectedTaskId,
     collapsed,
-    onToggleCollapsed: toggleCollapsed,
+    onToggleCollapsed: (id: string) => toggleIn(setCollapsed, id),
     onSelectTask: props.onSelectTask,
     onToggleTask: props.onToggleTask,
     onIndent: indent,
-    indentable: view?.kind === 'list',
+    indentable: props.indentable,
     timeZone: props.timeZone,
     now: props.now,
     tags: props.tags,
     listName,
+    matches: props.searchMatches,
     onOpenMenu: (task: Task, x: number, y: number, opener: HTMLElement | null) => setMenu({ task, x, y, opener }),
   };
 
+  const layoutSections: ContextMenuSection[] = [
+    {
+      label: '排序',
+      items: SORT_OPTIONS.map((sortBy) => ({
+        label: SORT_LABELS[sortBy],
+        checked: viewOptions.sortBy === sortBy,
+        onSelect: () => props.onChangeViewOptions({ ...viewOptions, sortBy }),
+      })),
+    },
+    {
+      label: '分组',
+      items: GROUP_OPTIONS.map((groupBy) => ({
+        label: GROUP_LABELS[groupBy],
+        checked: viewOptions.groupBy === groupBy,
+        onSelect: () => props.onChangeViewOptions({ ...viewOptions, groupBy }),
+      })),
+    },
+  ];
+
+  const isSearch = view?.kind === 'search';
+  const emptyQuery = view?.kind === 'search' && view.query === '';
+
   return (
-    <main className="list-pane" aria-busy={tasks === null} ref={paneRef}>
+    <main className="list-pane" aria-busy={tasks === null && !emptyQuery} ref={paneRef}>
       <header className="list-pane-header">
         <IconButton
           icon="sidebar"
@@ -130,7 +196,23 @@ export function TaskListPane(props: TaskListPaneProps) {
           onClick={props.onToggleSidebar}
           className="list-pane-sidebar-toggle"
         />
-        <h1 className="list-pane-title">{title}</h1>
+        <h1 className={`list-pane-title ${isSearch ? 'visually-hidden' : ''}`}>{title}</h1>
+        {view?.kind === 'search' && props.onSearch && (
+          <SearchBox key="search" initial={view.query} onSearch={props.onSearch} />
+        )}
+        {view && (
+          <IconButton
+            icon="sort"
+            label="排序和分组"
+            aria-haspopup="menu"
+            aria-expanded={layoutMenu !== null}
+            className="list-pane-layout"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setLayoutMenu({ x: rect.right - 200, y: rect.bottom + 4, opener: e.currentTarget });
+            }}
+          />
+        )}
         {props.onEditList && (
           <MenuButton
             label="清单更多操作"
@@ -160,52 +242,39 @@ export function TaskListPane(props: TaskListPaneProps) {
         </div>
       )}
 
-      {view && (
-        <QuickAdd key={view.kind === 'list' ? view.list.id : view.tag.id} target={addTarget} onAdd={props.onAddTask} />
-      )}
+      {view && props.addTarget !== null && <QuickAdd key={scopeKey(view)} target={props.addTarget} onAdd={props.onAddTask} />}
 
-      {tasks === null ? (
+      {emptyQuery ? (
+        <div className="list-pane-empty">
+          <p>输入关键词，搜索任务的标题、描述、检查项和评论</p>
+        </div>
+      ) : tasks === null ? (
         <p className="list-pane-status" role="status">
           正在加载…
         </p>
+      ) : sections.length === 0 ? (
+        <div className="list-pane-empty" role={isSearch ? 'status' : undefined}>
+          <p className="list-pane-empty-title">{isSearch ? '没有找到相关任务' : '没有任务'}</p>
+          {view && EMPTY_HINTS[view.kind] && <p>{EMPTY_HINTS[view.kind]}</p>}
+        </div>
       ) : (
-        <>
-          {open.length > 0 ? (
-            <ul className="task-rows" aria-label="任务">
-              <TaskRows nodes={buildTaskTree(open)} {...rowProps} />
+        sections.map((section) =>
+          section.title === '' ? (
+            <ul key={section.key} className="task-rows" aria-label="任务">
+              <TaskRows nodes={nodesOf(section.tasks)} {...rowProps} />
             </ul>
           ) : (
-            completed.length === 0 && (
-              <div className="list-pane-empty">
-                <p className="list-pane-empty-title">没有任务</p>
-                <p>在上方输入任务标题，按回车添加</p>
-              </div>
-            )
-          )}
-          {completed.length > 0 && (
-            <section className="task-section" aria-labelledby="completed-heading">
-              <h2 id="completed-heading" className="task-section-heading">
-                <button
-                  type="button"
-                  className="task-section-toggle"
-                  aria-expanded={showCompleted}
-                  aria-controls="completed-tasks"
-                  onClick={() => setShowCompleted((v) => !v)}
-                >
-                  <Icon name={showCompleted ? 'chevronDown' : 'chevronRight'} size={12} />
-                  <span>已完成</span>
-                  <span className="task-section-count">{completed.length}</span>
-                </button>
-              </h2>
-              {showCompleted && (
-                <ul id="completed-tasks" className="task-rows" aria-label="已完成的任务">
-                  {/* Completed subtrees keep their shape; a completed 子任务 of an open task shows as a root. */}
-                  <TaskRows nodes={buildTaskTree(completed)} {...rowProps} />
-                </ul>
-              )}
-            </section>
-          )}
-        </>
+            <TaskSectionBlock
+              key={section.key}
+              section={section}
+              collapsed={collapsedSections.has(section.key)}
+              onToggle={() => toggleIn(setCollapsedSections, section.key)}
+            >
+              {/* Completed subtrees keep their shape; a completed 子任务 of an open task shows as a root. */}
+              <TaskRows nodes={nodesOf(section.tasks)} {...rowProps} />
+            </TaskSectionBlock>
+          ),
+        )
       )}
 
       {menu && (
@@ -224,7 +293,88 @@ export function TaskListPane(props: TaskListPaneProps) {
           onClose={() => setMenu(null)}
         />
       )}
+      {layoutMenu && (
+        <ContextMenu
+          label="排序和分组"
+          x={layoutMenu.x}
+          y={layoutMenu.y}
+          returnFocus={layoutMenu.opener}
+          sections={layoutSections}
+          onClose={() => setLayoutMenu(null)}
+        />
+      )}
     </main>
+  );
+}
+
+/** A titled, collapsible group of rows: 已过期, a day, a 清单, 已完成 … */
+function TaskSectionBlock({
+  section,
+  collapsed,
+  onToggle,
+  children,
+}: {
+  section: TaskSection;
+  collapsed: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  const id = `section-${section.key.replace(/[^a-zA-Z0-9-]/g, '-')}`;
+  return (
+    <section className="task-section" aria-labelledby={`${id}-heading`}>
+      <h2 id={`${id}-heading`} className="task-section-heading">
+        <button type="button" className="task-section-toggle" aria-expanded={!collapsed} aria-controls={id} onClick={onToggle}>
+          <Icon name={collapsed ? 'chevronRight' : 'chevronDown'} size={12} />
+          <span>{section.title}</span>
+          <span className="task-section-count">{section.tasks.length}</span>
+        </button>
+      </h2>
+      {!collapsed && (
+        <ul id={id} className="task-rows" aria-label={section.completed ? '已完成的任务' : `${section.title}的任务`}>
+          {children}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** 搜索 box: searches as you type (debounced) and on Enter. */
+function SearchBox({ initial, onSearch }: { initial: string; onSearch: (query: string) => void }) {
+  const [value, setValue] = useState(initial);
+  const onSearchRef = useRef(onSearch);
+  useEffect(() => {
+    onSearchRef.current = onSearch;
+  });
+  useEffect(() => {
+    const trimmed = value.trim();
+    if (trimmed === initial) return;
+    const timer = window.setTimeout(() => onSearchRef.current(trimmed), 300);
+    return () => window.clearTimeout(timer);
+  }, [value, initial]);
+
+  return (
+    <form
+      className="search-box"
+      role="search"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSearch(value.trim());
+      }}
+    >
+      <span className="search-box-icon" aria-hidden="true">
+        <Icon name="search" size={16} />
+      </span>
+      <input
+        type="search"
+        className="search-box-input"
+        aria-label="搜索任务"
+        placeholder="搜索标题、描述、检查项和评论"
+        value={value}
+        maxLength={100}
+        autoFocus
+        onChange={(e) => setValue(e.target.value)}
+      />
+    </form>
   );
 }
 
@@ -268,13 +418,15 @@ interface TaskRowsProps {
   onSelectTask: (taskId: string) => void;
   onToggleTask: (task: Task) => void;
   onIndent: (task: Task, outdent: boolean) => boolean;
-  /** False in a 标签 view: Tab / Shift+Tab don't indent there. */
+  /** False outside a 清单's own order: Tab / Shift+Tab don't indent there. */
   indentable: boolean;
   timeZone: string;
   now: Date;
   tags: Tag[];
-  /** The task's 清单 name, shown in a 标签 view. */
+  /** The task's 清单 name, shown in cross-清单 views. */
   listName: (task: Task) => string | undefined;
+  /** 搜索: where each task matched. */
+  matches?: Record<string, SearchMatchField[]> | undefined;
   onOpenMenu: (task: Task, x: number, y: number, opener: HTMLElement | null) => void;
 }
 
@@ -296,8 +448,10 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
     now,
     tags,
     listName,
+    matches,
     onOpenMenu,
   } = rest;
+  const matchedIn = matches?.[task.id]?.filter((f) => f !== 'title') ?? [];
   const titleRef = useRef<HTMLButtonElement>(null);
   const taskTags = tagsOf(task, tags);
   const list = listName(task);
@@ -372,6 +526,9 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
               </li>
             ))}
           </ul>
+        )}
+        {matchedIn.length > 0 && (
+          <span className="task-row-match">{`匹配${matchedIn.map((f) => MATCH_LABELS[f]).join('、')}`}</span>
         )}
         {list && <span className="task-row-list">{list}</span>}
         {task.kind === 'checklist' ? (

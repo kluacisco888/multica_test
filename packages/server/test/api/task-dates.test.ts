@@ -119,12 +119,12 @@ describe('task dates and time zone settings API', () => {
   });
 
   it('defaults the time zone to Asia/Shanghai and validates changes', async () => {
-    expect(await settings(bob)).toEqual({ timeZone: 'Asia/Shanghai' });
+    expect(await settings(bob)).toMatchObject({ timeZone: 'Asia/Shanghai' });
     for (const payload of [{ timeZone: 'Mars/Olympus' }, { timeZone: '' }, { timeZone: 8 }, { theme: 'dark' }]) {
       expect((await api(bob, 'PATCH', '/api/settings', payload)).statusCode, JSON.stringify(payload)).toBe(400);
     }
-    expect(await setTimeZone(bob, 'Europe/London')).toEqual({ timeZone: 'Europe/London' });
-    expect(await settings(bob)).toEqual({ timeZone: 'Europe/London' });
+    expect(await setTimeZone(bob, 'Europe/London')).toMatchObject({ timeZone: 'Europe/London' });
+    expect(await settings(bob)).toMatchObject({ timeZone: 'Europe/London' });
     // Each user has their own settings.
     expect((await settings(alice)).timeZone).toBe('Asia/Shanghai');
   });
@@ -183,8 +183,8 @@ describe('task dates and time zone settings API', () => {
   it('keeps settings per user: one user changing the zone never shows up for another (review)', async () => {
     const [u1, u2] = await Promise.all([t.createUser('frank'), t.createUser('grace')]);
     await Promise.all([setTimeZone(u1, 'Asia/Tokyo'), setTimeZone(u2, 'Europe/Paris')]);
-    expect(await settings(u1)).toEqual({ timeZone: 'Asia/Tokyo' });
-    expect(await settings(u2)).toEqual({ timeZone: 'Europe/Paris' });
+    expect(await settings(u1)).toMatchObject({ timeZone: 'Asia/Tokyo' });
+    expect(await settings(u2)).toMatchObject({ timeZone: 'Europe/Paris' });
     // A timed task gets its owner's zone, not the other user's.
     const task = await createTask(u2, { title: 'x', dates: { allDay: false, dueAt: '2026-10-14T01:00:00.000Z' } });
     expect(task.dates).toMatchObject({ timeZone: 'Europe/Paris' });
