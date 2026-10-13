@@ -71,6 +71,13 @@
       "when": 1791882632205,
       "tag": "0009_repeat_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791882829640,
+      "tag": "0010_attachments_comments",
+      "breakpoints": true
     }
   ]
 }

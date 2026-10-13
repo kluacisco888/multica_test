@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { buildApp, type AppDeps } from '../../src/app.js';
 import { SESSION_COOKIE } from '../../src/auth.js';
@@ -52,8 +55,11 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
   const database = await createTestDatabase();
   await runMigrations(database.db);
   await options.prepare?.(database);
+  // Own data volume per test app: 附件 land in `<dataDir>/attachments`.
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'dida-test-data-'));
   const config = loadConfig({
     DATABASE_URL: database.url,
+    DATA_DIR: dataDir,
     LOG_LEVEL: 'silent',
     // Fixed test key so 通知渠道 work; pass `APP_ENCRYPTION_KEY: ''` to test without one.
     APP_ENCRYPTION_KEY: TEST_ENCRYPTION_KEY,
@@ -88,6 +94,7 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
     async close() {
       await app.close();
       await database.destroy();
+      await rm(dataDir, { recursive: true, force: true });
     },
   };
 }

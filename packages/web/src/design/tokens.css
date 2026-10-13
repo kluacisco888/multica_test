@@ -112,6 +112,10 @@
   --settings-dialog-width: 800px;
   --settings-nav-width: 214px;
   --settings-row-height: 40px;
+  --attachment-thumb-height: 320px; /* image 附件 in the detail pane: shown large like the reference's inline images */
+  --attachment-card-height: 52px; /* file 附件 card */
+  --attachment-preview-width: 960px; /* preview dialog (images, PDF) */
+  --comment-avatar-size: 28px;
 
   /* ---- Shape & elevation ---- */
   --radius-sm: 4px;

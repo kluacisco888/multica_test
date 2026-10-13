@@ -73,6 +73,8 @@ scripts/restore.sh backups/xxx.tar.gz   # 覆盖当前项目的数据库和附�
 
 备份文件是一个 `.tar.gz`，里面有 `manifest.json`、数据库 dump（`pg_dump -Fc`）和附件目录打包 `attachments.tar`。备份时应用可以在运行；恢复会先停 `app`，替换数据库和附件后再启动。
 
+附件文件存在数据卷的 `/data/attachments/<用户 id>/<附件 id>`，数据库只记文件名、类型和大小，所以两者必须一起备份和恢复（脚本就是这样做的）。`scripts/backup-restore-smoke.sh` 会起两个临时 compose 项目（`dida-smoke-src` / `dida-smoke-dst`，端口 18291 / 18292），上传一个附件、备份、恢复到另一个项目，再下载比对字节，并确认其他用户拿到 404，最后 `down -v` 删除这两个临时项目；CI 的 compose 任务会跑它。
+
 两个脚本都操作当前目录下的 compose 项目，用 `COMPOSE_PROJECT_NAME` 指定别的项目。例如在同一台机器上恢复一份副本做核对，不影响正在运行的服务：
 
 ```bash
@@ -170,6 +172,19 @@ CI 定义在 `ci/github-actions.yml`：lint、类型检查、四层测试，再�
 | `GET/POST/PATCH/DELETE /api/tags[/:id]` | 标签：名称（不含空格和 `#`，同一用户内不分大小写唯一，重名 409 `tag_name_taken`）、颜色、`parentId`、`sortOrder`。只嵌套一层：父标签必须在顶层，有子标签的标签不能再放进别的标签（400 `invalid_parent`）。删除标签会把它从所有任务上去掉（任务本身不变），子标签移到顶层原来的位置 |
 
 任务的 `dates`（`packages/shared/src/task-dates.ts`）：`null` 是不设日期；全天是 `{ allDay: true, startDate, dueDate }`，按日历日期存，不随时区换算；带时间是 `{ allDay: false, startAt, dueAt, timeZone }`，存 UTC 时间点，`timeZone` 由服务端按用户当时的设置写入，显示时一律用用户**当前**时区。`startDate` / `startAt` 为 null 就是只有截止日期。列表上的「今天 / 明天 / 周几 / 已过期」由 `describeTaskDates()` 算。
+
+### 附件与评论
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /api/tasks/:id/attachments` | 任务的附件，按上传时间排序：`fileName`、`mimeType`、`size`（字节）、`preview`（`image` / `pdf` / null） |
+| `POST /api/tasks/:id/attachments?name=<文件名>[&id=<uuid>]` | 上传：请求体就是文件本身（不是 multipart），`Content-Type` 是文件类型。单个文件最多 50MB，超过返回 413 `file_too_large`（先看 `Content-Length`，没有时边收边数，超过就丢弃）。文件名不能含 `/`、`\` 和控制字符，最多 255 字 |
+| `GET /api/attachments/:id/content` | 下载，只有附件所属用户能下，别人和不存在的一样回 404。只有 PNG / JPEG / GIF / WebP / AVIF / BMP 和 PDF 用 `inline` 返回给浏览器预览，其他类型（包括 SVG、HTML）一律按 `application/octet-stream` + `attachment` 下载，并带 `nosniff`，上传的文件不能在本站执行脚本。`?download=1` 强制下载 |
+| `DELETE /api/attachments/:id` | 软删除：留墓碑，磁盘上的文件删掉 |
+| `GET/POST /api/tasks/:id/comments` | 评论，按时间正序；`content` 去掉首尾空白后 1–5000 字，纯文本（没有 @人） |
+| `PATCH/DELETE /api/comments/:id` | 编辑（写入 `editedAt`）、软删除 |
+
+两者都是同步实体，`/api/changes` 里的类型是 `attachment` 和 `comment`。界面上：附件在描述下面，图片显示大图、点开预览，PDF 在对话框里预览，其他文件点卡片下载；上传入口在详情右下角「⋯」菜单的「上传附件」。评论在详情最下面，底栏的评论按钮打开输入框，Enter 发送、Shift+Enter 换行，每条评论的菜单里可以编辑和删除。
 
 ### 通知渠道（ADR-0005）
 

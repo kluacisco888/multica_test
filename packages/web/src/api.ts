@@ -1,6 +1,14 @@
 import {
   adminUserSchema,
   adminUsersResponseSchema,
+  ATTACHMENT_MAX_BYTES,
+  ATTACHMENT_TOO_LARGE_MESSAGE,
+  attachmentSchema,
+  attachmentsResponseSchema,
+  commentSchema,
+  commentsResponseSchema,
+  type Attachment,
+  type Comment,
   apiErrorSchema,
   type AdminUser,
   type CreateUserRequest,
@@ -62,12 +70,17 @@ export class ApiCallError extends Error {
 }
 
 async function call(method: string, url: string, body?: unknown): Promise<Response> {
-  const res = await fetch(url, {
-    method,
-    credentials: 'same-origin',
-    headers: body === undefined ? {} : { 'content-type': 'application/json' },
-    body: body === undefined ? null : JSON.stringify(body),
-  });
+  return check(
+    await fetch(url, {
+      method,
+      credentials: 'same-origin',
+      headers: body === undefined ? {} : { 'content-type': 'application/json' },
+      body: body === undefined ? null : JSON.stringify(body),
+    }),
+  );
+}
+
+async function check(res: Response): Promise<Response> {
   if (res.ok) return res;
   const parsed = apiErrorSchema.safeParse(await res.json().catch(() => null));
   throw parsed.success
@@ -233,6 +246,52 @@ export async function updateTag(id: string, patch: UpdateTagRequest): Promise<Ta
 
 export async function deleteTag(id: string): Promise<void> {
   await call('DELETE', `/api/tags/${encodeURIComponent(id)}`);
+}
+
+export async function fetchAttachments(taskId: string): Promise<Attachment[]> {
+  const res = await call('GET', `/api/tasks/${encodeURIComponent(taskId)}/attachments`);
+  return attachmentsResponseSchema.parse(await res.json()).attachments;
+}
+
+/** Upload one file as the raw request body; files over 50MB are refused before sending. */
+export async function uploadAttachment(taskId: string, file: File): Promise<Attachment> {
+  if (file.size > ATTACHMENT_MAX_BYTES) throw new ApiCallError(413, 'file_too_large', ATTACHMENT_TOO_LARGE_MESSAGE);
+  const query = new URLSearchParams({ name: file.name });
+  const res = await check(
+    await fetch(`/api/tasks/${encodeURIComponent(taskId)}/attachments?${query.toString()}`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': file.type || 'application/octet-stream' },
+      body: file,
+    }),
+  );
+  return attachmentSchema.parse(await res.json());
+}
+
+export async function deleteAttachment(id: string): Promise<void> {
+  await call('DELETE', `/api/attachments/${encodeURIComponent(id)}`);
+}
+
+/** Same-origin URL of the file; the session cookie authorises it. */
+export function attachmentUrl(id: string, download = false): string {
+  return `/api/attachments/${encodeURIComponent(id)}/content${download ? '?download=1' : ''}`;
+}
+
+export async function fetchComments(taskId: string): Promise<Comment[]> {
+  const res = await call('GET', `/api/tasks/${encodeURIComponent(taskId)}/comments`);
+  return commentsResponseSchema.parse(await res.json()).comments;
+}
+
+export async function createComment(taskId: string, content: string): Promise<Comment> {
+  return commentSchema.parse(await (await call('POST', `/api/tasks/${encodeURIComponent(taskId)}/comments`, { content })).json());
+}
+
+export async function updateComment(id: string, content: string): Promise<Comment> {
+  return commentSchema.parse(await (await call('PATCH', `/api/comments/${encodeURIComponent(id)}`, { content })).json());
+}
+
+export async function deleteComment(id: string): Promise<void> {
+  await call('DELETE', `/api/comments/${encodeURIComponent(id)}`);
 }
 
 export function errorMessage(error: unknown): string {

@@ -3,6 +3,7 @@ import fastifyCookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import { createAccounts, type Accounts } from './accounts.js';
+import { createAttachmentStore, type AttachmentStore } from './attachments/store.js';
 import { registerAuthentication } from './auth.js';
 import { systemClock, type Clock } from './clock.js';
 import type { AppConfig } from './config.js';
@@ -11,7 +12,9 @@ import { sendError } from './http-errors.js';
 import { createCredentialCipher } from './notify/credentials.js';
 import { createNotifier, type Notifier } from './notify/notifier.js';
 import { adminRoutes } from './routes/admin.js';
+import { attachmentRoutes } from './routes/attachments.js';
 import { authRoutes } from './routes/auth.js';
+import { commentRoutes } from './routes/comments.js';
 import { channelRoutes } from './routes/channels.js';
 import { changesRoutes } from './routes/changes.js';
 import { createHolidayService, type HolidayService } from './holidays/service.js';
@@ -52,6 +55,8 @@ declare module 'fastify' {
     notifier: Notifier;
     /** 回收站: restore, 彻底删除 and the 30-day cleanup job. */
     trash: TrashService;
+    /** Files of 附件 under `<DATA_DIR>/attachments`. */
+    attachmentStore: AttachmentStore;
   }
 }
 
@@ -100,6 +105,7 @@ export async function buildApp(deps: AppDeps) {
   });
   const cipher = config.encryptionKey ? createCredentialCipher(config.encryptionKey) : null;
   app.decorate('notifier', createNotifier({ db, cipher, clock }));
+  app.decorate('attachmentStore', createAttachmentStore(config.dataDir));
   await app.register(fastifyCookie);
   registerAuthentication(app, { sessions, config });
 
@@ -124,6 +130,8 @@ export async function buildApp(deps: AppDeps) {
   checklistRoutes(app);
   tagRoutes(app);
   trashRoutes(app);
+  attachmentRoutes(app);
+  commentRoutes(app);
   deps.routes?.(app);
 
   if (config.webDistDir) {
