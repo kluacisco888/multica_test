@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { snoozeRequestSchema, type ReminderAlertsResponse, type ReminderFailuresResponse } from '@dida/shared';
 import { sessionUser } from '../auth.js';
-import { sendValidationError } from '../http-errors.js';
+import { sendError, sendValidationError } from '../http-errors.js';
 import { notFound } from './respond.js';
 
 type Params = { Params: { id: string } };
@@ -26,7 +26,8 @@ export function reminderRoutes(app: FastifyInstance) {
     const body = snoozeRequestSchema.safeParse(request.body);
     if (!body.success) return sendValidationError(reply, body.error);
     const snoozed = await app.reminders.snooze(sessionUser(request).id, request.params.id, body.data.minutes);
-    if (!snoozed) return notFound(reply);
+    if (snoozed === 'not_found') return notFound(reply);
+    if (snoozed === 'dismissed') return sendError(reply, 409, 'alert_dismissed', '这条提醒已经关闭或稍后提醒过了');
     return { fireAt: snoozed.fireAt.toISOString() };
   });
 

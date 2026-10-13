@@ -103,7 +103,9 @@ describe('reminders: review edge cases', () => {
     // e.g. a second open tab still shows the card until its next poll.
     const first = await api(u, 'POST', `/api/reminders/alerts/${alert.id}/snooze`, { minutes: 5 });
     expect(first.statusCode).toBe(200);
-    await api(u, 'POST', `/api/reminders/alerts/${alert.id}/snooze`, { minutes: 5 });
+    const second = await api(u, 'POST', `/api/reminders/alerts/${alert.id}/snooze`, { minutes: 5 });
+    expect(second.statusCode).toBe(409);
+    expect(second.json().error.code).toBe('alert_dismissed');
     clock.set('2026-10-14T02:05:00.000Z');
     await t.app.reminders.tick();
     expect(u.hooks()).toHaveLength(2); // the original + one 稍后提醒
@@ -113,11 +115,12 @@ describe('reminders: review edge cases', () => {
   it('concurrent 稍后提醒 for the same alert reminds only once', async () => {
     const u = await account();
     const alert = await firedAlert(u, '并发');
-    await Promise.all([
+    const results = await Promise.all([
       api(u, 'POST', `/api/reminders/alerts/${alert.id}/snooze`, { minutes: 5 }),
       api(u, 'POST', `/api/reminders/alerts/${alert.id}/snooze`, { minutes: 5 }),
       api(u, 'POST', `/api/reminders/alerts/${alert.id}/snooze`, { minutes: 15 }),
     ]);
+    expect(results.map((r) => r.statusCode).sort()).toEqual([200, 409, 409]);
     clock.set('2026-10-14T02:20:00.000Z');
     await t.app.reminders.tick();
     expect(u.hooks()).toHaveLength(2);
@@ -143,14 +146,16 @@ describe('reminders: review edge cases', () => {
     expect(u.hooks()).toHaveLength(2);
   });
 
-  it('a task whose only chosen channel was deleted still pops up in the page (no channel send, no failure record)', async () => {
+  it('a task whose only chosen channel was deleted still pops up in the page and records a failure (渠道已删除)', async () => {
     const u = await account();
     await createTask(u, { title: '渠道被删', dates: timed(DUE), reminders: [{ type: 'before', minutes: 0 }], reminderChannelIds: [u.channelId] });
     expect((await api(u, 'DELETE', `/api/notification-channels/${u.channelId}`)).statusCode).toBeLessThan(300);
     clock.set(DUE);
-    expect(await t.app.reminders.tick()).toMatchObject({ fired: 1, sent: 0, failed: 0 });
+    expect(await t.app.reminders.tick()).toMatchObject({ fired: 1, sent: 0, failed: 1 });
     expect(u.sends()).toHaveLength(0);
-    expect((await api(u, 'GET', '/api/reminders/failures')).json().failures).toEqual([]);
+    expect((await api(u, 'GET', '/api/reminders/failures')).json().failures).toEqual([
+      expect.objectContaining({ taskTitle: '渠道被删', channelId: u.channelId, channelName: '飞书', attempts: 0, error: '渠道已删除', fireAt: DUE }),
+    ]);
     expect(await alerts(u)).toHaveLength(1);
   });
 });

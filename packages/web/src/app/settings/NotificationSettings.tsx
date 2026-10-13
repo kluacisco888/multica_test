@@ -368,7 +368,7 @@ function FailedReminders({ timeZone }: { timeZone: string | null }) {
                 <span className="settings-row-value">{formatInstant(f.fireAt, timeZone)}</span>
               </div>
               <p className="reminder-failure-detail">
-                {`${f.channelName} · 尝试 ${f.attempts} 次 · ${f.error}`}
+                {[f.channelName, f.attempts > 0 ? `尝试 ${f.attempts} 次` : null, f.error].filter(Boolean).join(' · ')}
               </p>
             </li>
           ))}

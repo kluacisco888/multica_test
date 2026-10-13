@@ -60,7 +60,8 @@ export function ReminderAlerts({
     try {
       await action();
     } catch (e) {
-      onError(e);
+      // Already closed or snoozed elsewhere (another tab): the card is just gone.
+      if (!(e instanceof api.ApiCallError && e.status === 409)) onError(e);
       void poll();
     }
   }

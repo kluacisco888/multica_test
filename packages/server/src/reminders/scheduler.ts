@@ -13,6 +13,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { Clock } from '../clock.js';
 import type { Db, Executor, Tx } from '../db/client.js';
 import { reminderDeliveries, type ChannelAttempt } from '../db/schema/reminders.js';
+import { notificationChannels } from '../db/schema/channels.js';
 import { userSettings } from '../db/schema/settings.js';
 import { tasks } from '../db/schema/tasks.js';
 import type { Notifier } from '../notify/notifier.js';
@@ -63,7 +64,11 @@ export interface ReminderService {
   /** false when the alert is not the user's. */
   dismissAlert(userId: string, id: string): Promise<boolean>;
   /** 稍后提醒: dismiss and remind again in `minutes`. Null when the alert is not the user's. */
-  snooze(userId: string, id: string, minutes: number): Promise<{ fireAt: Date } | null>;
+  /**
+   * 稍后提醒: dismiss and remind again in `minutes`. `not_found` when the alert
+   * is not the user's, `dismissed` when it was already closed or snoozed.
+   */
+  snooze(userId: string, id: string, minutes: number): Promise<{ fireAt: Date } | 'not_found' | 'dismissed'>;
   /** Deliveries that failed after their retries, newest first (用户故事 83). */
   failures(userId: string): Promise<ReminderFailure[]>;
 }
@@ -71,6 +76,7 @@ export interface ReminderService {
 const ACTIVE = ['scheduled', 'delivering'] as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MISSED_ERROR = '服务停机超过 24 小时，未能发送';
+const CHANNEL_DELETED_ERROR = '渠道已删除';
 
 const isLive = (task: TaskRow | undefined): boolean => task !== undefined && task.deletedAt === null && task.status === 'open';
 
@@ -200,8 +206,31 @@ export function createReminderService(deps: {
           return null;
         }
         const wanted = task?.reminderChannelIds ?? null;
-        const channels = (await liveChannels(tx, userId)).filter((c) => (wanted ? wanted.includes(c.id) : c.isDefault));
-        const attempts: ChannelAttempt[] = channels.map((c) => ({
+        const live = await liveChannels(tx, userId);
+        const channels = live.filter((c) => (wanted ? wanted.includes(c.id) : c.isDefault));
+        // Channels the task named that were deleted since: one failure each, shown in 发送失败的提醒.
+        const goneIds = (wanted ?? []).filter((cid) => !live.some((c) => c.id === cid));
+        const goneNames = new Map(
+          goneIds.length === 0
+            ? []
+            : (
+                await tx
+                  .select({ id: notificationChannels.id, name: notificationChannels.name })
+                  .from(notificationChannels)
+                  .where(and(eq(notificationChannels.userId, userId), inArray(notificationChannels.id, goneIds)))
+              ).map((c) => [c.id, c.name] as const),
+        );
+        const gone: ChannelAttempt[] = goneIds.map((cid) => ({
+          channelId: cid,
+          channelName: goneNames.get(cid) ?? '已删除的渠道',
+          status: 'failed',
+          attempts: 0,
+          nextAttemptAt: null,
+          lastError: CHANNEL_DELETED_ERROR,
+          finishedAt: now.toISOString(),
+        }));
+        result.failed += gone.length;
+        const pending: ChannelAttempt[] = channels.map((c) => ({
           channelId: c.id,
           channelName: c.name,
           status: 'pending',
@@ -211,13 +240,13 @@ export function createReminderService(deps: {
           finishedAt: null,
         }));
         const fired = await ops.update(reminderDeliveries, row.id, {
-          status: attempts.length > 0 ? 'delivering' : 'done',
+          status: pending.length > 0 ? 'delivering' : 'done',
           firedAt: now,
-          channels: attempts,
-          nextAttemptAt: attempts.length > 0 ? now : null,
+          channels: [...pending, ...gone],
+          nextAttemptAt: pending.length > 0 ? now : null,
         });
         result.fired += 1;
-        if (!fired || attempts.length === 0) return null;
+        if (!fired || pending.length === 0) return null;
         return { row: fired, task: task as TaskRow, settings };
       }
 
@@ -262,7 +291,9 @@ export function createReminderService(deps: {
           result.sent += 1;
           return { ...c, status: 'sent', attempts, nextAttemptAt: null, lastError: null, finishedAt: now.toISOString() };
         }
-        const retryAt = outcome.retryable ? nextRetryAt(attempts, now) : null;
+        // Every failure is retried 1, 5 and 15 minutes later (spec 用户故事 83), even
+        // ones that need the user to fix the channel: fixed in time, the retry succeeds.
+        const retryAt = nextRetryAt(attempts, now);
         if (retryAt) {
           result.retrying += 1;
           return { ...c, attempts, nextAttemptAt: retryAt.toISOString(), lastError: outcome.error };
@@ -359,13 +390,16 @@ export function createReminderService(deps: {
     },
 
     async snooze(userId, id, minutes) {
-      if (!UUID.test(id)) return null;
+      if (!UUID.test(id)) return 'not_found';
       return sync.transaction(userId, async (ops, tx) => {
+        // Locked, so concurrent 稍后提醒 of one alert (two tabs, double click) schedule it once.
         const [row] = await tx
           .select()
           .from(reminderDeliveries)
-          .where(and(eq(reminderDeliveries.id, id), eq(reminderDeliveries.userId, userId), isNull(reminderDeliveries.deletedAt), isNotNull(reminderDeliveries.firedAt)));
-        if (!row) return null;
+          .where(and(eq(reminderDeliveries.id, id), eq(reminderDeliveries.userId, userId), isNull(reminderDeliveries.deletedAt), isNotNull(reminderDeliveries.firedAt)))
+          .for('update');
+        if (!row) return 'not_found' as const;
+        if (row.alertDismissedAt) return 'dismissed' as const;
         const now = clock.now();
         const fireAt = new Date(now.getTime() + minutes * 60_000);
         await ops.update(reminderDeliveries, row.id, { alertDismissedAt: now });

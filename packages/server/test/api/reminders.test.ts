@@ -233,13 +233,26 @@ describe('reminders: scheduling and delivery', () => {
       expect((await api(u, 'GET', '/api/reminders/failures')).json()).toEqual({ failures: [] });
     });
 
-    it('a failure that needs the user to fix the channel is recorded at once', async () => {
+    it('a failure that needs the user to fix the channel is retried too, and succeeds once fixed', async () => {
       const u = await account();
       await createTask(u, { title: '签名错', dates: timed('2026-10-14T02:00:00.000Z'), reminders: [{ type: 'before', minutes: 0 }], reminderChannelIds: [u.feishuId] });
-      hook.replyNext({ status: 200, body: { code: 19021, msg: 'sign match fail or timestamp is not within one hour from current time' } });
-      expect(await tickAt('2026-10-14T02:00:00.000Z')).toMatchObject({ failed: 1, retrying: 0 });
+      const signFail = { status: 200, body: { code: 19021, msg: 'sign match fail or timestamp is not within one hour from current time' } };
+      hook.replyNext(signFail);
+      const fire = at('2026-10-14T02:00:00.000Z').getTime();
+      expect(await tickAt(new Date(fire))).toMatchObject({ failed: 0, retrying: 1 });
+      // The user fixes the channel before the 1-minute retry: it is delivered.
+      expect(await tickAt(new Date(fire + MIN))).toMatchObject({ sent: 1, failed: 0 });
+      expect(hook.requests.filter((r) => r.path.endsWith(`/${u.username}`))).toHaveLength(2); // the failed try + the retry
+      expect((await api(u, 'GET', '/api/reminders/failures')).json()).toEqual({ failures: [] });
+
+      // Never fixed: recorded after the 3 retries like any other failure.
+      await createTask(u, { title: '一直签名错', dates: timed('2026-10-14T03:00:00.000Z'), reminders: [{ type: 'before', minutes: 0 }], reminderChannelIds: [u.feishuId] });
+      hook.replyNext(signFail, signFail, signFail, signFail);
+      const fire2 = at('2026-10-14T03:00:00.000Z').getTime();
+      for (const offset of [0, MIN, 6 * MIN]) expect(await tickAt(new Date(fire2 + offset))).toMatchObject({ failed: 0, retrying: 1 });
+      expect(await tickAt(new Date(fire2 + 21 * MIN))).toMatchObject({ failed: 1, retrying: 0 });
       const failures = reminderFailuresResponseSchema.parse((await api(u, 'GET', '/api/reminders/failures')).json()).failures;
-      expect(failures).toEqual([expect.objectContaining({ attempts: 1, error: expect.stringContaining('19021') })]);
+      expect(failures).toEqual([expect.objectContaining({ taskTitle: '一直签名错', attempts: 4, error: expect.stringContaining('19021') })]);
     });
   });
 

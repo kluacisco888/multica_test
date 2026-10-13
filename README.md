@@ -221,14 +221,14 @@ const result = await app.notifier.send(userId, channelId, { title: '提醒：交
 调度表是 `reminder_deliveries`（提醒投递记录），逻辑在 `packages/server/src/reminders/scheduler.ts`：
 
 - 任何写任务的事务（新建、修改、完成、放弃、删除、还原、重复任务生成下一次）提交前都会经过同步层的写钩子 `sync.onWrite(tasks, …)`，把这个任务待发的提醒对齐：时间变了就取消旧的、排新的，任务关闭或删除就取消。改全天提醒时间或时区也会重排。已经过去的时间不补排。
-- `tick()` 发送到点的提醒：触发前再核对一次任务，逐个渠道发送，失败后按 1、5、15 分钟重试三次，仍失败就记为失败（需要改配置的错误，例如签名错误，直接记失败）。到点超过 24 小时才轮到的提醒记为 `missed`，不补发；停机超过 24 小时错过的重试记为失败。稍后提醒只在任务完成、放弃或删除时取消。
+- `tick()` 发送到点的提醒：触发前再核对一次任务，逐个渠道发送，所有失败（包括签名错误、授权码错误这类要改配置的）都按 1、5、15 分钟重试三次，仍失败就记为失败；任务指定的渠道已被删除时，照常弹应用内提醒，并为每个已删除的渠道记一条失败（原因「渠道已删除」）。到点超过 24 小时才轮到的提醒记为 `missed`，不补发；停机超过 24 小时错过的重试记为失败。稍后提醒只在任务完成、放弃或删除时取消。
 - pg-boss 队列 `reminders.tick`：启动时跑一次（补发停机期间的），每分钟跑一次兜底，另外每个触发 / 重试时间点各排一个 `startAfter` 任务，所以准时误差约 1–2 秒。
 
 | 接口 | 说明 |
 | --- | --- |
 | `GET /api/reminders/alerts` | 应用内提醒：一小时内触发、还没关掉、任务仍未完成的提醒；页面每 15 秒拉一次 |
 | `POST /api/reminders/alerts/:id/dismiss` | 关闭弹窗 |
-| `POST /api/reminders/alerts/:id/snooze` | 稍后提醒：`{ minutes }`，到时再走一遍渠道和弹窗 |
+| `POST /api/reminders/alerts/:id/snooze` | 稍后提醒：`{ minutes }`，到时再走一遍渠道和弹窗；同一条提醒只能稍后提醒一次（行锁），已关闭或已稍后提醒过的返回 409 `alert_dismissed` |
 | `GET /api/reminders/failures` | 重试后仍失败的投递（最近 50 条），设置 →「提醒与通知」里显示 |
 
 排序键是分数索引（`packages/shared/src/sort-key.ts`），拖拽只改被拖动的那一条；侧栏拖放规则在 `packages/shared/src/sidebar-order.ts`。界面的设计 token 和组件约定见 `packages/web/src/ui/README.md`。
