@@ -4,6 +4,8 @@ import {
   DEFAULT_ALL_DAY_REMINDER_TIME,
   DEFAULT_TIME_ZONE,
   datesAsStored,
+  DEFAULT_QUADRANTS,
+  quadrantPriority,
   todayIn,
   keyBetween,
   type BatchAction,
@@ -13,6 +15,7 @@ import {
   sortKeyForDrop,
   UNGROUPED_COLUMN_TITLE,
   type KanbanColumn,
+  type Quadrant,
   type Filter,
   type SearchMatchField,
   type SmartListId,
@@ -53,6 +56,7 @@ import {
   type TagDraft,
 } from './dialogs.js';
 import { CalendarPane } from './CalendarPane.js';
+import { MatrixPane } from './MatrixPane.js';
 import { Rail } from './Rail.js';
 import { ReminderAlerts } from './ReminderAlerts.js';
 import { SettingsDialog, type SettingsTab } from './SettingsDialog.js';
@@ -82,6 +86,7 @@ type DialogState =
   | { kind: 'empty-trash' }
   | { kind: 'filter'; filter: Filter | null }
   | { kind: 'delete-filter'; filter: Filter }
+  | { kind: 'quadrant'; index: number }
   | { kind: 'shortcuts' }
   | { kind: 'delete-column'; column: KanbanColumn; taskCount: number };
 
@@ -246,12 +251,14 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const inbox = sidebar?.lists.find((l) => l.isInbox) ?? null;
   const currentTag = route.tagId ? (tags?.find((t) => t.id === route.tagId) ?? null) : null;
   const currentFilter = route.filterId ? (filters?.find((f) => f.id === route.filterId) ?? null) : null;
-  const crossListRoute = Boolean(route.calendar || route.trash || route.tagId || route.smartId || route.filterId || (route.search !== null && route.search !== undefined));
+  const crossListRoute = Boolean(route.matrix || route.calendar || route.trash || route.tagId || route.smartId || route.filterId || (route.search !== null && route.search !== undefined));
   const currentList = useMemo(() => {
     if (!sidebar || crossListRoute) return null;
     return (route.listId ? sidebar.lists.find((l) => l.id === route.listId) : inbox) ?? null;
   }, [sidebar, route.listId, crossListRoute, inbox]);
+  const matrixQuadrants = settings?.matrixQuadrants ?? null;
   const view: ListPaneView | null = useMemo(() => {
+    if (route.matrix) return matrixQuadrants ? { kind: 'matrix', quadrants: matrixQuadrants } : null;
     if (calendarRange) return { kind: 'calendar', range: calendarRange };
     if (route.trash) return null;
     if (route.search !== null && route.search !== undefined) return { kind: 'search', query: route.search };
@@ -259,7 +266,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     if (currentFilter) return { kind: 'filter', filter: currentFilter, inbox };
     if (currentTag) return { kind: 'tag', tag: currentTag, inbox };
     return currentList ? { kind: 'list', list: currentList } : null;
-  }, [calendarRange, route.trash, route.search, route.smartId, sidebar, currentFilter, currentTag, currentList, inbox]);
+  }, [route.matrix, matrixQuadrants, calendarRange, route.trash, route.search, route.smartId, sidebar, currentFilter, currentTag, currentList, inbox]);
 
   useEffect(() => {
     if (!calendarRange) return;
@@ -526,6 +533,45 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     }
     navigate({ listId: null, calendar: { mode: mode ?? null, date: date ?? null }, taskId: null });
     setDrawerOpen(false);
+  }
+
+  /** 四象限 (spec 用户故事 72). */
+  function openMatrix() {
+    navigate({ listId: null, matrix: true, taskId: null });
+    setDrawerOpen(false);
+  }
+
+  /** Drag (or 移动到象限) in the 四象限 (spec 用户故事 73): the task takes the quadrant's 优先级. */
+  function moveMatrixTask(task: Task, index: number) {
+    if (!settings) return;
+    const priority = quadrantPriority(settings.matrixQuadrants, index);
+    if (priority === task.priority) return;
+    putTask({ ...task, priority });
+    void changeTask(task, { priority });
+  }
+
+  /** + in a quadrant: into the 收件箱 (or the quadrant's only 清单) with the quadrant's 优先级. */
+  async function addMatrixTask(index: number, title: string) {
+    if (!settings) return false;
+    const listIds = settings.matrixQuadrants[index]?.rules.listIds ?? [];
+    try {
+      putTask(await api.createTask({ title, priority: quadrantPriority(settings.matrixQuadrants, index), ...(listIds.length === 1 ? { listId: listIds[0] } : {}) }));
+      void reloadSidebar();
+      return true;
+    } catch (e) {
+      fail(e);
+      return false;
+    }
+  }
+
+  /** Save quadrant `index` (the four are stored together in 设置), then re-read the 四象限 tasks. */
+  async function saveQuadrant(index: number, quadrant: Quadrant) {
+    if (!settings) return;
+    const matrixQuadrants = settings.matrixQuadrants.map((q, i) => (i === index ? quadrant : q));
+    if (await saveSettings({ matrixQuadrants })) {
+      setDialog({ kind: 'none' });
+      setTasksEpoch((n) => n + 1);
+    }
   }
 
   /** Click on an empty day or time slot of the 日历 (spec 用户故事 71): into the 收件箱 with that date. */
@@ -958,14 +1004,14 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const timeline = view !== null && viewLayouts(view).includes('timeline') && viewOptions?.layout === 'timeline';
   const board = boardMode && !route.trash;
   // The 日历 takes the whole width too; its task opens beside it.
-  const showDetail = route.calendar ? selectedTask !== null : (!isMobile && !timeline && !board) || selectedTask !== null;
-  const sidebarVisible = isMobile ? drawerOpen : sidebarOpen && !route.calendar;
+  const showDetail = route.calendar || route.matrix ? selectedTask !== null : (!isMobile && !timeline && !board) || selectedTask !== null;
+  const sidebarVisible = isMobile ? drawerOpen : sidebarOpen && !route.calendar && !route.matrix;
 
   return (
     <div
       className={`shell ${sidebarVisible ? 'shell-sidebar-open' : 'shell-sidebar-closed'} ${selectedTask ? 'shell-has-task' : ''} ${
         route.calendar ? 'shell-calendar' : ''
-      } ${board ? 'shell-kanban' : ''}`}
+      } ${route.matrix ? 'shell-matrix' : ''} ${board ? 'shell-kanban' : ''}`}
     >
       {!isMobile && (
         <Rail
@@ -974,8 +1020,9 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onOpenSettings={() => setDialog({ kind: 'settings', tab: 'notifications' })}
           onHome={() => navigate({ listId: null, taskId: null })}
           onCalendar={() => openCalendar()}
+          onMatrix={openMatrix}
           onSearch={() => openSearch()}
-          active={route.calendar ? 'calendar' : view?.kind === 'search' ? 'search' : 'tasks'}
+          active={route.calendar ? 'calendar' : route.matrix ? 'matrix' : view?.kind === 'search' ? 'search' : 'tasks'}
         />
       )}
       {isMobile && drawerOpen && <div className="shell-scrim" aria-hidden="true" onClick={() => setDrawerOpen(false)} />}
@@ -1019,6 +1066,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onDeleteFilter={(filter) => setDialog({ kind: 'delete-filter', filter })}
           onOpenSearch={() => openSearch()}
           onOpenCalendar={() => openCalendar()}
+          onOpenMatrix={openMatrix}
         />
       )}
       {route.trash && (
@@ -1034,7 +1082,32 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onEmpty={() => setDialog({ kind: 'empty-trash' })}
         />
       )}
-      {!route.trash && !route.calendar && !(isMobile && selectedTask) && timeline && view && (
+      {route.matrix && !(isMobile && selectedTask) && (
+        <MatrixPane
+          quadrants={settings?.matrixQuadrants ?? DEFAULT_QUADRANTS}
+          tasks={listTasks}
+          lists={sidebar?.lists ?? []}
+          tags={tags ?? []}
+          selectedTaskId={route.taskId}
+          timeZone={timeZone}
+          now={now}
+          isMobile={isMobile}
+          sidebarVisible={sidebarVisible}
+          onToggleSidebar={() => setDrawerOpen((v) => !v)}
+          onSelectTask={selectTask}
+          onToggleTask={(task) => void changeTask(task, { status: task.status !== 'open' ? 'open' : 'completed' })}
+          onChangeTask={(task, patch) => void changeTask(task, patch)}
+          onDeleteTask={(task) => void deleteTask(task)}
+          onMoveTask={moveMatrixTask}
+          onAddTask={addMatrixTask}
+          onEditQuadrant={(index) => setDialog({ kind: 'quadrant', index })}
+          onResetQuadrant={(index) => {
+            const quadrant = DEFAULT_QUADRANTS[index];
+            if (quadrant) void saveQuadrant(index, quadrant);
+          }}
+        />
+      )}
+      {!route.trash && !route.calendar && !route.matrix && !(isMobile && selectedTask) && timeline && view && (
         <TimelinePane
           key={viewKey(view)}
           view={view}
@@ -1073,7 +1146,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onMoveTask={moveCalendarTask}
         />
       )}
-      {!route.trash && !route.calendar && !(isMobile && selectedTask) && !timeline && (
+      {!route.trash && !route.calendar && !route.matrix && !(isMobile && selectedTask) && !timeline && (
         <TaskListPane
           // A new view starts with its sections expanded.
           key={view ? viewKey(view) : 'none'}
@@ -1248,6 +1321,16 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           tags={tags ?? []}
           onCancel={() => setDialog({ kind: 'none' })}
           onSave={(draft) => saveFilter(draft, dialog.filter)}
+        />
+      )}
+      {dialog.kind === 'quadrant' && settings?.matrixQuadrants[dialog.index] && (
+        <FilterDialog
+          kind="quadrant"
+          filter={settings.matrixQuadrants[dialog.index] ?? null}
+          lists={sidebar?.lists ?? []}
+          tags={tags ?? []}
+          onCancel={() => setDialog({ kind: 'none' })}
+          onSave={(draft) => saveQuadrant(dialog.index, draft)}
         />
       )}
       {dialog.kind === 'delete-filter' && (

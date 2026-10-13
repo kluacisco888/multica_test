@@ -2,9 +2,11 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
   DEFAULT_SETTINGS,
   mergeViewOptions,
+  storedQuadrants,
   smartListIdSchema,
   themeColorSchema,
   themeModeSchema,
+  type Quadrant,
   type Settings,
   type ViewOptions,
 } from '@dida/shared';
@@ -24,7 +26,7 @@ function liveSettingsWhere(userId: string) {
 }
 
 function toSettings(row: SettingsRow | undefined): Settings {
-  if (!row) return { ...DEFAULT_SETTINGS };
+  if (!row) return { ...DEFAULT_SETTINGS, matrixQuadrants: storedQuadrants(null) };
   return {
     timeZone: row.timeZone,
     // Ids a later version no longer knows are dropped rather than failing the read.
@@ -37,6 +39,8 @@ function toSettings(row: SettingsRow | undefined): Settings {
     // A mode / colour a later version dropped falls back to the default.
     themeMode: themeModeSchema.catch(DEFAULT_SETTINGS.themeMode).parse(row.themeMode),
     themeColor: themeColorSchema.catch(DEFAULT_SETTINGS.themeColor).parse(row.themeColor),
+    // Unchanged (null) or unreadable quadrants are the default ones.
+    matrixQuadrants: storedQuadrants(row.matrixQuadrants),
   };
 }
 
@@ -48,6 +52,8 @@ export interface SettingsPatch {
   /** Merged per view; null resets a view to its default layout. */
   viewOptions?: Record<string, ViewOptions | null>;
   allDayReminderTime?: string;
+  /** All four 四象限 quadrants; null goes back to the defaults. */
+  matrixQuadrants?: Quadrant[] | null;
 }
 
 export async function readSettings(db: Executor, userId: string): Promise<Settings> {
@@ -64,6 +70,6 @@ export async function writeSettings(ops: SyncOps, tx: Tx, userId: string, patch:
     ...rest,
     ...(viewOptions ? { viewOptions: mergeViewOptions(existing?.viewOptions ?? {}, viewOptions) } : {}),
   };
-  if (!existing) return toSettings(await ops.insert(userSettings, { ...DEFAULT_SETTINGS, ...columns }));
+  if (!existing) return toSettings(await ops.insert(userSettings, { ...DEFAULT_SETTINGS, matrixQuadrants: null, ...columns }));
   return toSettings((await ops.update(userSettings, existing.id, columns)) ?? undefined);
 }

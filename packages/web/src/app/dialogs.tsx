@@ -176,15 +176,19 @@ function toggled<T>(values: readonly T[], value: T, on: boolean): T[] {
 /**
  * Create or edit a 过滤器 (spec 用户故事 62): a name and four conditions. Any
  * value ticked in a condition matches; every condition with a tick must match.
+ * A 四象限 quadrant's rules (72) are edited with the same dialog (`kind`).
  */
 export function FilterDialog({
   filter,
+  kind = 'filter',
   lists,
   tags,
   onCancel,
   onSave,
 }: {
-  filter: Filter | null;
+  filter: Pick<Filter, 'name' | 'rules'> | null;
+  /** `quadrant`: editing a 四象限 quadrant rather than a 过滤器. */
+  kind?: 'filter' | 'quadrant';
   /** 清单 in sidebar order. */
   lists: TaskList[];
   /** 标签 in display order. */
@@ -206,7 +210,7 @@ export function FilterDialog({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!name.trim()) {
-      setError('请输入过滤器名称');
+      setError(kind === 'quadrant' ? '请输入象限名称' : '请输入过滤器名称');
       return;
     }
     setSaving(true);
@@ -215,7 +219,7 @@ export function FilterDialog({
   }
 
   return (
-    <Dialog title={filter ? '编辑过滤器' : '添加过滤器'} onClose={onCancel} className="filter-dialog">
+    <Dialog title={kind === 'quadrant' ? '编辑象限' : filter ? '编辑过滤器' : '添加过滤器'} onClose={onCancel} className="filter-dialog">
       <form className="form" onSubmit={submit} noValidate>
         <div className="field">
           <label htmlFor={`${id}-name`}>名称</label>

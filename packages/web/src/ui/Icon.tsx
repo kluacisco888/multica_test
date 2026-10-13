@@ -122,6 +122,15 @@ const paths = {
       <path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" />
     </>
   ),
+  /** 四象限: four rounded petals, like the reference's rail entry. */
+  matrix: (
+    <>
+      <rect x="4" y="4" width="7" height="7" rx="3.5" />
+      <rect x="13" y="4" width="7" height="7" rx="3.5" />
+      <rect x="4" y="13" width="7" height="7" rx="3.5" />
+      <rect x="13" y="13" width="7" height="7" rx="3.5" />
+    </>
+  ),
   settings: (
     <>
       <circle cx="12" cy="12" r="2.75" />

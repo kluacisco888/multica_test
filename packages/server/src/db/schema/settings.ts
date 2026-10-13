@@ -27,6 +27,8 @@ export const userSettings = pgTable(
      */
     themeMode: text().notNull().default('light'),
     themeColor: text().notNull().default('blue'),
+    /** 四象限 names and rules (spec 用户故事 72); null until changed: the default quadrants. */
+    matrixQuadrants: jsonb().$type<unknown>(),
   },
   (t) => [
     syncIndex('user_settings', t),

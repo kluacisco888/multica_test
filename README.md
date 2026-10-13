@@ -170,8 +170,9 @@ CI 定义在 `.github/workflows/ci.yml`，在 GitHub Actions 上对每个 PR 和
 | `kind`（PATCH） | `text` ⇄ `checklist`：描述每个非空行变成一个检查项（去掉 `- `、`1. `、`[x]` 等列表标记，`[x]` 记为已勾选），描述清空；切回时每个检查项变成一行描述（勾选状态不保留），检查项删除（墓碑） |
 | `GET/POST /api/tasks/:id/checklist-items` | 检查项列表 / 新建（只能加到检查清单模式的任务上，否则 400 `not_checklist`），默认排在最后 |
 | `PATCH/DELETE /api/checklist-items/:id` | 勾选、改文字、`sortOrder` 排序；删除是软删除。检查项在 `/api/changes` 里的实体类型是 `checklistItem` |
-| `GET/PATCH /api/settings` | 设置：`timeZone`（IANA 名称，默认 `Asia/Shanghai`）、`hiddenSmartLists`（侧栏隐藏的智能清单）、`viewOptions`（每个视图的排序 / 分组和 `layout`：`list` 列表、`timeline` 时间线，不写就是列表；按视图合并，传 `null` 恢复默认）。第一次修改时才建行，同步类型 `settings` |
+| `GET/PATCH /api/settings` | 设置：`timeZone`（IANA 名称，默认 `Asia/Shanghai`）、`hiddenSmartLists`（侧栏隐藏的智能清单）、`viewOptions`（每个视图的排序 / 分组和 `layout`：`list` 列表、`timeline` 时间线，不写就是列表；按视图合并，传 `null` 恢复默认）。`matrixQuadrants`：四象限的四个象限（`name` + 和过滤器相同的 `rules`），整体替换，必须正好 4 个，传 `null` 恢复默认；规则只能引用自己的清单和标签（400 `invalid_list` / `invalid_tags`），已删除的清单和标签读出时去掉。第一次修改时才建行，同步类型 `settings` |
 | `GET /api/tasks?smart=` | 智能清单：`today` / `tomorrow` / `week` / `completed` / `notImportant`，规则在 `packages/shared/src/smart-lists.ts`。`excludeFromSmartLists`（不进智能清单）的清单和归档的清单不参与，判断只在 `listInSmartLists()` 一处，服务端和前端共用 |
+| `GET /api/tasks?view=matrix` | 四象限：未完成和已完成的任务（不含放弃、已删除和归档清单里的），只返回某个象限会收下的。默认象限按优先级高 / 中 / 低 / 无划分；一个任务只进第一个符合规则的象限，哪个象限都不收的不显示。规则和分象限在 `packages/shared/src/matrix.ts`（`quadrantMatcher`），服务端和前端共用。拖到另一个象限就是 `PATCH /api/tasks/:id` 改 `priority`：象限规则里只有一个优先级时用它，否则按位置（一高、二中、三低、四无，`quadrantPriority`） |
 | `GET /api/smart-lists` | 侧栏数量：今天 / 明天 / 最近7天的未完成任务数 |
 | `GET/POST/PATCH/DELETE /api/filters[/:id]`、`GET /api/tasks?filterId=` | 过滤器：`rules` 是 `listIds`、`tagIds`（父标签含子标签）、`untagged`、`dates`（`overdue`/`today`/`tomorrow`/`week`/`noDate`）、`priorities`；同一项内任一满足，不同项全部满足，空项不限制。不进智能清单的清单照样能被选中。只能引用自己的清单和标签（400 `invalid_list` / `invalid_tags`），同步类型 `filter` |
 | `GET /api/search?q=` | 全局搜索：标题、描述、检查项、评论（不分大小写，`%` `_` 按字面），返回 `tasks`、`matches`（每个任务在哪些字段命中）、`truncated`（最多 200 条）。每个字段是 `src/search.ts` 里 `searchSources` 的一项；不按清单过滤，所以不进智能清单和归档的清单都能搜到 |

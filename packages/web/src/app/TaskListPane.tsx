@@ -112,6 +112,7 @@ const EMPTY_HINTS: Record<ListPaneView['kind'], string> = {
   filter: '没有符合过滤条件的任务',
   search: '',
   calendar: '',
+  matrix: '',
 };
 
 /**

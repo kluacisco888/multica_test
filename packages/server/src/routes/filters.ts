@@ -44,11 +44,11 @@ async function liveFilters(db: Executor, userId: string): Promise<FilterRow[]> {
 }
 
 /**
- * Rules to store: the user's live 清单 and 标签 are kept, the user's deleted
+ * Rules to store (过滤器 and 四象限): the user's live 清单 and 标签 are kept, the user's deleted
  * ones are dropped (an old dialog may still send them), anything else —
  * another user's or never existing — is a 400.
  */
-function checkRules(rules: FilterRules, refs: RuleRefs): FilterRules {
+export function checkRules(rules: FilterRules, refs: RuleRefs): FilterRules {
   if (!rules.listIds.every((id) => refs.liveLists.has(id) || refs.deletedLists.has(id))) throw new Rejection(invalidList);
   if (!rules.tagIds.every((id) => refs.liveTags.has(id) || refs.deletedTags.has(id))) throw new Rejection(invalidTags);
   return liveRules(rules, refs.liveLists, refs.liveTags);

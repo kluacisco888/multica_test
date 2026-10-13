@@ -27,7 +27,7 @@ import { endOfChildren, inKeyOrder, pinnedTasks, placeTask, topOfList, topOfPinn
 import { readSettings } from '../settings.js';
 import { moveToTrash } from '../trash.js';
 import { findOwned, type SyncOps } from '../sync/sync.js';
-import { calendarTasks, filterTasks, smartListTasks } from '../task-views.js';
+import { calendarTasks, filterTasks, matrixTasks, smartListTasks } from '../task-views.js';
 import {
   ancestorsOf,
   checklistFromDescription,
@@ -99,6 +99,10 @@ export function taskRoutes(app: FastifyInstance) {
       const filter = await findOwned(app.db, filters, userId, query.data.filterId);
       if (!filter) return notFound(reply);
       const response: TasksResponse = { tasks: await filterTasks(app.db, userId, filter, app.clock.now()) };
+      return response;
+    }
+    if ('view' in query.data) {
+      const response: TasksResponse = { tasks: await matrixTasks(app.db, userId, app.clock.now()) };
       return response;
     }
     if ('from' in query.data) {
