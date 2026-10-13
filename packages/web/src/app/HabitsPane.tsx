@@ -18,7 +18,7 @@ import {
   type HabitGoal,
   type Streak,
 } from '@dida/shared';
-import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import * as api from '../api.js';
 import { Button, Dialog, IconButton, MenuButton } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
@@ -54,24 +54,27 @@ function streakText(s: Streak): string {
 export function HabitsPane(props: HabitsPaneProps) {
   const { today, isMobile, onError } = props;
   const [archived, setArchived] = useState(false);
-  const [habits, setHabits] = useState<Habit[] | null>(null);
-  const [day, setDay] = useState(today);
+  /** Habits as loaded for one tab; another tab shows 正在加载… until its own arrive. */
+  const [loaded, setLoaded] = useState<{ archived: boolean; habits: Habit[] } | null>(null);
+  const habits = loaded?.archived === archived ? loaded.habits : null;
+  const setHabits = (update: (list: Habit[] | null) => Habit[] | null) =>
+    setLoaded((current) => (current ? { ...current, habits: update(current.habits) ?? [] } : current));
+  /** Day the list checks in (补打卡 on an earlier day of the strip); back to today when the date changes. */
+  const [picked, setPicked] = useState({ today, day: today });
+  const day = picked.today === today ? picked.day : today;
+  const setDay = (date: string) => setPicked({ today, day: date });
   const [dialog, setDialog] = useState<Dialogs>({ kind: 'none' });
 
-  const load = useCallback(async () => {
-    try {
-      setHabits(await api.fetchHabits(archived));
-    } catch (e) {
-      onError(errorMessage(e));
-    }
-  }, [archived, onError]);
-
   useEffect(() => {
-    setHabits(null);
-    void load();
-  }, [load]);
-
-  useEffect(() => setDay(today), [today]);
+    let live = true;
+    api
+      .fetchHabits(archived)
+      .then((list) => live && setLoaded({ archived, habits: list }))
+      .catch((e: unknown) => live && onError(errorMessage(e)));
+    return () => {
+      live = false;
+    };
+  }, [archived, onError]);
 
   const replace = (next: Habit) => setHabits((list) => list?.map((h) => (h.id === next.id ? next : h)) ?? list);
 
