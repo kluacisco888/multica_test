@@ -5,18 +5,22 @@ import {
   weekday,
   zonedDateTime,
   zonedToInstant,
+  describeRepeatFrequency,
+  type RepeatRule,
   type TaskDates,
   type TaskDatesInput,
 } from '@dida/shared';
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { Button, IconButton } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
+import { RepeatEditor, RepeatRow } from './RepeatPicker.js';
 
 /*
  * 滴答-style date picker (spec 用户故事 23–26): a popover with the tabs 日期
  * (one due date, optional time) and 时间段 (start → due, 全天 or with times),
- * a month calendar, 清除 and 确定. Timed values are entered as wall-clock time
- * in the user's time zone and saved as UTC instants.
+ * a month calendar, the 重复 row (see RepeatPicker.tsx), 清除 and 确定.
+ * Timed values are entered as wall-clock time in the user's time zone and
+ * saved as UTC instants.
  */
 
 type Mode = 'date' | 'range';
@@ -28,12 +32,17 @@ interface Draft {
   due: string | null;
   startTime: string;
   dueTime: string;
+  repeat: RepeatRule | null;
 }
 
 const DEFAULT_START_TIME = '09:00';
 const DEFAULT_DUE_TIME = '10:00';
 
-function draftFrom(dates: TaskDates | null, timeZone: string): Draft {
+function draftFrom(dates: TaskDates | null, timeZone: string, repeat: RepeatRule | null): Draft {
+  return { ...datesDraft(dates, timeZone), repeat: dates ? repeat : null };
+}
+
+function datesDraft(dates: TaskDates | null, timeZone: string): Omit<Draft, 'repeat'> {
   if (!dates) return { mode: 'date', allDay: true, start: null, due: null, startTime: DEFAULT_START_TIME, dueTime: DEFAULT_START_TIME };
   if (dates.allDay) {
     return {
@@ -71,6 +80,11 @@ function inputFrom(draft: Draft, timeZone: string): { dates: TaskDatesInput | nu
   return { dates: { allDay: false, startAt, dueAt }, error: null };
 }
 
+/** Calendar day of the due date as the user sees it. */
+function dueDay(dates: TaskDates, timeZone: string): string {
+  return dates.allDay ? dates.dueDate : zonedDateTime(dates.dueAt, timeZone).date;
+}
+
 const monthStart = (date: string) => `${date.slice(0, 7)}-01`;
 
 function addMonths(date: string, months: number): string {
@@ -91,19 +105,22 @@ const WEEK_HEADER = ['日', '一', '二', '三', '四', '五', '六'];
 
 interface TaskDateButtonProps {
   dates: TaskDates | null;
+  /** 重复规则 of the task (only meaningful with dates). */
+  repeat: RepeatRule | null;
   timeZone: string;
   now: Date;
   isMobile: boolean;
   disabled?: boolean;
-  onSave: (dates: TaskDatesInput | null) => void;
+  onSave: (dates: TaskDatesInput | null, repeat: RepeatRule | null) => void;
 }
 
 /** The detail-header date control: the current label, opening the picker. */
-export function TaskDateButton({ dates, timeZone, now, isMobile, disabled, onSave }: TaskDateButtonProps) {
+export function TaskDateButton({ dates, repeat, timeZone, now, isMobile, disabled, onSave }: TaskDateButtonProps) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const popoverId = useId();
   const label = dates ? describeTaskDates(dates, { now, timeZone }) : null;
+  const repeatText = dates && repeat ? describeRepeatFrequency(repeat, dueDay(dates, timeZone)) : null;
 
   function close() {
     setOpen(false);
@@ -119,25 +136,27 @@ export function TaskDateButton({ dates, timeZone, now, isMobile, disabled, onSav
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? popoverId : undefined}
-        aria-label={label ? `日期：${label.text}${label.overdue ? '，已过期' : ''}` : '设置日期'}
+        aria-label={label ? `日期：${label.text}${label.overdue ? '，已过期' : ''}${repeatText ? `，重复：${repeatText}` : ''}` : '设置日期'}
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
       >
         <Icon name="calendar" size={16} />
         <span>{label?.text ?? '截止日期'}</span>
+        {repeatText && <Icon name="repeat" size={14} className="date-trigger-repeat" />}
       </button>
       {open && (
         <DatePickerPopover
           id={popoverId}
           dates={dates}
+          repeat={repeat}
           timeZone={timeZone}
           today={todayIn(now, timeZone)}
           isMobile={isMobile}
           anchor={buttonRef}
           onCancel={close}
-          onSave={(value) => {
+          onSave={(value, rule) => {
             close();
-            onSave(value);
+            onSave(value, rule);
           }}
         />
       )}
@@ -148,6 +167,7 @@ export function TaskDateButton({ dates, timeZone, now, isMobile, disabled, onSav
 function DatePickerPopover({
   id,
   dates,
+  repeat,
   timeZone,
   today,
   isMobile,
@@ -157,14 +177,17 @@ function DatePickerPopover({
 }: {
   id: string;
   dates: TaskDates | null;
+  repeat: RepeatRule | null;
   timeZone: string;
   today: string;
   isMobile: boolean;
   anchor: RefObject<HTMLButtonElement | null>;
   onCancel: () => void;
-  onSave: (dates: TaskDatesInput | null) => void;
+  onSave: (dates: TaskDatesInput | null, repeat: RepeatRule | null) => void;
 }) {
-  const [draft, setDraft] = useState(() => draftFrom(dates, timeZone));
+  const [draft, setDraft] = useState(() => draftFrom(dates, timeZone, repeat));
+  /** 自定义重复 editor shown instead of the date panel. */
+  const [customRepeat, setCustomRepeat] = useState(false);
   const [editing, setEditing] = useState<'start' | 'due'>('start');
   const [view, setView] = useState(() => monthStart(draft.due ?? today));
   const ref = useRef<HTMLDivElement>(null);
@@ -186,6 +209,19 @@ function DatePickerPopover({
 
   const update = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
   const { dates: result, error } = inputFrom(draft, timeZone);
+  /** The day a new series starts on: the chosen due date, or today. */
+  const repeatAnchor = draft.due ?? today;
+
+  function setRepeat(rule: RepeatRule | null) {
+    // A 重复规则 needs a date: like 滴答, choosing one without a date starts today.
+    update(rule && !draft.due ? { repeat: rule, due: today } : { repeat: rule });
+  }
+
+  function closeCustom() {
+    setCustomRepeat(false);
+    // Focus goes back to the 重复 row once it is rendered again.
+    requestAnimationFrame(() => ref.current?.querySelector<HTMLElement>('.date-repeat-trigger')?.focus());
+  }
 
   function setMode(mode: Mode) {
     if (mode === draft.mode) return;
@@ -259,121 +295,136 @@ function DatePickerPopover({
       className={`date-popover ${isMobile ? 'date-popover-sheet' : ''}`}
       onKeyDown={onKeyDown}
     >
-      <div role="tablist" aria-label="日期类型" className="date-tabs">
-        {tab('date', '日期')}
-        {tab('range', '时间段')}
-      </div>
-      <div id={`${uid}-panel`} role="tabpanel" aria-labelledby={`${uid}-tab-${draft.mode}`} className="date-panel">
-        {draft.mode === 'date' ? (
-          <div className="date-quick" role="group" aria-label="快捷日期">
-            {(
-              [
-                ['今天', today],
-                ['明天', addDays(today, 1)],
-                ['下周', addDays(today, 7)],
-                ['下月', addMonths(today, 1)],
-              ] as const
-            ).map(([text, date]) => (
-              <button key={text} type="button" className="date-quick-button" title={fullDateLabel(date)} onClick={() => quick(date)}>
-                {text}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="date-range-ends" role="group" aria-label="选择要修改的日期">
-            {(['start', 'due'] as const).map((end) => {
-              const value = end === 'start' ? draft.start : draft.due;
-              return (
-                <button
-                  key={end}
-                  type="button"
-                  className="date-range-end"
-                  aria-pressed={editing === end}
-                  onClick={() => setEditing(end)}
-                >
-                  <span className="date-range-end-label">{end === 'start' ? '开始' : '结束'}</span>
-                  <span>{value ? fullDateLabel(value) : '未设置'}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        <MonthCalendar
-          view={view}
-          today={today}
-          draft={draft}
-          onView={setView}
-          onPick={pick}
+      {customRepeat ? (
+        <RepeatEditor
+          value={draft.repeat}
+          anchor={repeatAnchor}
+          onCancel={closeCustom}
+          onSave={(rule) => {
+            setRepeat(rule);
+            closeCustom();
+          }}
         />
-
-        {draft.mode === 'date' ? (
-          <div className="date-row">
-            <Icon name="clock" size={16} />
-            <label htmlFor={`${uid}-time`}>时间</label>
-            <input
-              id={`${uid}-time`}
-              type="time"
-              className="date-time-input"
-              value={draft.allDay ? '' : draft.dueTime}
-              onChange={(e) =>
-                e.target.value
-                  ? update({ allDay: false, dueTime: e.target.value, due: draft.due ?? today })
-                  : update({ allDay: true })
-              }
-            />
-            {!draft.allDay && (
-              <IconButton icon="close" size={14} label="清除时间" className="date-row-clear" onClick={() => update({ allDay: true })} />
-            )}
+      ) : (
+        <>
+          <div role="tablist" aria-label="日期类型" className="date-tabs">
+            {tab('date', '日期')}
+            {tab('range', '时间段')}
           </div>
-        ) : (
-          <>
-            <div className="date-row">
-              <input
-                id={`${uid}-allday`}
-                type="checkbox"
-                className="date-allday"
-                checked={draft.allDay}
-                onChange={(e) => update({ allDay: e.target.checked })}
-              />
-              <label htmlFor={`${uid}-allday`}>全天</label>
-            </div>
-            {!draft.allDay && (
-              <div className="date-row date-row-times">
-                <label htmlFor={`${uid}-start-time`}>开始时间</label>
-                <input
-                  id={`${uid}-start-time`}
-                  type="time"
-                  className="date-time-input"
-                  required
-                  value={draft.startTime}
-                  onChange={(e) => e.target.value && update({ startTime: e.target.value })}
-                />
-                <label htmlFor={`${uid}-due-time`}>结束时间</label>
-                <input
-                  id={`${uid}-due-time`}
-                  type="time"
-                  className="date-time-input"
-                  required
-                  value={draft.dueTime}
-                  onChange={(e) => e.target.value && update({ dueTime: e.target.value })}
-                />
+          <div id={`${uid}-panel`} role="tabpanel" aria-labelledby={`${uid}-tab-${draft.mode}`} className="date-panel">
+            {draft.mode === 'date' ? (
+              <div className="date-quick" role="group" aria-label="快捷日期">
+                {(
+                  [
+                    ['今天', today],
+                    ['明天', addDays(today, 1)],
+                    ['下周', addDays(today, 7)],
+                    ['下月', addMonths(today, 1)],
+                  ] as const
+                ).map(([text, date]) => (
+                  <button key={text} type="button" className="date-quick-button" title={fullDateLabel(date)} onClick={() => quick(date)}>
+                    {text}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="date-range-ends" role="group" aria-label="选择要修改的日期">
+                {(['start', 'due'] as const).map((end) => {
+                  const value = end === 'start' ? draft.start : draft.due;
+                  return (
+                    <button
+                      key={end}
+                      type="button"
+                      className="date-range-end"
+                      aria-pressed={editing === end}
+                      onClick={() => setEditing(end)}
+                    >
+                      <span className="date-range-end-label">{end === 'start' ? '开始' : '结束'}</span>
+                      <span>{value ? fullDateLabel(value) : '未设置'}</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
-          </>
-        )}
-        {error && (
-          <p className="date-error" role="alert">
-            {error}
-          </p>
-        )}
-      </div>
-      <div className="date-footer">
-        <Button onClick={() => onSave(null)}>清除</Button>
-        <Button variant="primary" disabled={error !== null} onClick={() => onSave(result)}>
-          确定
-        </Button>
-      </div>
+
+            <MonthCalendar
+              view={view}
+              today={today}
+              draft={draft}
+              onView={setView}
+              onPick={pick}
+            />
+
+            {draft.mode === 'date' ? (
+              <div className="date-row">
+                <Icon name="clock" size={16} />
+                <label htmlFor={`${uid}-time`}>时间</label>
+                <input
+                  id={`${uid}-time`}
+                  type="time"
+                  className="date-time-input"
+                  value={draft.allDay ? '' : draft.dueTime}
+                  onChange={(e) =>
+                    e.target.value
+                      ? update({ allDay: false, dueTime: e.target.value, due: draft.due ?? today })
+                      : update({ allDay: true })
+                  }
+                />
+                {!draft.allDay && (
+                  <IconButton icon="close" size={14} label="清除时间" className="date-row-clear" onClick={() => update({ allDay: true })} />
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="date-row">
+                  <input
+                    id={`${uid}-allday`}
+                    type="checkbox"
+                    className="date-allday"
+                    checked={draft.allDay}
+                    onChange={(e) => update({ allDay: e.target.checked })}
+                  />
+                  <label htmlFor={`${uid}-allday`}>全天</label>
+                </div>
+                {!draft.allDay && (
+                  <div className="date-row date-row-times">
+                    <label htmlFor={`${uid}-start-time`}>开始时间</label>
+                    <input
+                      id={`${uid}-start-time`}
+                      type="time"
+                      className="date-time-input"
+                      required
+                      value={draft.startTime}
+                      onChange={(e) => e.target.value && update({ startTime: e.target.value })}
+                    />
+                    <label htmlFor={`${uid}-due-time`}>结束时间</label>
+                    <input
+                      id={`${uid}-due-time`}
+                      type="time"
+                      className="date-time-input"
+                      required
+                      value={draft.dueTime}
+                      onChange={(e) => e.target.value && update({ dueTime: e.target.value })}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+            <RepeatRow value={draft.repeat} anchor={repeatAnchor} onChange={setRepeat} onCustom={() => setCustomRepeat(true)} />
+            {error && (
+              <p className="date-error" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+          <div className="date-footer">
+            <Button onClick={() => onSave(null, null)}>清除</Button>
+            <Button variant="primary" disabled={error !== null} onClick={() => onSave(result, result ? draft.repeat : null)}>
+              确定
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 

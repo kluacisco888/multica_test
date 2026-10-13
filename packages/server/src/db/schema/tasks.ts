@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, date, index, pgTable, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { boolean, check, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import type { RepeatBasis, RepeatRule } from '@dida/shared';
 import { syncColumns, syncIndex } from '../../sync/columns.js';
 
 /** 文件夹: groups 清单, one level deep, never holds tasks directly. */
@@ -83,6 +84,14 @@ export const tasks = pgTable(
     trashRootId: uuid(),
     /** Content cleared (彻底删除 or the 30-day cleanup); the tombstone stays (ADR-0004). */
     purgedAt: timestamp({ withTimezone: true }),
+    /** 重复规则 (spec 用户故事 41–50); null: not a 重复任务. Needs a date. */
+    repeat: jsonb().$type<RepeatRule>(),
+    /** 1-based position in the 重复任务 series (for “重复 N 次”). */
+    repeatIndex: integer().notNull().default(1),
+    /** The instance whose completion generated this one; null for the first. */
+    repeatPrevId: uuid().references((): AnyPgColumn => tasks.id),
+    /** Inputs the next-instance date was computed from, to recompute it after 节假日数据更新. */
+    repeatBasis: jsonb().$type<RepeatBasis>(),
   },
   (t) => [
     syncIndex('tasks', t),
@@ -100,6 +109,8 @@ export const tasks = pgTable(
       END`,
     ),
     check('tasks_kind_check', sql`${t.kind} IN ('text', 'checklist')`),
+    index('tasks_repeat_prev_idx').on(t.repeatPrevId),
+    check('tasks_repeat_check', sql`${t.repeat} IS NULL OR ${t.allDay} IS NOT NULL`),
     check('tasks_priority_check', sql`${t.priority} IN ('none', 'low', 'medium', 'high')`),
   ],
 );

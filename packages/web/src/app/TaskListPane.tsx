@@ -1,6 +1,8 @@
 import {
   buildTaskTree,
+  describeRepeatFrequency,
   describeTaskDates,
+  dueDayOf,
   planIndent,
   PRIORITY_LABELS,
   type Tag,
@@ -303,6 +305,7 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
   const done = task.status !== 'open';
   const abandoned = task.status === 'abandoned';
   const date = task.dates ? describeTaskDates(task.dates, { now, timeZone }) : null;
+  const repeatText = task.dates && task.repeat ? describeRepeatFrequency(task.repeat, dueDayOf(task.dates)) : null;
   // Completed tasks are never shown as overdue.
   const overdue = date?.overdue === true && !done;
   const isCollapsed = collapsed.has(task.id);
@@ -383,6 +386,12 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
               <span className="visually-hidden">有描述</span>
             </span>
           )
+        )}
+        {repeatText && (
+          <span className="task-row-meta" title={repeatText}>
+            <Icon name="repeat" size={14} />
+            <span className="visually-hidden">{`重复：${repeatText}`}</span>
+          </span>
         )}
         {date && (
           <span className={`task-row-date ${overdue ? 'date-overdue' : ''}`}>

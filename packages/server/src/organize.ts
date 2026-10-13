@@ -132,13 +132,14 @@ export function taskToApi(row: TaskRow): Task {
     dates: taskDatesToApi(row),
     priority: row.priority,
     tagIds: row.tagIds,
+    repeat: row.repeat,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
     revision: row.revision,
   };
 }
 
-function taskDatesToApi(row: TaskRow): TaskDates | null {
+export function taskDatesToApi(row: TaskRow): TaskDates | null {
   if (row.allDay === null) return null;
   if (row.allDay) return { allDay: true, startDate: row.startDate, dueDate: row.dueDate as string };
   return {
