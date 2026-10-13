@@ -301,20 +301,7 @@ export function taskRoutes(app: FastifyInstance) {
               await moveToTrash(ops, tx, userId, task, await liveTasksOfList(tx, userId, task.listId));
               continue;
             }
-            const patch: UpdateTaskBody =
-              action.op === 'complete'
-                ? { status: 'completed' }
-                : action.op === 'abandon'
-                  ? { status: 'abandoned' }
-                  : action.op === 'move'
-                    ? { listId: action.listId }
-                    : action.op === 'dates'
-                      ? { dates: action.dates }
-                      : action.op === 'priority'
-                        ? { priority: action.priority }
-                        : action.op === 'pin'
-                          ? { pinned: action.pinned }
-                          : { tagIds: [...task.tagIds.filter((t) => !action.remove.includes(t)), ...action.add.filter((t) => !task.tagIds.includes(t))] };
+            const patch = batchPatch(action, task);
             if (patch.tagIds && patch.tagIds.length > TASK_MAX_TAGS) throw new Rejection(tooManyTags);
             changed.set(id, await applyTaskPatch(app, ops, tx, userId, task.id, patch));
           }
@@ -352,6 +339,27 @@ export function taskRoutes(app: FastifyInstance) {
 }
 
 type UpdateTaskBody = z.output<typeof updateTaskRequestSchema>;
+
+/** The single-task change a 批量操作 (other than 删除) makes to `task`. */
+function batchPatch(action: Exclude<z.output<typeof batchRequestSchema>['action'], { op: 'delete' }>, task: TaskRow): UpdateTaskBody {
+  switch (action.op) {
+    case 'complete':
+      return { status: 'completed' };
+    case 'abandon':
+      return { status: 'abandoned' };
+    case 'move':
+      return { listId: action.listId };
+    case 'dates':
+      return { dates: action.dates };
+    case 'priority':
+      return { priority: action.priority };
+    case 'pin':
+      return { pinned: action.pinned };
+    case 'tags':
+      // Keep the task's other 标签 in their order; new ones go last.
+      return { tagIds: [...task.tagIds.filter((t) => !action.remove.includes(t)), ...action.add.filter((t) => !task.tagIds.includes(t))] };
+  }
+}
 
 /**
  * One task change (`PATCH /api/tasks/:id`, and each task of a 批量操作) inside
