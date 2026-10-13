@@ -227,7 +227,14 @@ export function createTrashService({ db, sync, clock, files, log }: TrashService
           ? await tx
               .select({ id: kanbanColumns.id })
               .from(kanbanColumns)
-              .where(and(eq(kanbanColumns.id, root.columnId), eq(kanbanColumns.listId, listId), isNull(kanbanColumns.deletedAt)))
+              .where(
+                and(
+                  eq(kanbanColumns.id, root.columnId),
+                  eq(kanbanColumns.userId, userId),
+                  eq(kanbanColumns.listId, listId),
+                  isNull(kanbanColumns.deletedAt),
+                ),
+              )
           : [];
 
         const restored = await ops.restore(tasks, root.id, {
