@@ -216,6 +216,15 @@ const result = await app.notifier.send(userId, channelId, { title: '提醒：交
 
 排序键是分数索引（`packages/shared/src/sort-key.ts`），拖拽只改被拖动的那一条；侧栏拖放规则在 `packages/shared/src/sidebar-order.ts`。界面的设计 token 和组件约定见 `packages/web/src/ui/README.md`。
 
+### 日历视图
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /api/tasks?from=YYYY-MM-DD&to=YYYY-MM-DD` | 日历一页里的任务：按用户**当前**时区，任何一天落在 `from`–`to` 里的未完成和已完成任务（日期区间只要有重叠就算），不含放弃的、已删除的和归档清单里的。最多 62 天，`from` 晚于 `to` 或超长返回 400 |
+| `GET /api/calendar/days?from=&to=` | 每天的农历（`lunarMonthName`、`lunarDayName`）、节日（传统节日在前，再是 `solarFestivals()` 的公历节日，如国庆节、万圣夜）、节气、格子里显示的 `label` 和 `labelKind`（节日 > 节气 > 初一显示月份 > 农历日；节日用节日色），以及 `mark`：`holiday`（休）/ `makeup_workday`（班）和所属假日名。农历来自 `@dida/shared/lunar`，休 / 班来自 `app.holidays.calendar()`，和重复任务用的工作日日历是同一份数据 |
+
+界面在 `/calendar`（上次用的视图、今天）和 `/calendar/<month|week|day|multiDay>/<日期>`：月视图每周一行（和参照一样从周日开始），日期区间画成跨天的长条；视图在标题右边的下拉框里切换；周 / 日 / 多日（3 天）上面是日期和全天任务，下面是 24 小时时间格。拖动改日期的规则都在 `packages/shared/src/calendar.ts`：月视图里拖到别的日子是整体平移（`moveTaskByDays`，带时间的任务保持当前时区下的钟点，跨夏令时也一样）；拖到时间格是从那个时间开始、时长不变（`placeTaskAt`，全天任务变成一个时间点）；拖到全天栏变成全天任务、天数不变（`placeTaskOnDay`）。点空白的日子或时间格新建任务（进收件箱）。拖拽只支持鼠标；键盘和触屏打开任务后在详情里改日期。
+
 ### 节假日数据与农历（ADR-0006）
 
 - 后端每天 04:15（`DEFAULT_TIMEZONE`）和每次启动时，从 `HOLIDAY_DATA_URL`（默认 jsDelivr 上的 NateScarlet/holiday-cn）拉取当年和下一年的 `<year>.json`，存进 `holiday_years` 表。定时任务用 pg-boss（表在数据库的 `pgboss` schema 里，启动时自动安装）。

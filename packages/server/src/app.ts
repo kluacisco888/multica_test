@@ -14,6 +14,7 @@ import { createNotifier, type Notifier } from './notify/notifier.js';
 import { adminRoutes } from './routes/admin.js';
 import { attachmentRoutes } from './routes/attachments.js';
 import { authRoutes } from './routes/auth.js';
+import { calendarRoutes } from './routes/calendar.js';
 import { commentRoutes } from './routes/comments.js';
 import { channelRoutes } from './routes/channels.js';
 import { changesRoutes } from './routes/changes.js';
@@ -130,6 +131,7 @@ export async function buildApp(deps: AppDeps) {
   taskRoutes(app);
   settingsRoutes(app);
   holidayRoutes(app);
+  calendarRoutes(app);
   channelRoutes(app, { cipher });
   checklistRoutes(app);
   tagRoutes(app);

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { calendarRangeSchema } from './calendar.js';
 import { sortKeySchema } from './lists.js';
 import { repeatRuleSchema } from './repeat-rule.js';
 import { smartListIdSchema } from './smart-lists.js';
@@ -138,6 +139,8 @@ export const tasksQuerySchema = z.union([
   z.object({ tagId: z.uuid() }).strict(),
   z.object({ smart: smartListIdSchema }).strict(),
   z.object({ filterId: z.uuid() }).strict(),
+  /** 日历视图: open and completed tasks on any day `from`–`to` in the user's time zone (spec 用户故事 69). */
+  calendarRangeSchema,
 ]);
 export type TasksQuery = z.infer<typeof tasksQuerySchema>;
 

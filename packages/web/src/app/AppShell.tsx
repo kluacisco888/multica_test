@@ -1,6 +1,11 @@
 import {
+  calendarDays,
+  calendarModeSchema,
   DEFAULT_TIME_ZONE,
   datesAsStored,
+  todayIn,
+  type CalendarDay,
+  type CalendarMode,
   type Filter,
   type SearchMatchField,
   type SmartListId,
@@ -38,6 +43,7 @@ import {
   type ListDraft,
   type TagDraft,
 } from './dialogs.js';
+import { CalendarPane } from './CalendarPane.js';
 import { Rail } from './Rail.js';
 import { SettingsDialog, type SettingsTab } from './SettingsDialog.js';
 import { MOBILE_QUERY, useMediaQuery, useRoute } from './route.js';
@@ -61,6 +67,18 @@ type DialogState =
   | { kind: 'empty-trash' }
   | { kind: 'filter'; filter: Filter | null }
   | { kind: 'delete-filter'; filter: Filter };
+
+const CALENDAR_MODE_KEY = 'dida.calendar.mode';
+
+/** The 日历 view last used on this device (月 by default). */
+function storedCalendarMode(): CalendarMode {
+  try {
+    const parsed = calendarModeSchema.safeParse(window.localStorage.getItem(CALENDAR_MODE_KEY));
+    return parsed.success ? parsed.data : 'month';
+  } catch {
+    return 'month';
+  }
+}
 
 type ScreenTasks = { scope: string; items: Task[]; matches?: Record<string, SearchMatchField[]> };
 
@@ -163,22 +181,51 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     }
   }
 
+  const timeZone = settings?.timeZone ?? DEFAULT_TIME_ZONE;
+  const today = todayIn(now, timeZone);
+  const calendarMode = route.calendar ? (route.calendar.mode ?? storedCalendarMode()) : null;
+  const calendarAnchor = route.calendar ? (route.calendar.date ?? today) : null;
+  const calendarRange = useMemo(() => {
+    if (!calendarMode || !calendarAnchor) return null;
+    const days = calendarDays(calendarMode, calendarAnchor);
+    return { from: days[0] as string, to: days.at(-1) as string };
+  }, [calendarMode, calendarAnchor]);
+  /** 农历 / 节日 / 休 / 班 of the 日历 days on screen. */
+  const [calendarInfo, setCalendarInfo] = useState<ReadonlyMap<string, CalendarDay>>(new Map());
+
   const inbox = sidebar?.lists.find((l) => l.isInbox) ?? null;
   const currentTag = route.tagId ? (tags?.find((t) => t.id === route.tagId) ?? null) : null;
   const currentFilter = route.filterId ? (filters?.find((f) => f.id === route.filterId) ?? null) : null;
-  const crossListRoute = Boolean(route.trash || route.tagId || route.smartId || route.filterId || (route.search !== null && route.search !== undefined));
+  const crossListRoute = Boolean(route.calendar || route.trash || route.tagId || route.smartId || route.filterId || (route.search !== null && route.search !== undefined));
   const currentList = useMemo(() => {
     if (!sidebar || crossListRoute) return null;
     return (route.listId ? sidebar.lists.find((l) => l.id === route.listId) : inbox) ?? null;
   }, [sidebar, route.listId, crossListRoute, inbox]);
   const view: ListPaneView | null = useMemo(() => {
+    if (calendarRange) return { kind: 'calendar', range: calendarRange };
     if (route.trash) return null;
     if (route.search !== null && route.search !== undefined) return { kind: 'search', query: route.search };
     if (route.smartId) return sidebar ? { kind: 'smart', id: route.smartId, inbox } : null;
     if (currentFilter) return { kind: 'filter', filter: currentFilter, inbox };
     if (currentTag) return { kind: 'tag', tag: currentTag, inbox };
     return currentList ? { kind: 'list', list: currentList } : null;
-  }, [route.trash, route.search, route.smartId, sidebar, currentFilter, currentTag, currentList, inbox]);
+  }, [calendarRange, route.trash, route.search, route.smartId, sidebar, currentFilter, currentTag, currentList, inbox]);
+
+  useEffect(() => {
+    if (!calendarRange) return;
+    let cancelled = false;
+    api
+      .fetchCalendarDays(calendarRange)
+      .then((days) => {
+        if (!cancelled) setCalendarInfo(new Map(days.map((d) => [d.date, d])));
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) fail(e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [calendarRange, fail]);
 
   const reloadTrash = useCallback(async () => {
     try {
@@ -246,7 +293,6 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
 
   // Dates are shown in the user's time zone, so wait for the settings too.
   const listTasks = settings && tasks && tasks.scope === currentScope ? tasks.items : null;
-  const timeZone = settings?.timeZone ?? DEFAULT_TIME_ZONE;
   const selectedTask = listTasks?.find((t) => t.id === route.taskId) ?? null;
   const viewOptions = view ? viewOptionsFor(view, settings?.viewOptions) : null;
   // Tab / Shift+Tab only make sense in a 清单 shown in its own order.
@@ -286,7 +332,40 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   }
 
   function selectTask(taskId: string | null) {
-    navigate({ ...route, taskId });
+    // In the 日历 the URL names the view and date, so the task stays on the same page.
+    const calendar = calendarMode && calendarAnchor ? { mode: calendarMode, date: calendarAnchor } : null;
+    navigate({ ...route, calendar, taskId });
+  }
+
+  /** 日历 (spec 用户故事 69): `mode` and `date` default to the last used view and today. */
+  function openCalendar(mode?: CalendarMode, date?: string) {
+    if (mode) {
+      try {
+        window.localStorage.setItem(CALENDAR_MODE_KEY, mode);
+      } catch {
+        // Private mode: the view is still in the URL.
+      }
+    }
+    navigate({ listId: null, calendar: { mode: mode ?? null, date: date ?? null }, taskId: null });
+    setDrawerOpen(false);
+  }
+
+  /** Click on an empty day or time slot of the 日历 (spec 用户故事 71): into the 收件箱 with that date. */
+  async function addCalendarTask(title: string, dates: TaskDatesInput) {
+    try {
+      putTask(await api.createTask({ title, dates }));
+      void reloadSidebar();
+      return true;
+    } catch (e) {
+      fail(e);
+      return false;
+    }
+  }
+
+  /** Drag in the 日历: move at once, then save (a failure re-reads the tasks). */
+  function moveCalendarTask(task: Task, dates: TaskDatesInput) {
+    putTask({ ...task, dates: datesAsStored(dates, timeZone) });
+    void changeTask(task, { dates });
   }
 
   /** Does `task` belong to the task set on screen? */
@@ -594,20 +673,26 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   }
 
   // 时间线 (spec 用户故事 68) uses the whole width until a task is opened, like the reference.
-  const timeline = view !== null && view.kind !== 'search' && viewOptions?.layout === 'timeline';
-  const showDetail = (!isMobile && !timeline) || selectedTask !== null;
-  const sidebarVisible = isMobile ? drawerOpen : sidebarOpen;
+  const timeline = view !== null && view.kind !== 'search' && view.kind !== 'calendar' && viewOptions?.layout === 'timeline';
+  // The 日历 takes the whole width too; its task opens beside it.
+  const showDetail = route.calendar ? selectedTask !== null : (!isMobile && !timeline) || selectedTask !== null;
+  const sidebarVisible = isMobile ? drawerOpen : sidebarOpen && !route.calendar;
 
   return (
-    <div className={`shell ${sidebarVisible ? 'shell-sidebar-open' : 'shell-sidebar-closed'} ${selectedTask ? 'shell-has-task' : ''}`}>
+    <div
+      className={`shell ${sidebarVisible ? 'shell-sidebar-open' : 'shell-sidebar-closed'} ${selectedTask ? 'shell-has-task' : ''} ${
+        route.calendar ? 'shell-calendar' : ''
+      }`}
+    >
       {!isMobile && (
         <Rail
           user={user}
           onOpenAccount={() => setDialog({ kind: 'settings', tab: 'account' })}
           onOpenSettings={() => setDialog({ kind: 'settings', tab: 'notifications' })}
           onHome={() => navigate({ listId: null, taskId: null })}
+          onCalendar={() => openCalendar()}
           onSearch={() => openSearch()}
-          searchActive={view?.kind === 'search'}
+          active={route.calendar ? 'calendar' : view?.kind === 'search' ? 'search' : 'tasks'}
         />
       )}
       {isMobile && drawerOpen && <div className="shell-scrim" aria-hidden="true" onClick={() => setDrawerOpen(false)} />}
@@ -650,6 +735,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onEditFilter={(filter) => setDialog({ kind: 'filter', filter })}
           onDeleteFilter={(filter) => setDialog({ kind: 'delete-filter', filter })}
           onOpenSearch={() => openSearch()}
+          onOpenCalendar={() => openCalendar()}
         />
       )}
       {route.trash && (
@@ -665,7 +751,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onEmpty={() => setDialog({ kind: 'empty-trash' })}
         />
       )}
-      {!route.trash && !(isMobile && selectedTask) && timeline && view && (
+      {!route.trash && !route.calendar && !(isMobile && selectedTask) && timeline && view && (
         <TimelinePane
           key={viewKey(view)}
           view={view}
@@ -684,7 +770,27 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onEditList={currentList && !currentList.isInbox ? () => setDialog({ kind: 'list', list: currentList, folderId: currentList.folderId }) : null}
         />
       )}
-      {!route.trash && !(isMobile && selectedTask) && !timeline && (
+      {calendarMode && calendarAnchor && !(isMobile && selectedTask) && (
+        <CalendarPane
+          mode={calendarMode}
+          anchor={calendarAnchor}
+          today={today}
+          tasks={listTasks}
+          days={calendarInfo}
+          lists={sidebar?.lists ?? []}
+          timeZone={timeZone}
+          now={now}
+          selectedTaskId={route.taskId}
+          isMobile={isMobile}
+          sidebarVisible={sidebarVisible}
+          onToggleSidebar={() => setDrawerOpen((v) => !v)}
+          onNavigate={(mode, date) => openCalendar(mode, date)}
+          onSelectTask={selectTask}
+          onCreateTask={addCalendarTask}
+          onMoveTask={moveCalendarTask}
+        />
+      )}
+      {!route.trash && !route.calendar && !(isMobile && selectedTask) && !timeline && (
         <TaskListPane
           // A new view starts with its sections expanded.
           key={view ? viewKey(view) : 'none'}

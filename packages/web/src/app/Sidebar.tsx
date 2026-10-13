@@ -58,6 +58,8 @@ interface SidebarProps {
   onEditFilter: (filter: Filter) => void;
   onDeleteFilter: (filter: Filter) => void;
   onOpenSearch: () => void;
+  /** 日历 (the drawer has no rail, so it links there itself). */
+  onOpenCalendar: () => void;
 }
 
 /** Order of the built-in rows, like the reference: date lists, then 收件箱, then the rest. */
@@ -429,6 +431,7 @@ export function Sidebar(props: SidebarProps) {
             <span>{props.user.username}</span>
           </button>
           <span className="sidebar-drawer-actions">
+            <IconButton icon="calendar" label="日历" onClick={props.onOpenCalendar} />
             <IconButton icon="search" label="搜索" onClick={props.onOpenSearch} />
             <IconButton icon="settings" label="设置" onClick={props.onOpenSettings} />
             <IconButton icon="close" label="关闭侧栏" onClick={props.onClose} />

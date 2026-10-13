@@ -80,6 +80,7 @@ const EMPTY_HINTS: Record<ListPaneView['kind'], string> = {
   smart: '这里会显示符合条件的任务',
   filter: '没有符合过滤条件的任务',
   search: '',
+  calendar: '',
 };
 
 /**

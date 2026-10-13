@@ -1,10 +1,10 @@
-// 截图工具的纯逻辑：参数解析、输出路径校验、只读请求判定、配置目录锁检测。
+// 截图工具的纯逻辑：参数解析、导航脚本校验（ADR-0008）、输出路径校验、只读请求判定、配置目录锁检测。
 import { readlinkSync } from 'node:fs';
 import { hostname } from 'node:os';
 import path from 'node:path';
 
 const USAGE =
-  '用法: screenshot.mjs <url> -o <输出.png（仓库外）> [--full-page] [--wait <毫秒>] [--viewport <宽>x<高>]';
+  '用法: screenshot.mjs <url> -o <输出.png（仓库外）> [--full-page] [--wait <毫秒>] [--viewport <宽>x<高>] [--script <导航脚本.json>]';
 
 const READ_ONLY_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -33,6 +33,7 @@ export function parseArgs(argv) {
     fullPage: false,
     waitMs: 3000,
     viewport: { width: 1440, height: 900 },
+    script: null,
   };
   if (argv.length === 0) throw new Error(USAGE);
   for (let i = 0; i < argv.length; i++) {
@@ -57,6 +58,10 @@ export function parseArgs(argv) {
         out.viewport = { width: Number(m[1]), height: Number(m[2]) };
         break;
       }
+      case '--script':
+        out.script = argv[++i];
+        if (!out.script) throw new Error('--script 需要一个 JSON 文件路径');
+        break;
       default:
         if (a.startsWith('-') || out.url !== undefined) throw new Error(`未知参数: ${a}\n${USAGE}`);
         out.url = a;
@@ -89,4 +94,86 @@ export function profileLockOwner(profileDir) {
   } catch (e) {
     return e.code === 'EPERM' ? pid : null;
   }
+}
+
+// ---- 导航脚本（ADR-0008）----
+//
+// 一个 JSON 数组，每一步只能是下面之一（selector 是 Playwright 选择器，如 `text=月`、`role=button[name="周"]`、CSS）：
+//   { "click": sel }   { "hover": sel }   { "scroll": sel, "by": 像素 }   { "press": "Escape" }
+//   { "wait": 毫秒 }   { "waitFor": sel }   { "screenshot": "名字.png", "fullPage"?: bool }
+// 没有 fill / type / drag：不打字、不拖动。press 只允许关闭弹层和翻页用的键。
+
+const MAX_WAIT_MS = 120_000;
+/** 只用于关闭弹层、移动焦点、滚动的键；不含 Enter / 空格（会触发按钮）和字符键。 */
+const NAVIGATION_KEYS = new Set(['Escape', 'Tab', 'Shift+Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End']);
+
+function stepError(index, step, why) {
+  return new Error(`导航脚本步骤 ${index + 1} ${JSON.stringify(step)} 无效：${why}`);
+}
+
+const isSelector = (v) => typeof v === 'string' && v.trim() !== '';
+
+/** 解析并校验导航脚本，返回规范化的步骤；任何不在白名单里的操作都拒绝。 */
+export function parseScript(json) {
+  let raw;
+  try {
+    raw = JSON.parse(json);
+  } catch (e) {
+    throw new Error(`导航脚本不是合法 JSON：${e.message}`, { cause: e });
+  }
+  if (!Array.isArray(raw)) throw new Error('导航脚本必须是步骤数组');
+  return raw.map((step, i) => {
+    if (step === null || typeof step !== 'object' || Array.isArray(step)) throw stepError(i, step, '每一步是一个对象');
+    const keys = Object.keys(step);
+    const only = (...allowed) => {
+      const extra = keys.filter((k) => !allowed.includes(k));
+      if (extra.length > 0) throw stepError(i, step, `不认识的字段 ${extra.join(', ')}`);
+    };
+    if ('click' in step || 'hover' in step || 'waitFor' in step) {
+      const action = 'click' in step ? 'click' : 'hover' in step ? 'hover' : 'waitFor';
+      only(action);
+      if (!isSelector(step[action])) throw stepError(i, step, '需要非空选择器');
+      return { action, selector: step[action] };
+    }
+    if ('scroll' in step) {
+      only('scroll', 'by');
+      if (!isSelector(step.scroll)) throw stepError(i, step, '需要非空选择器');
+      if (!Number.isInteger(step.by) || Math.abs(step.by) > 100_000) throw stepError(i, step, 'by 是整数像素');
+      return { action: 'scroll', selector: step.scroll, by: step.by };
+    }
+    if ('wait' in step) {
+      only('wait');
+      if (!Number.isInteger(step.wait) || step.wait < 0 || step.wait > MAX_WAIT_MS) throw stepError(i, step, `wait 是 0–${MAX_WAIT_MS} 毫秒`);
+      return { action: 'wait', ms: step.wait };
+    }
+    if ('press' in step) {
+      only('press');
+      if (!NAVIGATION_KEYS.has(step.press)) throw stepError(i, step, `只允许导航键 ${[...NAVIGATION_KEYS].join(' ')}`);
+      return { action: 'press', key: step.press };
+    }
+    if ('screenshot' in step) {
+      only('screenshot', 'fullPage');
+      if (typeof step.screenshot !== 'string' || !step.screenshot.toLowerCase().endsWith('.png')) throw stepError(i, step, '截图文件以 .png 结尾');
+      if (step.fullPage !== undefined && typeof step.fullPage !== 'boolean') throw stepError(i, step, 'fullPage 是布尔值');
+      return { action: 'screenshot', output: step.screenshot, fullPage: step.fullPage ?? false };
+    }
+    throw stepError(i, step, '只允许 click / hover / scroll / press / wait / waitFor / screenshot（不打字、不拖动）');
+  });
+}
+
+/** 会新建、修改、删除数据或改变账号状态的控件文字（ADR-0008：这些不点）。 */
+const FORBIDDEN_LABELS =
+  /删除|新建|添加|创建|完成|保存|确定|确认|提交|移动|复制|归档|放弃|清空|还原|恢复|退出|注销|订阅|升级|购买|支付|分享|邀请|导入|导出|设置为|置顶|编辑|重命名|发送|上传|\b(delete|remove|add|new|create|save|ok|confirm|submit|done|complete|move|archive|share|subscribe|upgrade|buy|logout|sign out)\b/i;
+
+/**
+ * 点击前检查目标控件；返回拒绝原因，可以点时返回 null。
+ * `el`：{ text: 可见文字或可访问名称, tag: 小写标签名, type?: input 类型, editable?: contenteditable }
+ */
+export function forbiddenControl(el) {
+  const tag = String(el.tag ?? '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return `不点输入控件（${tag}${el.type ? ` ${el.type}` : ''}）`;
+  if (el.editable) return '不点可编辑区域';
+  const text = String(el.text ?? '').trim();
+  const hit = FORBIDDEN_LABELS.exec(text);
+  return hit ? `控件「${text.slice(0, 40)}」含「${hit[0]}」，可能改数据` : null;
 }

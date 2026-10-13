@@ -6,7 +6,9 @@ import {
   matchesSmartList,
   SMART_LIST_NAMES,
   tagWithChildren,
+  taskInRange,
   todayIn,
+  type CalendarRange,
   type CreateTaskRequest,
   type Filter,
   type SmartListId,
@@ -20,7 +22,7 @@ import {
 
 /*
  * The task views of the middle column: one 清单, one 标签, a 智能清单, a
- * 过滤器 or the 搜索 results. Everything the shell needs to know per view
+ * 过滤器, the 搜索 results, or the days of the 日历 on screen. Everything the shell needs to know per view
  * lives here, so adding a view kind touches one switch per question.
  */
 
@@ -29,7 +31,8 @@ export type ListPaneView =
   | { kind: 'tag'; tag: Tag; inbox: TaskList | null }
   | { kind: 'smart'; id: SmartListId; inbox: TaskList | null }
   | { kind: 'filter'; filter: Filter; inbox: TaskList | null }
-  | { kind: 'search'; query: string };
+  | { kind: 'search'; query: string }
+  | { kind: 'calendar'; range: CalendarRange };
 
 /** Key of the view in 设置 → `viewOptions` and of the task set on screen. */
 export function viewKey(view: ListPaneView): string {
@@ -44,12 +47,16 @@ export function viewKey(view: ListPaneView): string {
       return `filter:${view.filter.id}`;
     case 'search':
       return 'search';
+    case 'calendar':
+      return 'calendar';
   }
 }
 
 /** Key of the fetched task set: like `viewKey`, but each search query is its own set. */
 export function scopeKey(view: ListPaneView): string {
-  return view.kind === 'search' ? `search:${view.query}` : viewKey(view);
+  if (view.kind === 'search') return `search:${view.query}`;
+  if (view.kind === 'calendar') return `calendar:${view.range.from}:${view.range.to}`;
+  return viewKey(view);
 }
 
 export function viewTitle(view: ListPaneView): string {
@@ -64,6 +71,8 @@ export function viewTitle(view: ListPaneView): string {
       return view.filter.name;
     case 'search':
       return '搜索';
+    case 'calendar':
+      return '日历';
   }
 }
 
@@ -80,6 +89,8 @@ export function tasksQuery(view: ListPaneView): TasksQuery | null {
       return { filterId: view.filter.id };
     case 'search':
       return null;
+    case 'calendar':
+      return view.range;
   }
 }
 
@@ -90,7 +101,7 @@ export function viewOptionsFor(view: ListPaneView, saved: Record<string, ViewOpt
 
 /**
  * Quick add in this view: the 清单 shown in the placeholder and what a new
- * task gets so that it shows up here. Null: no quick add (搜索, 已完成).
+ * task gets so that it shows up here. Null: no quick add (搜索, 已完成; the 日历 adds by clicking a day).
  */
 export function quickAddTarget(view: ListPaneView, clock: ViewClock): { name: string; request: Omit<CreateTaskRequest, 'title'> } | null {
   switch (view.kind) {
@@ -109,6 +120,7 @@ export function quickAddTarget(view: ListPaneView, clock: ViewClock): { name: st
     case 'filter':
       return view.inbox ? { name: view.inbox.name, request: {} } : null;
     case 'search':
+    case 'calendar':
       return null;
   }
 }
@@ -140,5 +152,9 @@ export function belongsToView(
     case 'search':
       // Results stay put while edited; the next search re-reads them.
       return true;
+    case 'calendar': {
+      const list = context.lists.find((l) => l.id === task.listId);
+      return list !== undefined && list.archivedAt === null && task.status !== 'abandoned' && taskInRange(task.dates, view.range, context.timeZone);
+    }
   }
 }
