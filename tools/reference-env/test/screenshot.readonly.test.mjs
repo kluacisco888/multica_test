@@ -314,3 +314,41 @@ test('--script refuses a right click or a modifier click on a control that chang
     }
   }
 });
+
+// EURO-22 复审：脚本里的 form.submit() 不触发 submit 事件，target="_blank" 的表单照样开出新标签页，
+// 新标签页的 sendBeacon 在它被关掉之前就到了服务器。
+const FORM_PAGE = `<!doctype html><title>form-probe</title>
+<form id="fm" action="/popup" target="_blank" method="GET"></form>
+<p id="go">打开</p>
+<script>document.getElementById('go').onclick = () => document.getElementById('fm').submit();</script>`;
+
+test('--script: a form.submit() aimed at a new tab cannot write either', { skip: !hasChromium && 'Chromium 未安装' }, async () => {
+  const seen = [];
+  const server = createServer((req, res) => {
+    seen.push(`${req.method} ${req.url}`);
+    if (req.url === '/') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(FORM_PAGE);
+    } else if (req.url.startsWith('/popup')) {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(POPUP_PAGE);
+    } else {
+      res.writeHead(204);
+      res.end();
+    }
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const home = mkdtempSync(path.join(tmpdir(), 'ref-env-it-'));
+  mkdirSync(path.join(home, 'profile'), { mode: 0o700 });
+  try {
+    const script = path.join(home, 'form.json');
+    writeFileSync(script, JSON.stringify([{ click: '#go' }, { wait: 1500 }]));
+    const r = await run([`http://127.0.0.1:${server.address().port}/`, '-o', path.join(home, 'x.png'), '--wait', '200', '--script', script], { DIDA_REF_HOME: home });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.notEqual(r.code, 0, 'a page that opens a new tab fails the run');
+    assert.deepEqual(seen.filter((s) => !/^(GET|HEAD|OPTIONS) /.test(s)), [], `requests that reached the server: ${seen.join(', ')}`);
+  } finally {
+    server.close();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
