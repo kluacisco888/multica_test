@@ -7,6 +7,8 @@ import {
   matchesFilter,
   matchesSmartList,
   tagWithChildren,
+  taskInRange,
+  type CalendarRange,
   type FilterRules,
   type SmartListId,
   type Task,
@@ -113,4 +115,25 @@ export async function filterTasks(db: Executor, userId: string, filter: FilterRo
     .sort(compareTasks)
     .map(taskToApi)
     .filter((task) => matchesFilter(rules, task, clock, tagScope));
+}
+
+/**
+ * 日历视图 (spec 用户故事 69): open and completed tasks with a day in `range`
+ * in the user's time zone, from every 清单 except archived ones.
+ */
+export async function calendarTasks(db: Executor, userId: string, range: CalendarRange): Promise<Task[]> {
+  const [rows, listRows, { timeZone }] = await Promise.all([
+    liveTaskRows(db, userId),
+    db
+      .select({ id: lists.id, archivedAt: lists.archivedAt })
+      .from(lists)
+      .where(and(eq(lists.userId, userId), isNull(lists.deletedAt))),
+    readSettings(db, userId),
+  ]);
+  const shown = new Set(listRows.filter((l) => l.archivedAt === null).map((l) => l.id));
+  return rows
+    .filter((row) => shown.has(row.listId) && row.status !== 'abandoned')
+    .sort(compareTasks)
+    .map(taskToApi)
+    .filter((task) => taskInRange(task.dates, range, timeZone));
 }

@@ -1,5 +1,8 @@
 import {
   adminUserSchema,
+  calendarDaysResponseSchema,
+  type CalendarDay,
+  type CalendarRange,
   adminUsersResponseSchema,
   ATTACHMENT_MAX_BYTES,
   ATTACHMENT_TOO_LARGE_MESSAGE,
@@ -194,6 +197,12 @@ export async function updateSettings(patch: UpdateSettingsRequest): Promise<Sett
 
 export async function fetchHolidayStatus(): Promise<HolidayStatus> {
   return holidayStatusSchema.parse(await (await call('GET', '/api/holidays/status')).json());
+}
+
+/** 日历: 农历, 传统节日 and 休 / 班 of each day `from`–`to`. */
+export async function fetchCalendarDays({ from, to }: CalendarRange): Promise<CalendarDay[]> {
+  const res = await call('GET', `/api/calendar/days?${new URLSearchParams({ from, to }).toString()}`);
+  return calendarDaysResponseSchema.parse(await res.json()).days;
 }
 
 export async function refreshHolidays(): Promise<HolidayRefreshResponse> {

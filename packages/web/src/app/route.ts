@@ -1,4 +1,4 @@
-import { smartListIdSchema, type SmartListId } from '@dida/shared';
+import { calendarDateSchema, calendarModeSchema, smartListIdSchema, type CalendarMode, type SmartListId } from '@dida/shared';
 import { useCallback, useEffect, useState } from 'react';
 
 /*
@@ -12,8 +12,16 @@ import { useCallback, useEffect, useState } from 'react';
  *   /filters/<filterId>            → a 过滤器
  *   /search/<query>                → 全局搜索 results (`/search` alone: the empty search box)
  *   /trash                         → the 回收站
+ *   /calendar                      → 日历 (last used view, today)
+ *   /calendar/<mode>/<YYYY-MM-DD>  → 日历 in 月 / 周 / 日 / 多日 (`month` / `week` / `day` / `multiDay`) around a date
  * Each but /trash takes `/tasks/<taskId>` for an open 任务.
  */
+
+/** 日历 route: null mode / date mean "last used view" / "today". */
+export interface CalendarRoute {
+  mode: CalendarMode | null;
+  date: string | null;
+}
 
 export interface Route {
   listId: string | null;
@@ -25,13 +33,24 @@ export interface Route {
   taskId: string | null;
   /** The 回收站 smart list. */
   trash?: boolean;
+  /** Non-null: the 日历. */
+  calendar?: CalendarRoute | null;
 }
 
-const EMPTY: Required<Route> = { listId: null, tagId: null, smartId: null, filterId: null, search: null, taskId: null, trash: false };
+const EMPTY: Required<Route> = { listId: null, tagId: null, smartId: null, filterId: null, search: null, taskId: null, trash: false, calendar: null };
 
 export function parseRoute(pathname: string): Route {
   if (/^\/trash\/?$/.test(pathname)) return { ...EMPTY, trash: true };
   if (/^\/search\/?$/.test(pathname)) return { ...EMPTY, search: '' };
+  const calendar = /^\/calendar(?:\/([^/]+)\/([^/]+))?(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
+  if (calendar) {
+    const mode = calendarModeSchema.safeParse(calendar[1]);
+    const date = calendarDateSchema.safeParse(calendar[2]);
+    const taskId = calendar[3] ? safeDecode(calendar[3]) : null;
+    return mode.success && date.success
+      ? { ...EMPTY, calendar: { mode: mode.data, date: date.data }, taskId }
+      : { ...EMPTY, calendar: { mode: null, date: null }, taskId: calendar[1] ? null : taskId };
+  }
   const match = /^\/(lists|tags|smart|filters|search)\/([^/]+)(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
   if (!match) return { ...EMPTY };
   let id: string;
@@ -57,10 +76,19 @@ export function parseRoute(pathname: string): Route {
   }
 }
 
-export function routePath({ listId, tagId, smartId, filterId, search, taskId, trash }: Route): string {
+function safeDecode(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
+export function routePath({ listId, tagId, smartId, filterId, search, taskId, trash, calendar }: Route): string {
   if (trash) return '/trash';
   let base: string;
-  if (search !== null && search !== undefined) base = search ? `/search/${encodeURIComponent(search)}` : '/search';
+  if (calendar) base = calendar.mode && calendar.date ? `/calendar/${calendar.mode}/${calendar.date}` : '/calendar';
+  else if (search !== null && search !== undefined) base = search ? `/search/${encodeURIComponent(search)}` : '/search';
   else if (smartId) base = `/smart/${smartId}`;
   else if (filterId) base = `/filters/${encodeURIComponent(filterId)}`;
   else if (tagId) base = `/tags/${encodeURIComponent(tagId)}`;

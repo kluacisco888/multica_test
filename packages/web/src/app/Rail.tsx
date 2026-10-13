@@ -1,57 +1,60 @@
 import type { CurrentUser } from '@dida/shared';
-import { Icon } from '../ui/Icon.js';
+import { Icon, type IconName } from '../ui/Icon.js';
+
+/** Module shown in the main area, highlighted in the rail. */
+export type RailModule = 'tasks' | 'calendar' | 'search';
 
 /**
  * The narrow blue bar on the far left (desktop only): account at the top,
- * then one entry per module. Calendar, focus, habits etc. join it in later tasks.
+ * then one entry per module. Focus, habits etc. join it in later tasks.
  */
 export function Rail({
   user,
   onOpenAccount,
   onOpenSettings,
   onHome,
+  onCalendar,
   onSearch,
-  searchActive,
+  active,
 }: {
   user: CurrentUser;
   onOpenAccount: () => void;
   onOpenSettings: () => void;
   onHome: () => void;
+  /** 日历 (spec 用户故事 69). */
+  onCalendar: () => void;
   /** 全局搜索 (spec 用户故事 63). */
   onSearch: () => void;
-  searchActive: boolean;
+  active: RailModule;
 }) {
+  const items: { module: RailModule; href: string; label: string; icon: IconName; onOpen: () => void }[] = [
+    { module: 'tasks', href: '/', label: '任务', icon: 'task', onOpen: onHome },
+    { module: 'calendar', href: '/calendar', label: '日历', icon: 'calendar', onOpen: onCalendar },
+    { module: 'search', href: '/search', label: '搜索', icon: 'search', onOpen: onSearch },
+  ];
   return (
     <nav className="rail" aria-label="模块">
       <button type="button" className="rail-avatar" aria-label={`账户：${user.username}`} title={user.username} onClick={onOpenAccount}>
         <span aria-hidden="true">{user.username.slice(0, 1).toUpperCase()}</span>
       </button>
       <ul className="rail-items">
-        <li>
-          <a className={`rail-item ${searchActive ? '' : 'rail-item-active'}`} href="/"
-            onClick={(e) => {
-              e.preventDefault();
-              onHome();
-            }}
-            aria-current={searchActive ? undefined : 'page'} aria-label="任务" title="任务">
-            <Icon name="task" size={22} />
-          </a>
-        </li>
-        <li>
-          <a
-            className={`rail-item ${searchActive ? 'rail-item-active' : ''}`}
-            href="/search"
-            onClick={(e) => {
-              e.preventDefault();
-              onSearch();
-            }}
-            aria-current={searchActive ? 'page' : undefined}
-            aria-label="搜索"
-            title="搜索"
-          >
-            <Icon name="search" size={22} />
-          </a>
-        </li>
+        {items.map((item) => (
+          <li key={item.module}>
+            <a
+              className={`rail-item ${active === item.module ? 'rail-item-active' : ''}`}
+              href={item.href}
+              onClick={(e) => {
+                e.preventDefault();
+                item.onOpen();
+              }}
+              aria-current={active === item.module ? 'page' : undefined}
+              aria-label={item.label}
+              title={item.label}
+            >
+              <Icon name={item.icon} size={22} />
+            </a>
+          </li>
+        ))}
       </ul>
       <div className="rail-bottom">
         <button type="button" className="rail-item rail-button" aria-label="设置" title="设置" onClick={onOpenSettings}>

@@ -23,3 +23,4 @@ export * from './filters.js';
 export * from './task-view.js';
 export * from './search.js';
 export * from './timeline.js';
+export * from './calendar.js';

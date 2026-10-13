@@ -130,6 +130,26 @@
   --timeline-bar-height: 28px;
   --timeline-unscheduled-width: 240px; /* 待安排 panel */
 
+  /* ---- 日历 (EURO-19) ----
+   * 休 / 班 badges and 节日 labels. Not measured from the reference: the
+   * reference 日历 page rendered blank in the read-only screenshot tool, so
+   * these follow the common Chinese calendar convention (休 red, 班 grey),
+   * all at least 4.5:1 against their background. */
+  --color-calendar-festival: #2f5ae0;
+  --color-calendar-holiday: #c62828;
+  --color-calendar-holiday-bg: #fdecea;
+  --color-calendar-workday: #5f6368;
+  --color-calendar-workday-bg: #eceef1;
+  --color-calendar-cell-hover: #fafbff;
+  --color-calendar-outside: #fcfcfd; /* days of the previous / next month */
+  --color-calendar-done: #f2f3f5;
+  --calendar-detail-width: 400px;
+  --calendar-gutter: 56px; /* hour labels of the time grid */
+  --calendar-hour-height: 48px; /* CalendarPane HOUR_HEIGHT */
+  --calendar-lane-height: 22px; /* CalendarPane LANE_HEIGHT */
+  --calendar-cell-head: 28px; /* CalendarPane CELL_HEAD */
+  --calendar-cell-head-mobile: 38px; /* CalendarPane CELL_HEAD_MOBILE */
+
   /* ---- Shape & elevation ---- */
   --radius-sm: 4px;
   --radius-md: 6px;

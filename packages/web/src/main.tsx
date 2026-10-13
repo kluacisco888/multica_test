@@ -5,6 +5,7 @@ import './design/tokens.css';
 import './ui/ui.css';
 import './app/app.css';
 import './app/settings/settings.css';
+import './app/calendar.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root missing in index.html');

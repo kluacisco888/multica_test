@@ -18,7 +18,7 @@ import { compareTasks, ensureInbox, taskDateColumns, taskToApi, topOfList, type 
 import { readSettings } from '../settings.js';
 import { moveToTrash } from '../trash.js';
 import { findOwned } from '../sync/sync.js';
-import { filterTasks, smartListTasks } from '../task-views.js';
+import { calendarTasks, filterTasks, smartListTasks } from '../task-views.js';
 import {
   ancestorsOf,
   checklistFromDescription,
@@ -65,6 +65,10 @@ export function taskRoutes(app: FastifyInstance) {
       const filter = await findOwned(app.db, filters, userId, query.data.filterId);
       if (!filter) return notFound(reply);
       const response: TasksResponse = { tasks: await filterTasks(app.db, userId, filter, app.clock.now()) };
+      return response;
+    }
+    if ('from' in query.data) {
+      const response: TasksResponse = { tasks: await calendarTasks(app.db, userId, query.data) };
       return response;
     }
     let scope;
