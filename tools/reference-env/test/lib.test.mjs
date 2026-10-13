@@ -143,6 +143,13 @@ test('parseScript rejects typing, dragging, unknown steps and bad values', () =>
   }
 });
 
+test('forbiddenControl refuses modifier clicks on links (new tabs bypass the write guard)', () => {
+  assert.match(forbiddenControl({ text: '一', tag: 'a', link: true, modified: true }), /链接/);
+  assert.match(forbiddenControl({ text: '一', tag: 'span', link: true, modified: true }), /链接/);
+  assert.equal(forbiddenControl({ text: '一', tag: 'a', link: true, modified: false }), null);
+  assert.equal(forbiddenControl({ text: '一', tag: 'div', link: false, modified: true }), null);
+});
+
 test('forbiddenControl flags controls that would create, change or delete data', () => {
   for (const label of ['删除', '新建清单', '添加任务', '完成', '保存', '确定', '移动到', '归档', '放弃', '清空回收站', '退出登录', '订阅', '升级高级会员', 'Delete', 'Add Task']) {
     assert.ok(forbiddenControl({ text: label, tag: 'button' }), label);

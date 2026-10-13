@@ -238,7 +238,7 @@ const result = await app.notifier.send(userId, channelId, { title: '提醒：交
 | 接口 | 说明 |
 | --- | --- |
 | `POST /api/tasks/:id/move` | 拖拽排序：`{ afterId }` 放到同组任务 `afterId` 的后面（null 放到最前）。同组是同一清单、同一父任务的兄弟任务；已置顶的任务在用户的已置顶任务里排。`afterId` 不在同组返回 400 `invalid_position`。响应 `tasks` 是排序键变了的任务 |
-| `PATCH /api/tasks/:id` 的 `pinned` | 置顶 / 取消置顶：任务的 `pinOrder` 不为 null 就是置顶，排在「已置顶」组的最前（新置顶的在前），`sortOrder` 不变，取消置顶回到原来的位置。只有顶层任务能置顶（400 `invalid_pin`），变成子任务时自动取消置顶；重复任务的下一次沿用置顶 |
+| `PATCH /api/tasks/:id` 的 `pinned` | 置顶 / 取消置顶：任务的 `pinOrder` 不为 null 就是置顶，排在「已置顶」组的最前（新置顶的在前），`pinOrder` 按用户全局排（不分清单，跨清单的视图里已置顶分组的顺序也一致；代价是已置顶的键太长需要重新均分时，用户所有清单里的置顶任务都会拿到新修订号），`sortOrder` 不变，取消置顶回到原来的位置。只有顶层任务能置顶（400 `invalid_pin`），变成子任务时自动取消置顶；重复任务的下一次沿用置顶 |
 | `POST /api/tasks/batch` | 批量操作：`{ ids, action }`，`action.op` 是 `complete`、`abandon`、`delete`（软删除进回收站）、`move`（`listId`，按给出的顺序放到目标清单最前）、`dates`（`dates` 或 null）、`priority`、`tags`（`add` / `remove`，保留其他标签）、`pin`。一个事务，全部成功或全部不变；有一个 id 不是自己未删除的任务就 404。最多 500 个 |
 
 拖拽和新建任务通常只写一条排序键；同一位置插入很多次、键长度超过 `SORT_KEY_REBALANCE_LENGTH`（16）时，这一组任务一起换成均匀分布的短键（`placeAt`，`packages/server/src/task-order.ts`），每条都走同步层、有新修订号。界面：清单在「自定义」排序下可以拖动任务行（只在同组里），键盘用 Alt+↑/↓；Ctrl/Cmd+点击加减一条、Shift+点击连选（和参照一样从第一次点击的任务开始，跨分组），键盘是 Shift/Ctrl+Enter，Esc 取消；选中两条以上时右侧变成「已选择 N 项」，手机上是底部浮动工具栏（手机上 Ctrl/Shift+点击一条就进入多选），选中任务的右键菜单是批量菜单。选择逻辑在 `packages/shared/src/task-selection.ts`，放下位置在 `list-drag.ts`。

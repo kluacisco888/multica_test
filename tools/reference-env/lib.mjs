@@ -187,10 +187,13 @@ const FORBIDDEN_LABELS =
 
 /**
  * 点击前检查目标控件；返回拒绝原因，可以点时返回 null。
- * `el`：{ text: 可见文字或可访问名称, tag: 小写标签名, type?: input 类型, editable?: contenteditable }
+ * `el`：{ text: 可见文字或可访问名称, tag: 小写标签名, type?: input 类型, editable?: contenteditable,
+ *        link?: 目标或点击处在 a[href] / [role=link] 里, modified?: 这次点击带修饰键 }
  */
 export function forbiddenControl(el) {
   const tag = String(el.tag ?? '').toLowerCase();
+  // Shift / Ctrl / Cmd + 点击链接会开新标签页或新窗口，Chromium 不让 context.route 拦截那里的请求（EURO-22 审查）。
+  if (el.modified && el.link) return '不带修饰键点链接（会打开新标签页或新窗口，绕过写保护）';
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return `不点输入控件（${tag}${el.type ? ` ${el.type}` : ''}）`;
   if (el.editable) return '不点可编辑区域';
   const text = String(el.text ?? '').trim();

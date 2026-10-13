@@ -184,7 +184,9 @@ const MULTI_PAGE = `<!doctype html><title>multi-probe</title>
 <ul>
   <li><a id="l1" href="/popup">一</a></li>
   <li><a id="l2" href="/popup?shift">二</a></li>
+  <li><span id="wrap" style="display: inline-block; padding: 2px"><span role="link" tabindex="0" onclick="window.open('/popup?role')">三</span></span></li>
   <li id="row">四</li>
+  <li id="opener">五</li>
 </ul>
 <main id="view">空</main>
 <script>
@@ -197,10 +199,12 @@ const MULTI_PAGE = `<!doctype html><title>multi-probe</title>
     fetch('/contextmenu-post', { method: 'POST', body: 'x' }).catch(() => {});
     fetch('/contextmenu-delete', { method: 'DELETE' }).catch(() => {});
   });
+  // Plain text that opens a window from script: the tool must close it and fail.
+  document.getElementById('opener').addEventListener('click', () => window.open('/popup?script', '_blank'));
 </script>`;
 
-test('--script modifier clicks and right clicks: new tabs and context menus still cannot write', { skip: !hasChromium && 'Chromium 未安装' }, async () => {
-  const seen = [];
+/** A local page server for the modifier-click tests; `seen` collects every request it receives. */
+async function multiServer(seen) {
   const server = createServer((req, res) => {
     seen.push(`${req.method} ${req.url}`);
     if (req.url === '/') {
@@ -219,35 +223,69 @@ test('--script modifier clicks and right clicks: new tabs and context menus stil
     socket.destroy();
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  return server;
+}
+
+async function runScript(steps) {
+  const seen = [];
+  const server = await multiServer(seen);
   const home = mkdtempSync(path.join(tmpdir(), 'ref-env-it-'));
   mkdirSync(path.join(home, 'profile'), { mode: 0o700 });
   try {
     const script = path.join(home, 'multi.json');
-    writeFileSync(
-      script,
-      JSON.stringify([
-        { click: '#l1', modifiers: ['Control'] }, // new background tab
-        { click: '#l2', modifiers: ['Shift'] }, // new window
-        { click: '#view', modifiers: ['Meta'] }, // on Linux Meta+click on a link navigates in place, so click plain text
-        { click: '#row', button: 'right' },
-        { waitFor: 'text=右键菜单' },
-        { wait: 1500 },
-      ]),
-    );
+    writeFileSync(script, JSON.stringify(steps));
     const shot = path.join(home, 'final.png');
     const r = await run([`http://127.0.0.1:${server.address().port}/`, '-o', shot, '--wait', '200', '--script', script], { DIDA_REF_HOME: home });
-    assert.equal(r.code, 0, r.err);
-    const out = JSON.parse(r.out);
-    // The new tabs did open (their GET reached the server) …
-    assert.ok(seen.some((s) => s.startsWith('GET /popup')), `a new tab was opened: ${seen}`);
-    // … but nothing from them, from the click handlers or from the context menu wrote anything.
-    assert.deepEqual(seen.filter((s) => !/^(GET|HEAD|OPTIONS) /.test(s)), []);
-    assert.ok(out.blockedRequests.some((b) => /^POST .*\/contextmenu-post$/.test(b)), `context menu POST recorded: ${out.blockedRequests}`);
-    assert.ok(out.blockedRequests.some((b) => /^POST .*\/popup-post$/.test(b)), `new tab POST recorded: ${out.blockedRequests}`);
-    assert.ok(out.blockedRequests.some((b) => /^WS .*\/popup-ws$/.test(b)), `new tab websocket recorded: ${out.blockedRequests}`);
+    // Give a leaked tab time to send what it would send.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return { ...r, seen, shot: existsSync(shot) };
   } finally {
     server.close();
     rmSync(home, { recursive: true, force: true });
+  }
+}
+
+const writes = (seen) => seen.filter((s) => !/^(GET|HEAD|OPTIONS) /.test(s));
+
+test('--script modifier clicks and right clicks: new tabs and context menus still cannot write', { skip: !hasChromium && 'Chromium 未安装' }, async () => {
+  // A modifier click on a link would open a tab whose requests context.route never sees: refused before clicking.
+  for (const step of [
+    { click: '#l1', modifiers: ['Control'] }, // new background tab
+    { click: '#l2', modifiers: ['Shift'] }, // new window
+    { click: '#l1', modifiers: ['Meta'] },
+    { click: '#wrap', modifiers: ['Control'] }, // the click lands on a [role=link] inside
+  ]) {
+    const r = await runScript([step]);
+    assert.notEqual(r.code, 0, `${JSON.stringify(step)} should be refused`);
+    assert.match(r.err, /拒绝.*链接/);
+    assert.ok(!r.seen.some((s) => s.startsWith('GET /popup')), `no tab was opened: ${r.seen}`);
+    assert.deepEqual(writes(r.seen), []);
+    assert.ok(!r.shot, 'no screenshot after a refused step');
+  }
+
+  // Modifier clicks on plain text and right clicks still work, and write nothing.
+  const r = await runScript([
+    { click: '#view', modifiers: ['Meta'] },
+    { click: '#row', modifiers: ['Shift'] },
+    { click: '#row', button: 'right' },
+    { waitFor: 'text=右键菜单' },
+    { wait: 1000 },
+  ]);
+  assert.equal(r.code, 0, r.err);
+  assert.deepEqual(writes(r.seen), []);
+  const out = JSON.parse(r.out);
+  assert.ok(out.blockedRequests.some((b) => /^POST .*\/contextmenu-post$/.test(b)), `context menu POST recorded: ${out.blockedRequests}`);
+  assert.ok(out.blockedRequests.some((b) => /^DELETE .*\/contextmenu-delete$/.test(b)), `context menu DELETE recorded: ${out.blockedRequests}`);
+});
+
+test('--script: any new tab or window is closed at once and fails the run', { skip: !hasChromium && 'Chromium 未安装' }, async () => {
+  for (const step of [{ click: '#opener' }, { click: '#opener', modifiers: ['Shift'] }, { click: '#wrap' }]) {
+    const r = await runScript([step, { wait: 1000 }]);
+    assert.notEqual(r.code, 0, `${JSON.stringify(step)} opened a page and should fail`);
+    assert.match(r.err, /新页面/);
+    assert.ok(!r.seen.some((x) => x.startsWith('GET /popup')), `no tab was opened: ${r.seen}`);
+    assert.deepEqual(writes(r.seen), []);
+    assert.ok(!r.shot, 'no screenshot after a new page appeared');
   }
 });
 

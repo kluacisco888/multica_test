@@ -292,13 +292,21 @@ export function taskRoutes(app: FastifyInstance) {
           // Another user's, deleted or unknown ids: nothing changes, like a single 404.
           if (rows.length !== ids.length) throw new Rejection(notFound);
           const changed = new Map<string, TaskRow>();
+          // 删除: read each 清单 once. Rows deleted earlier in this batch stay in the cache, which is safe:
+          // their ids are skipped below, and a later root only takes its own subtree from the cache.
+          const listCache = new Map<string, TaskRow[]>();
+          const listRowsOf = async (listId: string) => {
+            let rows = listCache.get(listId);
+            if (!rows) listCache.set(listId, (rows = await liveTasksOfList(tx, userId, listId)));
+            return rows;
+          };
           // Moved tasks each land on top of the target 清单: go bottom-up so they keep the order they were given in.
           for (const id of action.op === 'move' ? [...ids].reverse() : ids) {
             // Read fresh: an earlier task of the batch may have cascaded to this one.
             const task = await findOwned(tx, tasks, userId, id);
             if (!task) continue; // deleted with its parent earlier in this batch
             if (action.op === 'delete') {
-              await moveToTrash(ops, tx, userId, task, await liveTasksOfList(tx, userId, task.listId));
+              await moveToTrash(ops, tx, userId, task, await listRowsOf(task.listId));
               continue;
             }
             const patch = batchPatch(action, task);
