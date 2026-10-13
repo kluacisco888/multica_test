@@ -352,3 +352,82 @@ test('--script: a form.submit() aimed at a new tab cannot write either', { skip:
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+// EURO-22 第 2 轮：所有能开新页面的入口。每种都必须让运行失败，而且新页面一个请求都发不出去（连它自己的 GET 都没有），
+// 服务器只看到首页的 GET。点击的都是普通文字（不带修饰键），新页面由页面脚本打开。
+const ENTRIES = {
+  'form.submit() target=_blank': `<form id="f" action="/popup" target="_blank"></form>`,
+  'requestSubmit() target=_blank': `<form id="f" action="/popup" target="_blank"><button id="b">x</button></form>`,
+  'requestSubmit(submitter) with formtarget=_blank': `<form id="f" action="/popup"><button id="b" formtarget="_blank">x</button></form>`,
+  '<base target=_blank> + form.submit()': `<base target="_blank"><form id="f" action="/popup"></form>`,
+  '<base target=_blank> + link click': `<base target="_blank"><a id="a" href="/popup">链接</a>`,
+  'link to an unknown named window': `<a id="a" href="/popup" target="win1">链接</a>`,
+  'form to an unknown named window': `<form id="f" action="/popup" target="win1"></form>`,
+  'detached a.click()': ``,
+  'detached anchor dispatchEvent(click)': ``,
+  'open()': ``,
+  'self.open()': ``,
+  'Reflect.apply(open)': ``,
+  "open(url, '_blank')": ``,
+  'new iframe contentWindow.open()': ``,
+  'new iframe realm form.submit()': `<form id="f" action="/popup" target="_blank"></form>`,
+};
+
+const ENTRY_JS = {
+  'form.submit() target=_blank': `document.getElementById('f').submit()`,
+  'requestSubmit() target=_blank': `document.getElementById('f').requestSubmit()`,
+  'requestSubmit(submitter) with formtarget=_blank': `document.getElementById('f').requestSubmit(document.getElementById('b'))`,
+  '<base target=_blank> + form.submit()': `document.getElementById('f').submit()`,
+  '<base target=_blank> + link click': `document.getElementById('a').click()`,
+  'link to an unknown named window': `document.getElementById('a').click()`,
+  'form to an unknown named window': `document.getElementById('f').submit()`,
+  'detached a.click()': `const a = document.createElement('a'); a.href = '/popup'; a.target = '_blank'; a.click()`,
+  'detached anchor dispatchEvent(click)': `const a = document.createElement('a'); a.href = '/popup'; a.target = '_blank'; a.dispatchEvent(new MouseEvent('click'))`,
+  'open()': `open('/popup')`,
+  'self.open()': `self.open('/popup', 'w2', 'popup')`,
+  'Reflect.apply(open)': `Reflect.apply(window['op' + 'en'], window, ['/popup', 'w3'])`,
+  "open(url, '_blank')": `window.open('/popup?script', '_blank')`,
+  'new iframe contentWindow.open()': `const f = document.createElement('iframe'); document.body.append(f); f.contentWindow.open('/popup')`,
+  'new iframe realm form.submit()': `const f = document.createElement('iframe'); document.body.append(f); f.contentWindow.HTMLFormElement.prototype.submit.call(document.getElementById('f'))`,
+};
+
+test('--script: every way a page can open a new tab or window fails the run before the new page sends anything', { skip: !hasChromium && 'Chromium 未安装' }, async () => {
+  for (const [name, html] of Object.entries(ENTRIES)) {
+    const page = `<!doctype html><title>entry</title>${html}<p id="go">打开</p>
+<script>document.getElementById('go').addEventListener('click', () => { try { ${ENTRY_JS[name]}; } catch (e) {} });</script>`;
+    const seen = [];
+    const server = createServer((req, res) => {
+      seen.push(`${req.method} ${req.url}`);
+      if (req.url === '/') {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        res.end(page);
+      } else if (req.url.startsWith('/popup')) {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        res.end(POPUP_PAGE);
+      } else {
+        res.writeHead(204);
+        res.end();
+      }
+    });
+    server.on('upgrade', (req, socket) => {
+      seen.push(`UPGRADE ${req.url}`);
+      socket.destroy();
+    });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const home = mkdtempSync(path.join(tmpdir(), 'ref-env-it-'));
+    mkdirSync(path.join(home, 'profile'), { mode: 0o700 });
+    try {
+      const script = path.join(home, 'entry.json');
+      writeFileSync(script, JSON.stringify([{ click: '#go' }, { wait: 1500 }]));
+      const r = await run([`http://127.0.0.1:${server.address().port}/`, '-o', path.join(home, 'x.png'), '--wait', '200', '--script', script], { DIDA_REF_HOME: home });
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      assert.notEqual(r.code, 0, `${name}: opening a new page fails the run`);
+      assert.match(r.err, /新页面/, name);
+      assert.ok(!existsSync(path.join(home, 'x.png')), `${name}: no screenshot`);
+      assert.deepEqual(seen, ['GET /'], `${name}: requests that reached the server`);
+    } finally {
+      server.close();
+      rmSync(home, { recursive: true, force: true });
+    }
+  }
+});

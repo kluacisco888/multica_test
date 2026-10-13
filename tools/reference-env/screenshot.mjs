@@ -2,7 +2,7 @@
 // 只读截图工具：加载参照浏览器配置目录（维护者在 noVNC 里登录的那份），打开 url 并截图。
 // 可选 --script：按导航脚本做导航类的点击、悬停、滚动后截图（ADR-0008），不打字、不拖动，
 // 点击前拒绝输入控件和会改数据的控件。所有非 GET/HEAD/OPTIONS 请求和全部 WebSocket 连接都被拦截，防止改动参照账号的数据。
-/* global window, document, Element, HTMLFormElement -- used only in code that runs inside the page (addInitScript, evaluate) */
+/* global window, Element, HTMLAnchorElement, HTMLFormElement, document -- used only in code that runs inside the page (addInitScript, evaluate) */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -69,6 +69,58 @@ async function main() {
     return ws.close();
   });
 
+  // ---- Browser-level guard (CDP on the browser target, below Playwright; EURO-22 复审) ----
+  // Every request of every target is paused here before it leaves the browser (Fetch on the browser target),
+  // including keepalive requests (sendBeacon) that outlive their page, which the per-page route can miss.
+  //   - Requests of a frame that is not part of the page we opened — a new tab or window, however it was
+  //     opened — fail, GET included: such a page never gets its document, scripts or beacons out.
+  //   - Every other request: only GET/HEAD/OPTIONS go through.
+  // New page targets are also closed as soon as they appear, and fail the run.
+  // (Holding new pages with waitForDebuggerOnStart and closing them was tried: a window.open popup shares its
+  //  opener's renderer, so holding it froze the opener and the click never returned.)
+  const page = context.pages()[0] ?? (await context.newPage());
+  const pageSession = await context.newCDPSession(page);
+  const pageTargetId = (await pageSession.send('Target.getTargetInfo')).targetInfo.targetId;
+  const ownFrames = new Set([pageTargetId]);
+  const collectFrames = (tree) => {
+    ownFrames.add(tree.frame.id);
+    for (const child of tree.childFrames ?? []) collectFrames(child);
+  };
+  pageSession.on('Page.frameAttached', ({ frameId }) => ownFrames.add(frameId));
+  await pageSession.send('Page.enable');
+  collectFrames((await pageSession.send('Page.getFrameTree')).frameTree);
+  const isOwnFrame = async (frameId) => {
+    if (ownFrames.has(frameId)) return true;
+    try {
+      collectFrames((await pageSession.send('Page.getFrameTree')).frameTree);
+    } catch {
+      // the page is gone: nothing is ours any more
+    }
+    return ownFrames.has(frameId);
+  };
+
+  const heldPages = [];
+  const browserSession = await context.browser().newBrowserCDPSession();
+  browserSession.on('Fetch.requestPaused', async ({ requestId, request, frameId }) => {
+    const fail = (why) => {
+      blocked.push(`${why}${request.method} ${request.url}`);
+      return browserSession.send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' }).catch(() => {});
+    };
+    if (frameId && !(await isOwnFrame(frameId))) {
+      heldPages.push(request.url);
+      return fail('新页面 ');
+    }
+    if (!isReadOnlyMethod(request.method)) return fail('');
+    return browserSession.send('Fetch.continueRequest', { requestId }).catch(() => {});
+  });
+  await browserSession.send('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] });
+  browserSession.on('Target.attachedToTarget', ({ targetInfo }) => {
+    if (targetInfo.type !== 'page' || targetInfo.targetId === pageTargetId) return;
+    heldPages.push(targetInfo.url || 'about:blank');
+    browserSession.send('Target.closeTarget', { targetId: targetInfo.targetId }).catch(() => {});
+  });
+  await browserSession.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true, filter: [{ type: 'page' }] });
+
   // New tabs and windows are where the write guard leaks (EURO-22 审查: a popup's sendBeacon reached the server even
   // though the popup was closed at once), so pages may not open them at all: window.open, links and forms aimed at
   // another tab, and middle / modifier clicks on links are stopped in the page and reported here.
@@ -84,40 +136,98 @@ async function main() {
         // binding not ready: the page still gets no popup
       }
     };
-    const open = () => {
+    const lock = (target, name, value) => Object.defineProperty(target, name, { value, writable: false, configurable: false });
+    // window.open, however it is called (open(), self.open, Reflect.apply, an iframe's contentWindow.open).
+    const open = function () {
       report('window.open');
       return null;
     };
-    Object.defineProperty(window, 'open', { value: open, writable: false, configurable: false });
-    const otherTab = (target) => target !== '' && target !== '_self' && target !== '_parent' && target !== '_top';
+    lock(window, 'open', open);
+    // A target names another tab unless it is this browsing context or a frame that already exists in the page.
+    const otherTab = (target) => {
+      const t = (target ?? '').trim();
+      if (t === '' || t === '_self' || t === '_parent' || t === '_top') return false;
+      if (t.startsWith('_')) return true; // _blank, _new, …
+      try {
+        const w = window.top;
+        const seen = [];
+        const walk = (win) => {
+          seen.push(win);
+          for (let i = 0; i < win.frames.length; i++) walk(win.frames[i]);
+        };
+        walk(w);
+        return !seen.some((win) => {
+          try {
+            return win.name === t;
+          } catch {
+            return false;
+          }
+        });
+      } catch {
+        return true;
+      }
+    };
+    // <base target> applies when a link or form has no target of its own.
+    const effectiveTarget = (el, attr) => {
+      if (el.hasAttribute(attr)) return el.getAttribute(attr);
+      return el.ownerDocument?.querySelector('base[target]')?.getAttribute('target') ?? '';
+    };
+    const formTarget = (form, submitter) =>
+      submitter && submitter.hasAttribute?.('formtarget') ? submitter.getAttribute('formtarget') : effectiveTarget(form, 'target');
+    const linkOpensTab = (link, event) => {
+      const modified = event && (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button === 1);
+      return modified || otherTab(effectiveTarget(link, 'target'));
+    };
     const guardClick = (event) => {
       const link = event.target instanceof Element ? event.target.closest('a[href], area[href]') : null;
-      if (!link) return;
-      const modified = event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button === 1;
-      if (modified || otherTab(link.getAttribute('target') ?? '')) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        report(`link ${link.href}`);
-      }
+      if (!link || !linkOpensTab(link, event)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      report(`link ${link.href}`);
     };
     window.addEventListener('click', guardClick, true);
     window.addEventListener('auxclick', guardClick, true);
+    // Links that are not in the document (their click events never reach window): a.click() / dispatchEvent.
+    const anchorClick = HTMLAnchorElement.prototype.click;
+    lock(HTMLAnchorElement.prototype, 'click', function () {
+      if (this.hasAttribute('href') && linkOpensTab(this)) return report(`link ${this.href}`);
+      return anchorClick.call(this);
+    });
+    const dispatch = EventTarget.prototype.dispatchEvent;
+    lock(EventTarget.prototype, 'dispatchEvent', function (event) {
+      const link = this instanceof Element ? this.closest('a[href], area[href]') : null;
+      if (link && (event.type === 'click' || event.type === 'auxclick') && linkOpensTab(link, event)) {
+        report(`link ${link.href}`);
+        return false;
+      }
+      return dispatch.call(this, event);
+    });
+    // Forms: user submits and requestSubmit() fire the submit event; form.submit() does not.
     window.addEventListener(
       'submit',
       (event) => {
         const form = event.target;
-        if (form instanceof HTMLFormElement && otherTab(form.getAttribute('target') ?? '')) {
+        if (form instanceof HTMLFormElement && otherTab(formTarget(form, event.submitter))) {
           event.preventDefault();
+          event.stopImmediatePropagation();
           report(`form ${form.action}`);
         }
       },
       true,
     );
+    const submit = HTMLFormElement.prototype.submit;
+    lock(HTMLFormElement.prototype, 'submit', function () {
+      if (otherTab(formTarget(this, null))) return report(`form ${this.action}`);
+      return submit.call(this);
+    });
+    const requestSubmit = HTMLFormElement.prototype.requestSubmit;
+    lock(HTMLFormElement.prototype, 'requestSubmit', function (submitter) {
+      if (otherTab(formTarget(this, submitter ?? null))) return report(`form ${this.action}`);
+      return requestSubmit.call(this, submitter);
+    });
   });
 
-  // Only the first page is allowed. Any other (a tab or window a click opened) is closed at once and fails the run:
-  // requests of tabs opened with modifier clicks are not seen by context.route (EURO-22 审查).
-  const page = context.pages()[0] ?? (await context.newPage());
+  // Backstop: any other page Playwright still sees is closed too and fails the run.
   const extraPages = [];
   context.on('page', (p) => {
     if (p === page) return;
@@ -125,6 +235,7 @@ async function main() {
     p.close().catch(() => {});
   });
   const checkPages = (where) => {
+    if (heldPages.length > 0) throw new Error(`${where}打开了新页面（${heldPages.join(', ')}），它的请求全部拦下，页面已关闭；为保护参照账号，本次运行失败`);
     if (extraPages.length > 0) throw new Error(`${where}打开了新页面（${extraPages.join(', ')}），已关闭；为保护参照账号，本次运行失败`);
     if (blockedPopups.length > 0) throw new Error(`${where}页面想打开新页面（${blockedPopups.join(', ')}），已阻止；为保护参照账号，本次运行失败`);
   };
