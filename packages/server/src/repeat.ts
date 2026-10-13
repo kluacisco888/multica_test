@@ -69,6 +69,7 @@ export async function generateNextInstance(
     // Each instance reminds by the same rules (spec 用户故事 81); the sync hook schedules them.
     reminders: task.reminders,
     reminderChannelIds: task.reminderChannelIds,
+    columnId: task.columnId,
   });
   // A 检查清单 starts over: same 检查项, none checked.
   if (task.kind === 'checklist') {

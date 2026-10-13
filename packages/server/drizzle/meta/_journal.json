@@ -99,6 +99,13 @@
       "when": 1791901093844,
       "tag": "0013_theme",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791901651070,
+      "tag": "0014_kanban_columns",
+      "breakpoints": true
     }
   ]
 }

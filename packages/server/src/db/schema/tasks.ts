@@ -41,6 +41,20 @@ export const lists = pgTable(
   ],
 );
 
+/** 看板分栏 of a 清单 (spec 用户故事 66): left to right by `sort_order`. */
+export const kanbanColumns = pgTable(
+  'kanban_columns',
+  {
+    ...syncColumns(),
+    listId: uuid()
+      .notNull()
+      .references(() => lists.id),
+    name: text().notNull(),
+    sortOrder: text().notNull(),
+  },
+  (t) => [syncIndex('kanban_columns', t), index('kanban_columns_user_list_idx').on(t.userId, t.listId)],
+);
+
 /**
  * 任务, including 子任务 (`parent_id`), 优先级 and 标签.
  *
@@ -98,6 +112,8 @@ export const tasks = pgTable(
     reminders: jsonb().$type<Reminder[]>().notNull().default([]),
     /** 通知渠道 of the reminders; null: the user's default channels (用户故事 78). */
     reminderChannelIds: uuid().array(),
+    /** 看板分栏 of its 清单; null (or a deleted 分栏): 未分组. Only meaningful for top-level tasks. */
+    columnId: uuid().references(() => kanbanColumns.id),
   },
   (t) => [
     syncIndex('tasks', t),

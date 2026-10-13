@@ -14,6 +14,12 @@ import {
   type Comment,
   filterSchema,
   filtersResponseSchema,
+  kanbanColumnSchema,
+  kanbanColumnsResponseSchema,
+  type CreateKanbanColumnRequest,
+  type DeleteKanbanColumnQuery,
+  type KanbanColumn,
+  type UpdateKanbanColumnRequest,
   searchResponseSchema,
   smartListCountsResponseSchema,
   type CreateFilterRequest,
@@ -384,4 +390,24 @@ export async function snoozeReminderAlert(id: string, minutes: number): Promise<
 /** Deliveries that still failed after their retries. */
 export async function fetchReminderFailures(): Promise<ReminderFailure[]> {
   return reminderFailuresResponseSchema.parse(await (await call('GET', '/api/reminders/failures')).json()).failures;
+}
+
+/** 看板分栏 of a 清单, left to right. */
+export async function fetchKanbanColumns(listId: string): Promise<KanbanColumn[]> {
+  const res = await call('GET', `/api/kanban-columns?${new URLSearchParams({ listId }).toString()}`);
+  return kanbanColumnsResponseSchema.parse(await res.json()).columns;
+}
+
+export async function createKanbanColumn(request: CreateKanbanColumnRequest): Promise<KanbanColumn> {
+  return kanbanColumnSchema.parse(await (await call('POST', '/api/kanban-columns', request)).json());
+}
+
+export async function updateKanbanColumn(id: string, patch: UpdateKanbanColumnRequest): Promise<KanbanColumn> {
+  return kanbanColumnSchema.parse(await (await call('PATCH', `/api/kanban-columns/${encodeURIComponent(id)}`, patch)).json());
+}
+
+/** 删除分组: its tasks go to the 回收站, or move to another 分栏 / 未分组. */
+export async function deleteKanbanColumn(id: string, query: DeleteKanbanColumnQuery): Promise<void> {
+  const params = new URLSearchParams({ tasks: query.tasks ?? 'delete', ...(query.moveTo ? { moveTo: query.moveTo } : {}) });
+  await call('DELETE', `/api/kanban-columns/${encodeURIComponent(id)}?${params.toString()}`);
 }

@@ -65,6 +65,20 @@ test.describe('keyboard', () => {
     await expect(box).toHaveValue('');
   });
 
+  test('N on a 清单 看板 opens the 添加任务 box of the first column', async ({ page }) => {
+    await start(page, 'kb-n-board');
+    const lists = (await (await page.request.get('/api/lists')).json()) as { lists: { id: string; isInbox: boolean }[] };
+    const inbox = lists.lists.find((l) => l.isInbox)?.id as string;
+    await page.request.patch('/api/settings', { data: { viewOptions: { [`list:${inbox}`]: { sortBy: 'custom', groupBy: 'none', layout: 'kanban' } } } });
+    await page.reload();
+    await expect(page.getByRole('region', { name: '未分组' })).toBeVisible();
+    await page.locator('body').click({ position: { x: 5, y: 5 } });
+    await page.keyboard.press('n');
+    const box = page.getByRole('textbox', { name: '添加任务到「未分组」' });
+    await expect(box).toBeFocused();
+    await expect(box).toHaveValue('');
+  });
+
   test('Enter in 添加任务 saves the task and keeps the box ready for the next one', async ({ page }) => {
     await start(page, 'kb-enter');
     await quickAdd(page).fill('第一件');

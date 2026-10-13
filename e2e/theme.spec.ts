@@ -183,7 +183,7 @@ test('外观: 深色 changes every screen, survives a reload, and 浅色 brings 
   expect(bg).toBe('rgb(255, 255, 255)');
 });
 
-test('外观: 深色 and a 颜色系列 also cover the 时间线 and the 日历', async ({ page }, testInfo) => {
+test('外观: 深色 and a 颜色系列 also cover the 时间线, the 日历 and the 看板', async ({ page }, testInfo) => {
   const user = createUser('theme-views');
   await logIn(page, user.username, user.password);
   const today = new Date().toISOString().slice(0, 10);
@@ -220,6 +220,13 @@ test('外观: 深色 and a 颜色系列 also cover the 时间线 and the 日历'
   });
   expect(tokens.bar).toBe(tokens.accent);
   expect(tokens.calendar).toContain('color-mix');
+  // 看板 of the 收件箱 (EURO-18), with a 分栏.
+  await page.request.post('/api/kanban-columns', { data: { listId: inbox, name: '进行中' } });
+  await page.request.patch('/api/settings', { data: { viewOptions: { [`list:${inbox}`]: { sortBy: 'custom', groupBy: 'none', layout: 'kanban' } } } });
+  await page.goto('/');
+  await expect(page.getByRole('region', { name: '进行中' })).toBeVisible();
+  expect(await lightLeftovers(page)).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath(`theme-dark-kanban-${testInfo.project.name}.png`) });
 });
 
 test('外观: 跟随系统 follows the OS setting, live', async ({ page }) => {

@@ -5,6 +5,7 @@ import {
   keyBetween,
   type ChecklistItem,
   type Folder,
+  type KanbanColumn,
   type Tag,
   type Task,
   type TaskDates,
@@ -13,7 +14,7 @@ import {
 } from '@dida/shared';
 import type { Executor } from './db/client.js';
 import { tags } from './db/schema/tags.js';
-import type { checklistItems } from './db/schema/tasks.js';
+import type { checklistItems, kanbanColumns } from './db/schema/tasks.js';
 import { folders, lists, tasks } from './db/schema/tasks.js';
 import type { SyncWriter } from './sync/sync.js';
 
@@ -27,6 +28,7 @@ export type FolderRow = typeof folders.$inferSelect;
 export type TaskRow = typeof tasks.$inferSelect;
 export type ChecklistItemRow = typeof checklistItems.$inferSelect;
 export type TagRow = typeof tags.$inferSelect;
+export type KanbanColumnRow = typeof kanbanColumns.$inferSelect;
 
 /** Advisory-lock namespace for creating a user's 收件箱 (second key: hash of the user id). */
 const INBOX_LOCK = 0x696e_6278; // "inbx"
@@ -144,6 +146,19 @@ export function taskToApi(row: TaskRow): Task {
     repeat: row.repeat,
     reminders: row.reminders,
     reminderChannelIds: row.reminderChannelIds,
+    columnId: row.columnId,
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt),
+    revision: row.revision,
+  };
+}
+
+export function kanbanColumnToApi(row: KanbanColumnRow): KanbanColumn {
+  return {
+    id: row.id,
+    listId: row.listId,
+    name: row.name,
+    sortOrder: row.sortOrder,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
     revision: row.revision,

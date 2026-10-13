@@ -102,6 +102,7 @@
 
   /* ---- Colour: lines ---- */
   --color-divider: #f2f3f3;
+  --color-card-border: #ebebeb; /* 看板 cards */
   --color-divider-strong: #e8ebf2;
   --color-border: #e5e6e8;
   --color-border-strong: #8a8b8d; /* checkbox outline: 3:1 for UI components */
@@ -184,6 +185,11 @@
   --calendar-lane-height: 20px; /* CalendarPane LANE_HEIGHT */
   --calendar-cell-head: 29px; /* CalendarPane CELL_HEAD */
   --calendar-row-min: 96px; /* a 月 week row never gets shorter than this */
+
+  --kanban-column-width: 258px; /* reference 看板 column (314→572 at 1440) */
+  --kanban-column-gap: 20px; /* column → next column / “+ 新分组” */
+  --kanban-header-height: 28px;
+  --kanban-detail-width: 420px; /* detail beside a board while a task is open */
 
   /* ---- Shape & elevation ---- */
   --radius-sm: 4px;
@@ -347,6 +353,7 @@
 
   --color-divider: #2c2c2f;
   --color-divider-strong: #333337;
+  --color-card-border: #3a3a3e; /* 看板 cards (EURO-18) */
   --color-border: #3a3a3e;
   --color-border-strong: #8a8b8f;
   --color-focus: var(--accent-on-dark);

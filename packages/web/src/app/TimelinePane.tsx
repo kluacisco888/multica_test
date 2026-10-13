@@ -30,7 +30,7 @@ import {
 import { ContextMenu, IconButton, MenuButton } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { layoutMenuSections } from './TaskListPane.js';
-import { viewTitle, type ListPaneView } from './views.js';
+import { viewLayouts, viewTitle, type ListPaneView } from './views.js';
 
 /*
  * 时间线视图 (spec 用户故事 68). Each open dated task is a bar from its start
@@ -293,7 +293,7 @@ export function TimelinePane(props: TimelinePaneProps) {
     );
   }
 
-  const layoutSections = layoutMenuSections(props.viewOptions, props.onChangeViewOptions, true);
+  const layoutSections = layoutMenuSections(props.viewOptions, props.onChangeViewOptions, viewLayouts(props.view));
   const loading = tasks === null;
 
   return (

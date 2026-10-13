@@ -8,6 +8,9 @@ import {
   type CalendarDay,
   type CalendarMode,
   type NotificationChannel,
+  sortKeyForDrop,
+  UNGROUPED_COLUMN_TITLE,
+  type KanbanColumn,
   type Filter,
   type SearchMatchField,
   type SmartListId,
@@ -37,10 +40,12 @@ import * as api from '../api.js';
 import { useNow } from './clock.js';
 import {
   ConfirmDialog,
+  DeleteColumnDialog,
   FilterDialog,
   FolderDialog,
   ListDialog,
   TagDialog,
+  type DeleteColumnChoice,
   type FilterDraft,
   type ListDraft,
   type TagDraft,
@@ -52,13 +57,14 @@ import { SettingsDialog, type SettingsTab } from './SettingsDialog.js';
 import { MOBILE_QUERY, useMediaQuery, useRoute } from './route.js';
 import { activeSidebar, Sidebar } from './Sidebar.js';
 import { TaskDetail } from './TaskDetail.js';
+import type { ManualBoardActions } from './KanbanBoard.js';
 import { TaskListPane } from './TaskListPane.js';
 import { TimelinePane } from './TimelinePane.js';
 import { TrashPane } from './TrashPane.js';
 import { matchShortcut } from './shortcuts.js';
 import { ShortcutsDialog } from './ShortcutsPanel.js';
 import { useTheme } from './theme.js';
-import { belongsToView, quickAddTarget, scopeKey, tasksQuery, viewOptionsFor, viewKey, type ListPaneView } from './views.js';
+import { belongsToView, quickAddTarget, scopeKey, tasksQuery, viewLayouts, viewOptionsFor, viewKey, type ListPaneView } from './views.js';
 
 type DialogState =
   | { kind: 'none' }
@@ -73,7 +79,8 @@ type DialogState =
   | { kind: 'empty-trash' }
   | { kind: 'filter'; filter: Filter | null }
   | { kind: 'delete-filter'; filter: Filter }
-  | { kind: 'shortcuts' };
+  | { kind: 'shortcuts' }
+  | { kind: 'delete-column'; column: KanbanColumn; taskCount: number };
 
 const CALENDAR_MODE_KEY = 'dida.calendar.mode';
 
@@ -111,6 +118,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const [settings, setSettings] = useState<Settings | null>(null);
   /** 通知渠道, for choosing where a task's 提醒 go; reloaded when 设置 closes. */
   const [channels, setChannels] = useState<NotificationChannel[]>([]);
+  /** 看板分栏 of the 清单 on screen in 看板视图. */
+  const [columns, setColumns] = useState<{ listId: string; items: KanbanColumn[] } | null>(null);
   /** The 回收站 while it is on screen. */
   const [trash, setTrash] = useState<TrashedTask[] | null>(null);
   const now = useNow();
@@ -336,6 +345,126 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   // Tab / Shift+Tab only make sense in a 清单 shown in its own order.
   const indentable = view?.kind === 'list' && viewOptions?.sortBy === 'custom' && viewOptions.groupBy === 'none';
   const addTarget = view ? quickAddTarget(view, { now, timeZone }) : null;
+  // 看板视图 (spec 用户故事 66、67).
+  const boardMode = view !== null && viewLayouts(view).includes('kanban') && viewOptions?.layout === 'kanban';
+  const boardListId = boardMode && view?.kind === 'list' ? view.list.id : null;
+  const listColumns = columns && columns.listId === boardListId ? columns.items : null;
+
+  useEffect(() => {
+    if (!boardListId) return;
+    let cancelled = false;
+    api
+      .fetchKanbanColumns(boardListId)
+      .then((items) => {
+        if (!cancelled) setColumns({ listId: boardListId, items });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) fail(e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [boardListId, fail]);
+
+  const sortColumns = (items: KanbanColumn[]) =>
+    [...items].sort((a, b) => (a.sortOrder < b.sortOrder ? -1 : a.sortOrder > b.sortOrder ? 1 : a.id < b.id ? -1 : 1));
+
+  async function reloadColumns(listId: string) {
+    try {
+      const items = await api.fetchKanbanColumns(listId);
+      setColumns((prev) => (prev && prev.listId !== listId ? prev : { listId, items }));
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  /** Open cards (top-level tasks) of a column in custom order: where a dropped card lands. */
+  function cardsOf(columnId: string | null): Task[] {
+    const live = new Set((listColumns ?? []).map((c) => c.id));
+    const ids = new Set((listTasks ?? []).map((t) => t.id));
+    return (listTasks ?? []).filter(
+      (t) =>
+        t.status === 'open' &&
+        (t.parentId === null || !ids.has(t.parentId)) &&
+        (t.columnId !== null && live.has(t.columnId) ? t.columnId : null) === columnId,
+    );
+  }
+
+  const kanbanActions: ManualBoardActions | null =
+    boardListId === null
+      ? null
+      : {
+          async onAddTask(columnId, title) {
+            try {
+              putTask(await api.createTask({ listId: boardListId, title, columnId }));
+              void reloadSidebar();
+              return true;
+            } catch (e) {
+              fail(e);
+              return false;
+            }
+          },
+          async onAddColumn(name, sortOrder) {
+            try {
+              const created = await api.createKanbanColumn({ listId: boardListId, name, ...(sortOrder ? { sortOrder } : {}) });
+              setColumns((prev) => ({ listId: boardListId, items: sortColumns([...(prev?.listId === boardListId ? prev.items : []), created]) }));
+              return true;
+            } catch (e) {
+              fail(e);
+              return false;
+            }
+          },
+          async onRenameColumn(column, name) {
+            try {
+              const updated = await api.updateKanbanColumn(column.id, { name });
+              setColumns((prev) => prev && { ...prev, items: prev.items.map((c) => (c.id === updated.id ? updated : c)) });
+              return true;
+            } catch (e) {
+              fail(e);
+              return false;
+            }
+          },
+          onReorderColumn(column, sortOrder) {
+            // Optimistic: the column moves at once.
+            setColumns((prev) => prev && { ...prev, items: sortColumns(prev.items.map((c) => (c.id === column.id ? { ...c, sortOrder } : c))) });
+            api.updateKanbanColumn(column.id, { sortOrder }).catch((e: unknown) => {
+              fail(e);
+              void reloadColumns(boardListId);
+            });
+          },
+          onDeleteColumn(column) {
+            const taskCount = (listTasks ?? []).filter((t) => t.columnId === column.id && t.parentId === null).length;
+            // Reference: an empty 分组 is deleted without asking.
+            if (taskCount === 0) void removeColumn(column, { tasks: 'delete' });
+            else setDialog({ kind: 'delete-column', column, taskCount });
+          },
+          onDropTask(taskId, columnId, beforeId) {
+            const task = listTasks?.find((t) => t.id === taskId);
+            if (!task) return;
+            const live = new Set((listColumns ?? []).map((c) => c.id));
+            const currentColumn = task.columnId !== null && live.has(task.columnId) ? task.columnId : null;
+            // Order inside a column follows the drop only in the custom order.
+            const sortOrder = viewOptions?.sortBy === 'custom' ? sortKeyForDrop(cardsOf(columnId), task.id, beforeId) : null;
+            const patch: UpdateTaskRequest = {
+              ...(currentColumn !== columnId ? { columnId } : {}),
+              ...(sortOrder ? { sortOrder } : {}),
+            };
+            if (Object.keys(patch).length === 0) return;
+            putTask({ ...task, ...patch } as Task);
+            void changeTask(task, patch);
+          },
+        };
+
+  async function removeColumn(column: KanbanColumn, choice: DeleteColumnChoice) {
+    try {
+      await api.deleteKanbanColumn(column.id, choice.tasks === 'move' ? { tasks: 'move', ...(choice.moveTo ? { moveTo: choice.moveTo } : {}) } : { tasks: 'delete' });
+      setDialog({ kind: 'none' });
+      await Promise.all([reloadColumns(column.listId), reloadTasks()]);
+      void reloadSidebar();
+    } catch (e) {
+      fail(e);
+    }
+  }
 
   function openList(listId: string) {
     navigate({ listId: listId === inbox?.id ? null : listId, taskId: null });
@@ -749,17 +878,18 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     return () => document.removeEventListener('keydown', onKeyDown);
   });
 
-  // 时间线 (spec 用户故事 68) uses the whole width until a task is opened, like the reference.
-  const timeline = view !== null && view.kind !== 'search' && view.kind !== 'calendar' && viewOptions?.layout === 'timeline';
+  // 时间线 (spec 用户故事 68) and 看板 (66、67) use the whole width until a task is opened, like the reference.
+  const timeline = view !== null && viewLayouts(view).includes('timeline') && viewOptions?.layout === 'timeline';
+  const board = boardMode && !route.trash;
   // The 日历 takes the whole width too; its task opens beside it.
-  const showDetail = route.calendar ? selectedTask !== null : (!isMobile && !timeline) || selectedTask !== null;
+  const showDetail = route.calendar ? selectedTask !== null : (!isMobile && !timeline && !board) || selectedTask !== null;
   const sidebarVisible = isMobile ? drawerOpen : sidebarOpen && !route.calendar;
 
   return (
     <div
       className={`shell ${sidebarVisible ? 'shell-sidebar-open' : 'shell-sidebar-closed'} ${selectedTask ? 'shell-has-task' : ''} ${
         route.calendar ? 'shell-calendar' : ''
-      }`}
+      } ${board ? 'shell-kanban' : ''}`}
     >
       {!isMobile && (
         <Rail
@@ -894,6 +1024,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onDeleteTask={(task) => void deleteTask(task)}
           onArchiveList={currentList && !currentList.isInbox ? (archived) => void archiveList(currentList, archived) : null}
           onEditList={currentList && !currentList.isInbox ? () => setDialog({ kind: 'list', list: currentList, folderId: currentList.folderId }) : null}
+          columns={view?.kind === 'list' ? listColumns : null}
+          kanban={kanbanActions}
         />
       )}
       {showDetail && !(isMobile && route.trash) && (
@@ -1030,6 +1162,18 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           confirmLabel="删除"
           onCancel={() => setDialog({ kind: 'none' })}
           onConfirm={() => removeFilter(dialog.filter)}
+        />
+      )}
+      {dialog.kind === 'delete-column' && (
+        <DeleteColumnDialog
+          columnName={dialog.column.name}
+          taskCount={dialog.taskCount}
+          targets={[
+            ...(listColumns ?? []).filter((c) => c.id !== dialog.column.id).map((c) => ({ id: c.id, name: c.name })),
+            { id: null, name: UNGROUPED_COLUMN_TITLE },
+          ]}
+          onCancel={() => setDialog({ kind: 'none' })}
+          onConfirm={(choice) => removeColumn(dialog.column, choice)}
         />
       )}
       {dialog.kind === 'delete-tag' && (

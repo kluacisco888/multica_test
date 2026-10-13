@@ -8,10 +8,12 @@ import {
   tagWithChildren,
   taskInRange,
   todayIn,
+  layoutsFor,
   type CalendarRange,
   type CreateTaskRequest,
   type Filter,
   type SmartListId,
+  type ViewLayout,
   type Tag,
   type Task,
   type TaskList,
@@ -33,6 +35,11 @@ export type ListPaneView =
   | { kind: 'filter'; filter: Filter; inbox: TaskList | null }
   | { kind: 'search'; query: string }
   | { kind: 'calendar'; range: CalendarRange };
+
+/** Layouts the 视图 switcher offers here (see `layoutsFor`); the 日历 has its own views. */
+export function viewLayouts(view: ListPaneView): ViewLayout[] {
+  return view.kind === 'calendar' ? [] : layoutsFor(view.kind);
+}
 
 /** Key of the view in 设置 → `viewOptions` and of the task set on screen. */
 export function viewKey(view: ListPaneView): string {
