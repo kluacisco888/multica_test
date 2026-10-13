@@ -5,7 +5,17 @@ import { Icon } from '../ui/Icon.js';
  * The narrow blue bar on the far left (desktop only): account at the top,
  * then one entry per module. Calendar, focus, habits etc. join it in later tasks.
  */
-export function Rail({ user, onOpenAccount, onHome }: { user: CurrentUser; onOpenAccount: () => void; onHome: () => void }) {
+export function Rail({
+  user,
+  onOpenAccount,
+  onOpenSettings,
+  onHome,
+}: {
+  user: CurrentUser;
+  onOpenAccount: () => void;
+  onOpenSettings: () => void;
+  onHome: () => void;
+}) {
   return (
     <nav className="rail" aria-label="模块">
       <button type="button" className="rail-avatar" aria-label={`账户：${user.username}`} title={user.username} onClick={onOpenAccount}>
@@ -23,6 +33,11 @@ export function Rail({ user, onOpenAccount, onHome }: { user: CurrentUser; onOpe
           </a>
         </li>
       </ul>
+      <div className="rail-bottom">
+        <button type="button" className="rail-item rail-button" aria-label="设置" title="设置" onClick={onOpenSettings}>
+          <Icon name="settings" size={22} />
+        </button>
+      </div>
     </nav>
   );
 }

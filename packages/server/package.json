@@ -5,7 +5,8 @@
   "type": "module",
   "files": [
     "dist",
-    "drizzle"
+    "drizzle",
+    "holidays"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -21,6 +22,7 @@
     "drizzle-orm": "0.45.4",
     "fastify": "5.12.5",
     "pg": "8.23.1",
+    "pg-boss": "12.37.1",
     "zod": "4.6.6"
   },
   "devDependencies": {

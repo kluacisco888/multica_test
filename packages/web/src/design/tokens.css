@@ -18,6 +18,7 @@
   --color-brand-softer: #ecf0fe; /* hovered sidebar item */
   --color-on-brand: #ffffff;
   --gradient-rail: linear-gradient(180deg, #4772fa 0%, #6d91ff 100%);
+  --color-rail-hover: rgb(255 255 255 / 0.12); /* hovered rail button */
 
   /* ---- Colour: surfaces ---- */
   --color-bg: #ffffff;

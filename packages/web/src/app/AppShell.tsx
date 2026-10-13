@@ -264,7 +264,14 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
 
   return (
     <div className={`shell ${sidebarVisible ? 'shell-sidebar-open' : 'shell-sidebar-closed'} ${selectedTask ? 'shell-has-task' : ''}`}>
-      {!isMobile && <Rail user={user} onOpenAccount={() => setDialog({ kind: 'settings' })} onHome={() => navigate({ listId: null, taskId: null })} />}
+      {!isMobile && (
+        <Rail
+          user={user}
+          onOpenAccount={() => setDialog({ kind: 'settings' })}
+          onOpenSettings={() => setDialog({ kind: 'settings' })}
+          onHome={() => navigate({ listId: null, taskId: null })}
+        />
+      )}
       {isMobile && drawerOpen && <div className="shell-scrim" aria-hidden="true" onClick={() => setDrawerOpen(false)} />}
       {sidebarVisible && (
         <Sidebar
@@ -273,6 +280,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           isDrawer={isMobile}
           user={user}
           onOpenAccount={() => setDialog({ kind: 'settings' })}
+          onOpenSettings={() => setDialog({ kind: 'settings' })}
           onClose={() => setDrawerOpen(false)}
           onOpenList={openList}
           onAddList={(folderId) => setDialog({ kind: 'list', list: null, folderId })}

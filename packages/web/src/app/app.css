@@ -1265,3 +1265,98 @@ body {
     box-shadow: none;
   }
 }
+
+/* ---- Rail: bottom actions ---- */
+
+.rail-bottom {
+  display: grid;
+  margin-top: auto;
+  padding-bottom: var(--space-4);
+}
+
+.rail-button {
+  padding: 0;
+  font: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.rail-button:hover {
+  background: var(--color-rail-hover);
+}
+
+.rail-button:focus-visible {
+  outline-color: var(--color-on-brand);
+}
+
+.sidebar-drawer-actions {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+/* ---- 设置: 节假日数据 card rows (the dialog shell is above) ---- */
+
+.settings-row-stacked {
+  display: grid;
+  gap: 2px;
+  align-content: center;
+  padding: var(--space-2) 0;
+}
+
+.settings-row-label {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-regular);
+}
+
+.settings-row-hint {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.settings-row-value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--color-text-secondary);
+  text-align: right;
+}
+
+.settings-link {
+  padding: 0;
+  font: inherit;
+  color: var(--color-brand-text);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.settings-link:hover {
+  text-decoration: underline;
+}
+
+.settings-link[aria-disabled='true'] {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.settings-status {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.settings-status:empty {
+  display: none;
+}
+
+.settings-status:not(:empty) {
+  padding-bottom: var(--space-2);
+}
+
+.settings-status-error {
+  color: var(--color-danger);
+}
+

@@ -13,7 +13,14 @@ describe('loadConfig', () => {
       defaultTimezone: 'Asia/Shanghai',
       dataDir: '/data',
       trustProxy: ['loopback', 'linklocal', 'uniquelocal'],
+      holidayDataUrl: 'https://cdn.jsdelivr.net/gh/NateScarlet/holiday-cn@master',
     });
+  });
+
+  it('reads HOLIDAY_DATA_URL without a trailing slash', () => {
+    expect(loadConfig({ ...base, HOLIDAY_DATA_URL: 'http://127.0.0.1:9999/holiday-cn/' }).holidayDataUrl).toBe(
+      'http://127.0.0.1:9999/holiday-cn',
+    );
   });
 
   it('reads port, host and PUBLIC_URL from the environment', () => {

@@ -10,7 +10,9 @@ import type { Db } from './db/client.js';
 import { sendError } from './http-errors.js';
 import { authRoutes } from './routes/auth.js';
 import { changesRoutes } from './routes/changes.js';
+import { createHolidayService, type HolidayService } from './holidays/service.js';
 import { healthRoutes } from './routes/health.js';
+import { holidayRoutes } from './routes/holidays.js';
 import { listRoutes } from './routes/lists.js';
 import { settingsRoutes } from './routes/settings.js';
 import { taskRoutes } from './routes/tasks.js';
@@ -36,6 +38,7 @@ declare module 'fastify' {
     sync: SyncWriter;
     accounts: Accounts;
     sessions: SessionStore;
+    holidays: HolidayService;
   }
 }
 
@@ -65,6 +68,16 @@ export async function buildApp(deps: AppDeps) {
   app.decorate('sync', createSyncWriter(db, clock));
   app.decorate('accounts', accounts);
   app.decorate('sessions', sessions);
+  app.decorate(
+    'holidays',
+    createHolidayService({
+      db,
+      clock,
+      log: app.log,
+      dataUrl: config.holidayDataUrl,
+      timezone: config.defaultTimezone,
+    }),
+  );
   await app.register(fastifyCookie);
   registerAuthentication(app, { sessions, config });
 
@@ -83,6 +96,7 @@ export async function buildApp(deps: AppDeps) {
   listRoutes(app);
   taskRoutes(app);
   settingsRoutes(app);
+  holidayRoutes(app);
   deps.routes?.(app);
 
   if (config.webDistDir) {

@@ -1,6 +1,8 @@
 import {
   apiErrorSchema,
   folderSchema,
+  holidayRefreshResponseSchema,
+  holidayStatusSchema,
   listSchema,
   meResponseSchema,
   settingsSchema,
@@ -13,6 +15,8 @@ import {
   type CreateTaskRequest,
   type CurrentUser,
   type Folder,
+  type HolidayRefreshResponse,
+  type HolidayStatus,
   type LoginRequest,
   type Settings,
   type SidebarResponse,
@@ -120,6 +124,14 @@ export async function fetchSettings(): Promise<Settings> {
 
 export async function updateSettings(patch: UpdateSettingsRequest): Promise<Settings> {
   return settingsSchema.parse(await (await call('PATCH', '/api/settings', patch)).json());
+}
+
+export async function fetchHolidayStatus(): Promise<HolidayStatus> {
+  return holidayStatusSchema.parse(await (await call('GET', '/api/holidays/status')).json());
+}
+
+export async function refreshHolidays(): Promise<HolidayRefreshResponse> {
+  return holidayRefreshResponseSchema.parse(await (await call('POST', '/api/holidays/refresh')).json());
 }
 
 export function errorMessage(error: unknown): string {
