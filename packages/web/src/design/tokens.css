@@ -186,6 +186,8 @@
   --color-habit-ring-track: #e8eaef; /* empty / hatched day circles (reference #e3e5ea) */
   --color-habit-hatch: #f4f5f8;
   --color-habit-art-bg: #eef0f5;
+  --color-habit-art-ink: #1f2a5a; /* empty-state drawing outlines */
+  --color-habit-art-paper: #ffffff;
   --calendar-gutter: 68px; /* hour labels of the time grid */
   --calendar-hour-height: 60px; /* CalendarPane HOUR_HEIGHT */
   --calendar-lane-height: 20px; /* CalendarPane LANE_HEIGHT */
@@ -426,6 +428,8 @@
   --color-habit-ring-track: #3a3a3e;
   --color-habit-hatch: #2a2a2e;
   --color-habit-art-bg: #2a2a2e;
+  --color-habit-art-ink: #c9cfe8;
+  --color-habit-art-paper: #1c1c1e;
   --color-calendar-outside: #18181a;
   --color-calendar-line: #2c2c2f;
   --color-calendar-cell-hover: color-mix(in srgb, var(--accent) 10%, #1c1c1e);

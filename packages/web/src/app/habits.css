@@ -179,7 +179,7 @@
   height: 36px;
   font-size: 15px;
   font-weight: var(--font-weight-bold);
-  color: #fff;
+  color: var(--color-on-brand);
   background: var(--color-brand);
   border-radius: 50%;
 }
@@ -219,7 +219,7 @@
   width: 32px;
   height: 32px;
   padding: 0;
-  color: #fff;
+  color: var(--color-on-brand);
   border: 0;
   border-radius: 50%;
   cursor: pointer;
@@ -378,7 +378,7 @@
 
 .habit-day-done,
 .habit-day-done:hover:not(:disabled) {
-  color: #fff;
+  color: var(--color-on-brand);
   background: var(--color-brand);
 }
 
@@ -440,7 +440,7 @@
 }
 
 .habit-weekday-on {
-  color: #fff;
+  color: var(--color-on-brand);
   background: var(--color-brand);
   border-color: var(--color-brand);
 }

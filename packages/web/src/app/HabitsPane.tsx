@@ -578,15 +578,15 @@ function HabitsEmptyArt() {
   return (
     <svg className="habits-empty-art" width="140" height="124" viewBox="0 0 140 124" aria-hidden="true" focusable="false">
       <path d="M30 40c10-24 60-34 86-22 18 8 22 40 10 62-14 26-60 40-86 24C18 90 20 62 30 40Z" fill="var(--color-habit-art-bg)" />
-      <rect x="6" y="30" width="52" height="22" rx="3" fill="#fff" stroke="#1f2a5a" strokeWidth="2" />
+      <rect x="6" y="30" width="52" height="22" rx="3" fill="var(--color-habit-art-paper)" stroke="var(--color-habit-art-ink)" strokeWidth="2" />
       <circle cx="18" cy="41" r="5" fill="none" stroke="var(--color-brand)" strokeWidth="2" />
       <path d="M28 38h22M28 44h14" stroke="var(--color-brand)" strokeWidth="3" strokeLinecap="round" />
       <circle cx="92" cy="72" r="26" fill="var(--color-brand)" />
-      <circle cx="92" cy="72" r="20" fill="#fff" stroke="#1f2a5a" strokeWidth="2" />
-      <path d="M92 60v13l-5 6" stroke="#1f2a5a" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+      <circle cx="92" cy="72" r="20" fill="var(--color-habit-art-paper)" stroke="var(--color-habit-art-ink)" strokeWidth="2" />
+      <path d="M92 60v13l-5 6" stroke="var(--color-habit-art-ink)" strokeWidth="2.5" strokeLinecap="round" fill="none" />
       <path d="M70 52a9 9 0 0 1 12-6M114 52a9 9 0 0 0-12-6" stroke="var(--color-brand)" strokeWidth="6" strokeLinecap="round" fill="none" />
-      <path d="M48 76l2 4 4 2-4 2-2 4-2-4-4-2 4-2Z" fill="#1f2a5a" />
-      <circle cx="70" cy="22" r="2" fill="#1f2a5a" />
+      <path d="M48 76l2 4 4 2-4 2-2 4-2-4-4-2 4-2Z" fill="var(--color-habit-art-ink)" />
+      <circle cx="70" cy="22" r="2" fill="var(--color-habit-art-ink)" />
     </svg>
   );
 }
