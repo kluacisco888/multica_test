@@ -39,6 +39,8 @@ export interface Route {
   calendar?: CalendarRoute | null;
   /** The 四象限. */
   matrix?: boolean;
+  /** 番茄专注. */
+  focus?: boolean;
 }
 
 const EMPTY: Required<Route> = { listId: null, tagId: null, smartId: null, filterId: null, search: null, taskId: null, trash: false, calendar: null, matrix: false, focus: false };
@@ -48,6 +50,7 @@ export function parseRoute(pathname: string): Route {
   if (/^\/search\/?$/.test(pathname)) return { ...EMPTY, search: '' };
   const matrix = /^\/matrix(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
   if (matrix) return { ...EMPTY, matrix: true, taskId: matrix[1] ? safeDecode(matrix[1]) : null };
+  if (/^\/focus\/?$/.test(pathname)) return { ...EMPTY, focus: true };
   const calendar = /^\/calendar(?:\/([^/]+)\/([^/]+))?(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
   if (calendar) {
     const mode = calendarModeSchema.safeParse(calendar[1]);
@@ -92,6 +95,7 @@ function safeDecode(value: string): string | null {
 
 export function routePath({ listId, tagId, smartId, filterId, search, taskId, trash, calendar, matrix, focus }: Route): string {
   if (trash) return '/trash';
+  if (focus) return '/focus';
   let base: string;
   if (matrix) base = '/matrix';
   else if (calendar) base = calendar.mode && calendar.date ? `/calendar/${calendar.mode}/${calendar.date}` : '/calendar';

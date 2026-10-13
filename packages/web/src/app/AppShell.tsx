@@ -139,6 +139,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     console.error(e);
     setError(api.errorMessage(e));
   }, []);
+  /** 番茄专注 timer, kept for the whole app so a 番茄 ends (and chimes) wherever the user is. */
+  const focusTimer = useFocusTimer(fail);
 
   /** The sidebar: 清单, 文件夹, their counts and the 智能清单 counts. */
   const reloadSidebar = useCallback(async () => {
@@ -254,7 +256,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const inbox = sidebar?.lists.find((l) => l.isInbox) ?? null;
   const currentTag = route.tagId ? (tags?.find((t) => t.id === route.tagId) ?? null) : null;
   const currentFilter = route.filterId ? (filters?.find((f) => f.id === route.filterId) ?? null) : null;
-  const crossListRoute = Boolean(route.matrix || route.calendar || route.trash || route.tagId || route.smartId || route.filterId || (route.search !== null && route.search !== undefined));
+  const crossListRoute = Boolean(route.matrix || route.focus || route.calendar || route.trash || route.tagId || route.smartId || route.filterId || (route.search !== null && route.search !== undefined));
   const currentList = useMemo(() => {
     if (!sidebar || crossListRoute) return null;
     return (route.listId ? sidebar.lists.find((l) => l.id === route.listId) : inbox) ?? null;
@@ -1013,7 +1015,11 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const timeline = view !== null && viewLayouts(view).includes('timeline') && viewOptions?.layout === 'timeline';
   const board = boardMode && !route.trash;
   // The 日历 takes the whole width too; its task opens beside it.
-  const showDetail = route.calendar || route.matrix ? selectedTask !== null : (!isMobile && !timeline && !board) || selectedTask !== null;
+  const showDetail = route.focus
+    ? false
+    : route.calendar || route.matrix
+      ? selectedTask !== null
+      : (!isMobile && !timeline && !board) || selectedTask !== null;
   const sidebarVisible = isMobile ? drawerOpen : sidebarOpen && !route.calendar && !route.matrix && !route.focus;
 
   return (
@@ -1078,6 +1084,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onOpenSearch={() => openSearch()}
           onOpenCalendar={() => openCalendar()}
           onOpenMatrix={openMatrix}
+          onOpenFocus={openFocus}
         />
       )}
       {route.trash && (
@@ -1091,6 +1098,18 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onRestore={(task) => void restoreTask(task)}
           onPurge={(task) => setDialog({ kind: 'purge-task', task })}
           onEmpty={() => setDialog({ kind: 'empty-trash' })}
+        />
+      )}
+      {route.focus && (
+        <FocusPane
+          timer={focusTimer}
+          pomodoro={settings?.pomodoro ?? DEFAULT_SETTINGS.pomodoro}
+          timeZone={timeZone}
+          isMobile={isMobile}
+          sidebarVisible={sidebarVisible}
+          onToggleSidebar={() => setDrawerOpen((v) => !v)}
+          onSaveSettings={saveSettings}
+          onError={fail}
         />
       )}
       {route.matrix && !(isMobile && selectedTask) && (
@@ -1118,7 +1137,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           }}
         />
       )}
-      {!route.trash && !route.calendar && !route.matrix && !(isMobile && selectedTask) && timeline && view && (
+      {!route.trash && !route.calendar && !route.matrix && !route.focus && !(isMobile && selectedTask) && timeline && view && (
         <TimelinePane
           key={viewKey(view)}
           view={view}
@@ -1157,7 +1176,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onMoveTask={moveCalendarTask}
         />
       )}
-      {!route.trash && !route.calendar && !route.matrix && !(isMobile && selectedTask) && !timeline && (
+      {!route.trash && !route.calendar && !route.matrix && !route.focus && !(isMobile && selectedTask) && !timeline && (
         <TaskListPane
           // A new view starts with its sections expanded.
           key={view ? viewKey(view) : 'none'}

@@ -62,6 +62,8 @@ interface SidebarProps {
   onOpenCalendar: () => void;
   /** 四象限 (the drawer has no rail either). */
   onOpenMatrix: () => void;
+  /** 番茄专注 (likewise). */
+  onOpenFocus: () => void;
 }
 
 /** Order of the built-in rows, like the reference: date lists, then 收件箱, then the rest. */
