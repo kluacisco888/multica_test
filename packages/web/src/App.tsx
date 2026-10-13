@@ -1,15 +1,12 @@
 import type { CurrentUser } from '@dida/shared';
 import { useEffect, useState } from 'react';
 import { fetchCurrentUser } from './api.js';
-import { HomePage } from './HomePage.js';
+import { AppShell } from './app/AppShell.js';
 import { LoginPage } from './LoginPage.js';
 
 type AuthState = { status: 'loading' } | { status: 'error' } | { status: 'anonymous' } | { status: 'ready'; user: CurrentUser };
 
-/**
- * Login gate. EURO-6 replaces `HomePage` with the real application shell; the
- * login page's appearance is matched against the reference screenshots later.
- */
+/** Login gate in front of the application shell. */
 export function App() {
   const [auth, setAuth] = useState<AuthState>({ status: 'loading' });
 
@@ -44,6 +41,6 @@ export function App() {
     case 'anonymous':
       return <LoginPage onLoggedIn={(user) => setAuth({ status: 'ready', user })} />;
     case 'ready':
-      return <HomePage user={auth.user} onLoggedOut={() => setAuth({ status: 'anonymous' })} />;
+      return <AppShell user={auth.user} onLoggedOut={() => setAuth({ status: 'anonymous' })} />;
   }
 }

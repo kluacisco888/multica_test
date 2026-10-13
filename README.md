@@ -135,3 +135,15 @@ CI 定义在 `ci/github-actions.yml`：lint、类型检查、四层测试，再�
 - `GET /api/changes?since=<revision>` 按实体类型返回 `upserts` 和 `tombstones`，以及当前 `revision`，下一次把它作为 `since` 传回。
 - `/api` 下的接口默认都要登录（`src/auth.ts` 在 `onRoute` 里统一加 `app.authenticate`），未登录返回 401；只有声明了 `config: { public: true }` 的才公开（目前只有 health、login、logout，`test/api/access-control.test.ts` 会核对这份清单并逐个检查其余接口返回 401）。处理函数里用 `sessionUser(request)` 拿当前用户。
 - 按 id 读资源用 `findOwned(app.db, table, userId, id)`，写用 `app.sync.transaction`：别人的、已删除的、不存在的、非法 id 一律返回 null，接口统一回 404。
+
+### 清单、文件夹与任务 API
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /api/lists` | 侧栏：`lists`（收件箱在最前，首次访问时自动创建）、`folders`、`openTaskCounts` |
+| `POST/PATCH/DELETE /api/lists[/:id]` | 清单：名称、颜色、图标、`folderId`、`sortOrder`。收件箱不能改、不能删（400 `inbox_protected`）；删除清单会一起删除其中的任务 |
+| `POST/PATCH/DELETE /api/folders[/:id]` | 文件夹（只有一层）：名称、`collapsed`、`sortOrder`。删除文件夹时，其中的清单移到文件夹原来的位置 |
+| `GET /api/tasks?listId=` | 未完成任务按排序键，已完成任务在后、最近完成的在前 |
+| `GET/POST/PATCH /api/tasks[/:id]` | 不指定清单进收件箱；新建和移入的任务排在最前；`status` 在 `open` / `completed` 之间切换 |
+
+排序键是分数索引（`packages/shared/src/sort-key.ts`），拖拽只改被拖动的那一条；侧栏拖放规则在 `packages/shared/src/sidebar-order.ts`。界面的设计 token 和组件约定见 `packages/web/src/ui/README.md`。
