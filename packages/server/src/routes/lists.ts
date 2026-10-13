@@ -17,6 +17,7 @@ import { endOfSidebarLevel, ensureInbox, folderToApi, listToApi, topLevelKeys, t
 import { findOwned } from '../sync/sync.js';
 import { liveTasksOfList, lockTaskTrees } from '../task-tree.js';
 import { moveToTrash } from '../trash.js';
+import { deleteColumnsOfList } from './kanban.js';
 import { inboxProtected, invalidFolder, notFound, Rejection, respond } from './respond.js';
 
 type Params = { Params: { id: string } };
@@ -125,6 +126,7 @@ export function listRoutes(app: FastifyInstance) {
           for (const root of owned.filter((task) => task.parentId === null || !ids.has(task.parentId))) {
             await moveToTrash(ops, tx, userId, root, owned);
           }
+          await deleteColumnsOfList(ops, tx, userId, list.id);
           if (!(await ops.softDelete(lists, list.id))) throw new Rejection(notFound);
           return { id: list.id };
         }),

@@ -22,14 +22,24 @@ export const SORT_LABELS: Record<SortBy, string> = { custom: '自定义', date: 
 export const GROUP_LABELS: Record<GroupBy, string> = { none: '不分组', list: '清单', date: '日期', priority: '优先级', tag: '标签' };
 
 /**
- * How a view shows its tasks: `list` (the default) or `timeline` (时间线, spec
- * 用户故事 68, see `timeline.ts`). Missing means `list`, so layouts saved
- * before 时间线 existed stay valid.
+ * How a view shows its tasks (the 视图 switcher): `list` (the default),
+ * `timeline` (时间线, spec 用户故事 68, see `timeline.ts`) or `kanban` (看板,
+ * 用户故事 66、67, see `kanban.ts`). Missing means `list`, so layouts saved
+ * before these existed stay valid. The 日历 (用户故事 69) is its own module
+ * (`/calendar`), not a layout of a view.
  */
-export const VIEW_LAYOUTS = ['list', 'timeline'] as const;
+export const VIEW_LAYOUTS = ['list', 'kanban', 'timeline'] as const;
 export const viewLayoutSchema = z.enum(VIEW_LAYOUTS);
 export type ViewLayout = z.infer<typeof viewLayoutSchema>;
-export const VIEW_LAYOUT_LABELS: Record<ViewLayout, string> = { list: '列表', timeline: '时间线' };
+export const VIEW_LAYOUT_LABELS: Record<ViewLayout, string> = { list: '列表', kanban: '看板', timeline: '时间线' };
+/** Views that can be shown as a board: 清单, 智能清单 and 过滤器. */
+export const KANBAN_VIEW_KINDS: readonly ViewKind[] = ['list', 'smart', 'filter'];
+
+/** The layouts the 视图 switcher offers for a kind of view (搜索: none). */
+export function layoutsFor(kind: ViewKind): ViewLayout[] {
+  if (kind === 'search') return [];
+  return VIEW_LAYOUTS.filter((layout) => layout !== 'kanban' || KANBAN_VIEW_KINDS.includes(kind));
+}
 
 export const viewOptionsSchema = z.object({ sortBy: sortBySchema, groupBy: groupBySchema, layout: viewLayoutSchema.optional() }).strict();
 export type ViewOptions = z.infer<typeof viewOptionsSchema>;

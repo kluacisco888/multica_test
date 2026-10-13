@@ -5,7 +5,7 @@ import type { AttachmentStore } from './attachments/store.js';
 import type { Clock } from './clock.js';
 import type { Db, Executor, Tx } from './db/client.js';
 import { attachments, comments } from './db/schema/attachments.js';
-import { checklistItems, lists, tasks } from './db/schema/tasks.js';
+import { checklistItems, kanbanColumns, lists, tasks } from './db/schema/tasks.js';
 import { ensureInbox, taskToApi, topOfList, type TaskRow } from './organize.js';
 import type { SyncOps, SyncWriter } from './sync/sync.js';
 import { descendantsOf, exceedsDepth, liveTasksOfList, lockTaskTrees } from './task-tree.js';
@@ -222,9 +222,18 @@ export function createTrashService({ db, sync, clock, files, log }: TrashService
         const keepParent = parent !== undefined && !exceedsDepth(listRows, parent.id, batch, root.id);
         const moved = listId !== root.listId || (root.parentId !== null && !keepParent);
 
+        // Its 看板分栏 may be gone (deleting a 分栏 sends its tasks here): then 未分组.
+        const [column] = root.columnId
+          ? await tx
+              .select({ id: kanbanColumns.id })
+              .from(kanbanColumns)
+              .where(and(eq(kanbanColumns.id, root.columnId), eq(kanbanColumns.listId, listId), isNull(kanbanColumns.deletedAt)))
+          : [];
+
         const restored = await ops.restore(tasks, root.id, {
           trashRootId: null,
           listId,
+          columnId: column?.id ?? null,
           parentId: keepParent ? root.parentId : null,
           ...(moved ? { sortOrder: await topOfList(tx, userId, listId) } : {}),
         });

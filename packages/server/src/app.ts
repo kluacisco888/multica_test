@@ -23,6 +23,7 @@ import { healthRoutes } from './routes/health.js';
 import { holidayRoutes } from './routes/holidays.js';
 import { checklistRoutes } from './routes/checklist.js';
 import { filterRoutes } from './routes/filters.js';
+import { kanbanRoutes } from './routes/kanban.js';
 import { listRoutes } from './routes/lists.js';
 import { searchRoutes } from './routes/search.js';
 import { settingsRoutes } from './routes/settings.js';
@@ -144,6 +145,7 @@ export async function buildApp(deps: AppDeps) {
   attachmentRoutes(app);
   commentRoutes(app);
   filterRoutes(app);
+  kanbanRoutes(app);
   searchRoutes(app);
   reminderRoutes(app);
   deps.routes?.(app);

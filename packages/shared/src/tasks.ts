@@ -73,6 +73,8 @@ export const taskSchema = z.object({
   reminders: z.array(reminderSchema),
   /** 通知渠道 the reminders go to; null: the user's default channels (用户故事 78). */
   reminderChannelIds: z.array(z.uuid()).nullable(),
+  /** 看板分栏 of its 清单 (see kanban.ts); null: 未分组. */
+  columnId: z.uuid().nullable(),
 });
 export type Task = z.infer<typeof taskSchema>;
 
@@ -105,6 +107,8 @@ export const createTaskRequestSchema = z.object({
   /** 提醒; need `dates` and must fit them (timed: `before`, 全天: `day`). */
   reminders: remindersSchema.optional(),
   reminderChannelIds: reminderChannelIdsSchema.optional(),
+  /** 看板分栏 of the task's 清单; omitted or null: 未分组. */
+  columnId: z.uuid().nullable().optional(),
 });
 export type CreateTaskRequest = z.input<typeof createTaskRequestSchema>;
 
@@ -148,6 +152,11 @@ export const updateTaskRequestSchema = z
     reminders: remindersSchema,
     /** Replace the 通知渠道 of the reminders; null: the default channels. */
     reminderChannelIds: reminderChannelIdsSchema,
+    /**
+     * Move to a 看板分栏 of the task's (target) 清单; null: 未分组. Moving to
+     * another 清单 without it puts the task into 未分组 there.
+     */
+    columnId: z.uuid().nullable(),
   })
   .partial()
   .strict();

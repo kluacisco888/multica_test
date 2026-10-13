@@ -33,6 +33,7 @@ import {
 } from '../task-tree.js';
 import { generateNextInstance } from '../repeat.js';
 import { checklistMode, depthExceeded, invalidChannels, invalidList, invalidReminders, invalidParent, invalidTags, notFound, Rejection, repeatNeedsDate, respond } from './respond.js';
+import { checkColumn } from './kanban.js';
 import { liveTags } from './tags.js';
 
 type Params = { Params: { id: string } };
@@ -125,6 +126,7 @@ export function taskRoutes(app: FastifyInstance) {
       repeat = null,
       reminders = [],
       reminderChannelIds = null,
+      columnId = null,
     } = body.data;
     if (repeat && !dates) return repeatNeedsDate(reply);
     if (!reminders.every((r) => fitsDates(r, dates?.allDay ?? null))) return invalidReminders(reply);
@@ -140,6 +142,7 @@ export function taskRoutes(app: FastifyInstance) {
             await checkChannels(tx, userId, reminderChannelIds);
             const parent = await findOwned(tx, tasks, userId, parentId);
             if (!parent || (listId && listId !== parent.listId)) throw new Rejection(invalidParent);
+            await checkColumn(tx, userId, parent.listId, columnId);
             const siblings = await liveTasksOfList(tx, userId, parent.listId);
             if (exceedsDepth(siblings, parent.id, null, null)) throw new Rejection(depthExceeded);
             return ops.insert(tasks, {
@@ -157,6 +160,7 @@ export function taskRoutes(app: FastifyInstance) {
               repeat,
               reminders,
               reminderChannelIds,
+              columnId,
               sortOrder: sortOrder ?? endOfChildren(siblings, parent.id),
             });
           }),
@@ -173,6 +177,7 @@ export function taskRoutes(app: FastifyInstance) {
         app.sync.transaction(userId, async (ops, tx) => {
           await checkTags(tx, userId, tagIds);
           await checkChannels(tx, userId, reminderChannelIds);
+          await checkColumn(tx, userId, list.id, columnId);
           return ops.insert(tasks, {
             ...(id ? { id } : {}),
             ...(await dateColumns(tx, userId, dates)),
@@ -189,6 +194,7 @@ export function taskRoutes(app: FastifyInstance) {
             repeat,
             reminders,
             reminderChannelIds,
+            columnId,
             sortOrder: sortOrder ?? (await topOfList(tx, userId, list.id)),
           });
         }),
@@ -202,7 +208,7 @@ export function taskRoutes(app: FastifyInstance) {
     if (!found) return notFound(reply);
     const body = updateTaskRequestSchema.safeParse(request.body);
     if (!body.success) return sendValidationError(reply, body.error);
-    const { status, listId, parentId, kind, sortOrder, description, dates, repeat, reminders, ...fields } = body.data;
+    const { status, listId, parentId, kind, sortOrder, description, dates, repeat, reminders, columnId, ...fields } = body.data;
     // A 重复规则 needs a date; clearing the dates stops the repeat too.
     const hasDate = dates !== undefined ? dates !== null : found.allDay !== null;
     if (repeat && !hasDate) return repeatNeedsDate(reply);
@@ -256,6 +262,9 @@ export function taskRoutes(app: FastifyInstance) {
           }
           const movedList = targetList !== task.listId;
           const reparented = targetParent !== task.parentId;
+          // 看板分栏 belong to one 清单: moving elsewhere lands in 未分组 unless a 分栏 there is given.
+          await checkColumn(tx, userId, targetList, columnId);
+          const columnPatch = columnId !== undefined ? { columnId } : movedList && task.columnId !== null ? { columnId: null } : {};
           const newSortOrder =
             sortOrder ??
             (reparented && targetParent !== null
@@ -286,6 +295,7 @@ export function taskRoutes(app: FastifyInstance) {
             ...(newDescription !== undefined ? { description: newDescription } : {}),
             ...(kind !== undefined ? { kind } : {}),
             ...(movedList ? { listId: targetList } : {}),
+            ...columnPatch,
             ...(reparented ? { parentId: targetParent } : {}),
             ...(newSortOrder ? { sortOrder: newSortOrder } : {}),
             ...(status === 'completed' ? { status, completedAt: task.completedAt ?? now, abandonedAt: null } : {}),
@@ -299,6 +309,7 @@ export function taskRoutes(app: FastifyInstance) {
           for (const child of subtree) {
             const patch = {
               ...(movedList ? { listId: targetList } : {}),
+              ...(movedList && child.columnId !== null ? { columnId: null } : {}),
               ...(status === 'completed' && child.status === 'open' ? { status: 'completed' as const, completedAt: now } : {}),
               ...(status === 'abandoned' && child.status === 'open' ? { status: 'abandoned' as const, abandonedAt: now } : {}),
             };

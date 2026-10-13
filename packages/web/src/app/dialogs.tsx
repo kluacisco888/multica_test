@@ -6,6 +6,7 @@ import {
   liveRules,
   PRIORITIES,
   PRIORITY_LABELS,
+  TRASH_RETENTION_DAYS,
   type Filter,
   type FilterDate,
   type FilterRules,
@@ -539,6 +540,81 @@ export function ConfirmDialog({
       }
     >
       <p className="dialog-message">{message}</p>
+    </Dialog>
+  );
+}
+
+export type DeleteColumnChoice = { tasks: 'delete' } | { tasks: 'move'; moveTo: string | null };
+
+/**
+ * 删除分组 (reference dialog): delete the 分栏 with its tasks (into the 回收站,
+ * the default), or delete it and move the tasks to another 分栏 / 未分组.
+ */
+export function DeleteColumnDialog({
+  columnName,
+  taskCount,
+  targets,
+  onCancel,
+  onConfirm,
+}: {
+  columnName: string;
+  taskCount: number;
+  /** Where the tasks can go: other 分栏 and 未分组 (id null). */
+  targets: { id: string | null; name: string }[];
+  onCancel: () => void;
+  onConfirm: (choice: DeleteColumnChoice) => Promise<void>;
+}) {
+  const id = useId();
+  const [mode, setMode] = useState<'delete' | 'move'>('delete');
+  const [target, setTarget] = useState<string>(targets[0]?.id ?? '');
+  const [busy, setBusy] = useState(false);
+  return (
+    <Dialog
+      title="删除分组"
+      onClose={onCancel}
+      footer={
+        <>
+          <Button onClick={onCancel}>取消</Button>
+          <Button
+            variant="danger"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              await onConfirm(mode === 'delete' ? { tasks: 'delete' } : { tasks: 'move', moveTo: target || null });
+              setBusy(false);
+            }}
+          >
+            删除
+          </Button>
+        </>
+      }
+    >
+      <fieldset className="field column-delete-choices">
+        <legend className="dialog-message">{`分组「${columnName}」里有 ${taskCount} 个任务，删除分组后：`}</legend>
+        <label className="column-delete-choice">
+          <input type="radio" name={`${id}-mode`} checked={mode === 'delete'} onChange={() => setMode('delete')} autoFocus />
+          <span>删除分组和任务</span>
+        </label>
+        <label className="column-delete-choice">
+          <input type="radio" name={`${id}-mode`} checked={mode === 'move'} onChange={() => setMode('move')} />
+          <span>删除分组，将任务移动到...</span>
+        </label>
+        {mode === 'move' && (
+          <div className="column-delete-target">
+            <label htmlFor={`${id}-target`} className="visually-hidden">
+              移动到
+            </label>
+            <select id={`${id}-target`} className="settings-select" value={target} onChange={(e) => setTarget(e.target.value)}>
+              {targets.map((t) => (
+                <option key={t.id ?? ''} value={t.id ?? ''}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {mode === 'delete' && <p className="column-delete-note">{`任务会移到回收站，${TRASH_RETENTION_DAYS} 天内可以还原。`}</p>}
+      </fieldset>
     </Dialog>
   );
 }

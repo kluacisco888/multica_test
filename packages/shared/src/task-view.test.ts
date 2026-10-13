@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mergeViewOptions } from './settings.js';
-import { arrangeTasks, defaultViewOptions, type ArrangeContext } from './task-view.js';
+import { arrangeTasks, defaultViewOptions, layoutsFor, viewOptionsSchema, type ArrangeContext } from './task-view.js';
 import type { Task } from './tasks.js';
 
 const LIST_A = '00000000-0000-4000-8000-00000000000a';
@@ -40,6 +40,7 @@ function task(title: string, extra: Partial<Task> = {}): Task {
     repeat: null,
     reminders: [],
     reminderChannelIds: null,
+    columnId: null,
     ...extra,
   };
 }
@@ -115,5 +116,23 @@ describe('排序和分组', () => {
     const b = { sortBy: 'priority', groupBy: 'list' } as const;
     expect(mergeViewOptions({ 'smart:today': a }, { search: b })).toEqual({ 'smart:today': a, search: b });
     expect(mergeViewOptions({ 'smart:today': a, search: b }, { 'smart:today': null })).toEqual({ search: b });
+  });
+});
+
+describe('视图 layouts', () => {
+  it('offers 列表 / 看板 / 时间线 where they apply, none for 搜索', () => {
+    expect(layoutsFor('list')).toEqual(['list', 'kanban', 'timeline']);
+    expect(layoutsFor('smart')).toEqual(['list', 'kanban', 'timeline']);
+    expect(layoutsFor('filter')).toEqual(['list', 'kanban', 'timeline']);
+    expect(layoutsFor('tag')).toEqual(['list', 'timeline']);
+    expect(layoutsFor('search')).toEqual([]);
+  });
+
+  it('stores every layout in one `layout` field; old saves without it stay valid', () => {
+    for (const layout of ['list', 'kanban', 'timeline'] as const) {
+      expect(viewOptionsSchema.parse({ sortBy: 'custom', groupBy: 'none', layout }).layout).toBe(layout);
+    }
+    expect(viewOptionsSchema.parse({ sortBy: 'custom', groupBy: 'none' }).layout).toBeUndefined();
+    expect(viewOptionsSchema.safeParse({ sortBy: 'custom', groupBy: 'none', mode: 'kanban' }).success).toBe(false);
   });
 });

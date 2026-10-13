@@ -8,7 +8,7 @@ import { notificationChannels } from '../db/schema/channels.js';
 import { channelToApi } from '../notify/notifier.js';
 import { filterToApi } from '../routes/filters.js';
 import type { FilterRow } from '../task-views.js';
-import { checklistItems, folders, lists, tasks } from '../db/schema/tasks.js';
+import { checklistItems, folders, kanbanColumns, lists, tasks } from '../db/schema/tasks.js';
 import { reminderDeliveries } from '../db/schema/reminders.js';
 import type { SyncEntity } from './columns.js';
 
@@ -37,4 +37,5 @@ export const syncEntities: readonly SyncEntity[] = [
   { type: 'comment', table: comments, serialize: commentToApi },
   { type: 'filter', table: filters, serialize: (row: FilterRow) => filterToApi(row) },
   { type: 'reminderDelivery', table: reminderDeliveries },
+  { type: 'kanbanColumn', table: kanbanColumns },
 ];

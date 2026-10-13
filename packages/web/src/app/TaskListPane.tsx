@@ -1,4 +1,6 @@
 import {
+  arrangeAutoBoard,
+  arrangeListBoard,
   arrangeTasks,
   buildTaskTree,
   describeRepeatFrequency,
@@ -6,10 +8,13 @@ import {
   dueDayOf,
   GROUP_LABELS,
   GROUP_OPTIONS,
+  UNGROUPED_COLUMN_TITLE,
   planIndent,
   PRIORITY_LABELS,
   SORT_LABELS,
   SORT_OPTIONS,
+  type Board,
+  type KanbanColumn,
   type SearchMatchField,
   type Tag,
   type Task,
@@ -19,13 +24,14 @@ import {
   type UpdateTaskRequest,
   type ViewOptions,
   VIEW_LAYOUT_LABELS,
-  VIEW_LAYOUTS,
+  type ViewLayout,
 } from '@dida/shared';
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { ContextMenu, IconButton, MenuButton, TaskCheckbox, type ContextMenuSection } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
+import { KanbanBoard, type ManualBoardActions } from './KanbanBoard.js';
 import { chipStyle, tagsOf, taskContextSections } from './taskMeta.js';
-import { scopeKey, viewTitle, type ListPaneView } from './views.js';
+import { scopeKey, viewLayouts, viewTitle, type ListPaneView } from './views.js';
 
 export type { ListPaneView } from './views.js';
 
@@ -65,6 +71,10 @@ interface TaskListPaneProps {
   onEditList: (() => void) | null;
   /** 归档 / 取消归档 the 清单 on screen; null for the 收件箱 and 标签 views. */
   onArchiveList: ((archived: boolean) => void) | null;
+  /** 看板分栏 of the 清单 on screen (看板视图); null while loading or not needed. */
+  columns: KanbanColumn[] | null;
+  /** 清单 board actions (看板视图 of a 清单). */
+  kanban: ManualBoardActions | null;
 }
 
 type MenuState = { task: Task; x: number; y: number; opener: HTMLElement | null } | null;
@@ -115,6 +125,21 @@ export function TaskListPane(props: TaskListPaneProps) {
       : [];
   // The custom order keeps 子任务 nested; other orders show flat rows.
   const nested = viewOptions.sortBy === 'custom';
+  // 看板视图 (spec 用户故事 66、67): 清单 get their own 分栏, 智能清单 / 过滤器 automatic columns.
+  const kanbanCapable = view !== null && viewLayouts(view).includes('kanban');
+  const boardMode = kanbanCapable && viewOptions.layout === 'kanban';
+  const arrangeContext = {
+    now: props.now,
+    timeZone: props.timeZone,
+    lists: props.lists,
+    tags: props.tags,
+    completedView: view?.kind === 'smart' && view.id === 'completed',
+  };
+  let board: Board | null = null;
+  if (boardMode && tasks && view) {
+    if (view.kind !== 'list') board = arrangeAutoBoard(tasks, viewOptions, arrangeContext);
+    else if (props.columns) board = arrangeListBoard(tasks, props.columns, viewOptions, arrangeContext);
+  }
   const nodesOf = (items: Task[]): TaskNode<Task>[] =>
     nested ? buildTaskTree(items) : items.map((task) => ({ task, depth: 1, children: [] }));
 
@@ -167,13 +192,13 @@ export function TaskListPane(props: TaskListPaneProps) {
     onOpenMenu: (task: Task, x: number, y: number, opener: HTMLElement | null) => setMenu({ task, x, y, opener }),
   };
 
-  const layoutSections = layoutMenuSections(viewOptions, props.onChangeViewOptions, view?.kind !== 'search');
+  const layoutSections = layoutMenuSections(viewOptions, props.onChangeViewOptions, view ? viewLayouts(view) : []);
 
   const isSearch = view?.kind === 'search';
   const emptyQuery = view?.kind === 'search' && view.query === '';
 
   return (
-    <main className="list-pane" aria-busy={tasks === null && !emptyQuery} ref={paneRef}>
+    <main className={`list-pane ${boardMode ? 'list-pane-kanban' : ''}`} aria-busy={(tasks === null || (boardMode && !board)) && !emptyQuery} ref={paneRef}>
       <header className="list-pane-header">
         <IconButton
           icon="sidebar"
@@ -228,9 +253,28 @@ export function TaskListPane(props: TaskListPaneProps) {
         </div>
       )}
 
-      {view && props.addTarget !== null && <QuickAdd key={scopeKey(view)} target={props.addTarget} onAdd={props.onAddTask} />}
+      {view && props.addTarget !== null && !boardMode && <QuickAdd key={scopeKey(view)} target={props.addTarget} onAdd={props.onAddTask} />}
 
-      {emptyQuery ? (
+      {boardMode ? (
+        board ? (
+          <KanbanBoard
+            board={board}
+            tags={props.tags}
+            selectedTaskId={props.selectedTaskId}
+            timeZone={props.timeZone}
+            now={props.now}
+            listName={listName}
+            onSelectTask={props.onSelectTask}
+            onToggleTask={props.onToggleTask}
+            onOpenMenu={rowProps.onOpenMenu}
+            manual={view?.kind === 'list' && !archived ? props.kanban : null}
+          />
+        ) : (
+          <p className="list-pane-status" role="status">
+            正在加载…
+          </p>
+        )
+      ) : emptyQuery ? (
         <div className="list-pane-empty">
           <p>输入关键词，搜索任务的标题、描述、检查项和评论</p>
         </div>
@@ -270,12 +314,15 @@ export function TaskListPane(props: TaskListPaneProps) {
           y={menu.y}
           returnFocus={menu.opener}
           // Read the task fresh: it may have changed since the menu opened.
-          sections={taskContextSections(
-            tasks?.find((t) => t.id === menu.task.id) ?? menu.task,
-            props.tags,
-            (patch) => props.onChangeTask(menu.task, patch),
-            () => props.onDeleteTask(menu.task),
-          )}
+          sections={[
+            ...taskContextSections(
+              tasks?.find((t) => t.id === menu.task.id) ?? menu.task,
+              props.tags,
+              (patch) => props.onChangeTask(menu.task, patch),
+              () => props.onDeleteTask(menu.task),
+            ),
+            ...(board?.kind === 'manual' && props.kanban && menu.task.parentId === null ? [columnMoveSection(menu.task, props.columns ?? [], props.kanban)] : []),
+          ]}
           onClose={() => setMenu(null)}
         />
       )}
@@ -294,21 +341,21 @@ export function TaskListPane(props: TaskListPaneProps) {
 }
 
 /**
- * The 排序和分组 menu (shared with the 时间线): 视图 (列表 / 时间线, not for
- * 搜索), 排序 and 分组 of the view on screen.
+ * The 排序和分组 menu (shared with the 时间线): 视图 (the `layouts` this view
+ * offers: 列表 / 看板 / 时间线, none for 搜索), 排序 and 分组 of the view on screen.
  */
 export function layoutMenuSections(
   viewOptions: ViewOptions,
   onChange: (options: ViewOptions) => void,
-  canSwitchLayout: boolean,
+  layouts: readonly ViewLayout[],
 ): ContextMenuSection[] {
   const layout = viewOptions.layout ?? 'list';
   return [
-    ...(canSwitchLayout
+    ...(layouts.length > 1
       ? [
           {
             label: '视图',
-            items: VIEW_LAYOUTS.map((next) => ({
+            items: layouts.map((next) => ({
               label: VIEW_LAYOUT_LABELS[next],
               checked: layout === next,
               onSelect: () => onChange({ ...viewOptions, layout: next }),
@@ -333,6 +380,22 @@ export function layoutMenuSections(
       })),
     },
   ];
+}
+
+/** 移动到分组: the keyboard / touch way to move a card between 分栏. */
+function columnMoveSection(task: Task, columns: KanbanColumn[], kanban: ManualBoardActions): ContextMenuSection {
+  const current = columns.some((c) => c.id === task.columnId) ? task.columnId : null;
+  const targets = [{ id: null, name: UNGROUPED_COLUMN_TITLE }, ...columns.map((c) => ({ id: c.id, name: c.name }))];
+  return {
+    label: '移动到分组',
+    items: targets.map((t) => ({
+      label: t.name,
+      checked: t.id === current,
+      onSelect: () => {
+        if (t.id !== current) kanban.onDropTask(task.id, t.id, null);
+      },
+    })),
+  };
 }
 
 /** A titled, collapsible group of rows: 已过期, a day, a 清单, 已完成 … */

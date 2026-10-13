@@ -26,3 +26,4 @@ export * from './timeline.js';
 export * from './calendar.js';
 export * from './reminders.js';
 export * from './theme.js';
+export * from './kanban.js';

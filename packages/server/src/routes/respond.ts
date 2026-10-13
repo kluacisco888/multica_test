@@ -16,6 +16,9 @@ export const tagNameTaken = (reply: FastifyReply) => sendError(reply, 409, 'tag_
 export const invalidList = (reply: FastifyReply) => sendError(reply, 400, 'invalid_list', '清单不存在');
 export const invalidParent = (reply: FastifyReply) =>
   sendError(reply, 400, 'invalid_parent', '父任务不存在，或不能移到自己的子任务下面');
+export const invalidColumn = (reply: FastifyReply) => sendError(reply, 400, 'invalid_column', '分组不存在，或不属于这个清单');
+export const columnNameTaken = (reply: FastifyReply) => sendError(reply, 409, 'column_name_taken', '分组名称已存在');
+export const columnLimit = (reply: FastifyReply) => sendError(reply, 400, 'column_limit', '抱歉，此清单内的分组数量已达上限。');
 export const depthExceeded = (reply: FastifyReply) => sendError(reply, 400, 'depth_exceeded', DEPTH_EXCEEDED_MESSAGE);
 export const notChecklist = (reply: FastifyReply) => sendError(reply, 400, 'not_checklist', '任务不是检查清单模式');
 export const repeatNeedsDate = (reply: FastifyReply) => sendError(reply, 400, 'repeat_needs_date', '设置重复规则前需要先设置日期');
