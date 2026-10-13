@@ -150,3 +150,11 @@ CI 定义在 `ci/github-actions.yml`：lint、类型检查、四层测试，再�
 任务的 `dates`（`packages/shared/src/task-dates.ts`）：`null` 是不设日期；全天是 `{ allDay: true, startDate, dueDate }`，按日历日期存，不随时区换算；带时间是 `{ allDay: false, startAt, dueAt, timeZone }`，存 UTC 时间点，`timeZone` 由服务端按用户当时的设置写入，显示时一律用用户**当前**时区。`startDate` / `startAt` 为 null 就是只有截止日期。列表上的「今天 / 明天 / 周几 / 已过期」由 `describeTaskDates()` 算。
 
 排序键是分数索引（`packages/shared/src/sort-key.ts`），拖拽只改被拖动的那一条；侧栏拖放规则在 `packages/shared/src/sidebar-order.ts`。界面的设计 token 和组件约定见 `packages/web/src/ui/README.md`。
+
+### 节假日数据与农历（ADR-0006）
+
+- 后端每天 04:15（`DEFAULT_TIMEZONE`）和每次启动时，从 `HOLIDAY_DATA_URL`（默认 jsDelivr 上的 NateScarlet/holiday-cn）拉取当年和下一年的 `<year>.json`，存进 `holiday_years` 表。定时任务用 pg-boss（表在数据库的 `pgboss` schema 里，启动时自动安装）。
+- 拉取失败只记 warn 日志，继续用数据库里已有的数据；数据库里没有的年份用镜像内置的 `packages/server/holidays/<year>.json`；两边都没有（比如下一年还没公布）就按周一到周五算工作日。发版前可以用 `scripts/update-bundled-holidays.sh` 更新内置数据。
+- 设置 → 日期与时间里显示最后更新时间，「立即更新」调 `POST /api/holidays/refresh`。`GET /api/holidays/status`、`GET /api/holidays/:year` 读当前数据。节假日数据所有用户共用（是公开数据），不按用户隔离，接口仍然要求登录。
+- 数据实际变化时发出「节假日数据更新」事件：`app.holidays.onUpdated(({ years, calendar }) => …)`，`calendar` 是新的工作日日历，供重复任务重新计算日期。
+- 工作日日历在 `packages/shared/src/workday-calendar.ts`（`createWorkdayCalendar(years).dayInfo('2026-10-10')`）；农历在 `@dida/shared/lunar`（`solarToLunar`、`lunarToSolar`、`traditionalFestivals`，封装 `lunar-javascript`，单独的入口，不进前端主包）。

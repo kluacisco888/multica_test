@@ -4,6 +4,7 @@ import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { createDatabase } from './db/client.js';
 import { runMigrations } from './db/migrations.js';
+import { startBackgroundJobs, type BackgroundJobs } from './jobs.js';
 
 const config = loadConfig(process.env);
 const database = createDatabase(config.databaseUrl);
@@ -26,11 +27,13 @@ if (bootstrap === 'created') {
   );
 }
 
+let jobs: BackgroundJobs | null = null;
 let closing = false;
 async function shutdown(signal: string) {
   if (closing) return;
   closing = true;
   app.log.info({ signal }, 'shutting down');
+  await jobs?.stop();
   await app.close();
   await database.close();
   process.exit(0);
@@ -39,4 +42,10 @@ process.on('SIGTERM', () => void shutdown('SIGTERM'));
 process.on('SIGINT', () => void shutdown('SIGINT'));
 
 await app.listen({ host: config.host, port: config.port });
+jobs = await startBackgroundJobs({
+  databaseUrl: config.databaseUrl,
+  holidays: app.holidays,
+  timezone: config.defaultTimezone,
+  log: app.log,
+});
 app.log.info({ publicUrl: config.publicUrl }, 'dida-clone ready');

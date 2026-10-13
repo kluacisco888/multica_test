@@ -18,6 +18,7 @@ interface SidebarProps {
   isDrawer: boolean;
   user: CurrentUser;
   onOpenAccount: () => void;
+  onOpenSettings: () => void;
   onClose: () => void;
   onOpenList: (listId: string) => void;
   onAddList: (folderId: string | null) => void;
@@ -217,7 +218,10 @@ export function Sidebar(props: SidebarProps) {
             </span>
             <span>{props.user.username}</span>
           </button>
-          <IconButton icon="close" label="关闭侧栏" onClick={props.onClose} />
+          <span className="sidebar-drawer-actions">
+            <IconButton icon="settings" label="设置" onClick={props.onOpenSettings} />
+            <IconButton icon="close" label="关闭侧栏" onClick={props.onClose} />
+          </span>
         </div>
       )}
       <ul className="sidebar-tree sidebar-smart">

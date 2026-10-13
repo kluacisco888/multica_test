@@ -3,6 +3,7 @@ import { useId, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { changePassword, errorMessage, logout } from '../api.js';
 import { Button, Dialog } from '../ui/controls.js';
 import { Icon, type IconName } from '../ui/Icon.js';
+import { HolidaySettings } from './HolidaySettings.js';
 
 type SettingsTab = 'account' | 'datetime';
 
@@ -14,7 +15,8 @@ const TABS: { id: SettingsTab; label: string; icon: IconName }[] = [
 /**
  * 设置, laid out like 滴答's settings dialog: a tab list on the left, the
  * panel on the right. 账户与安全: who is signed in, change password, log out
- * (spec 用户故事 7、8). 日期与时间: the time zone (用户故事 26).
+ * (spec 用户故事 7、8). 日期与时间: the time zone (用户故事 26) and the
+ * 节假日数据 card (用户故事 114).
  */
 export function SettingsDialog({
   user,
@@ -189,6 +191,7 @@ function DateTimePanel({ settings, onSave }: { settings: Settings | null; onSave
           时区已保存
         </p>
       )}
+      <HolidaySettings />
     </section>
   );
 }

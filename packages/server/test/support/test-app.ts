@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { buildApp } from '../../src/app.js';
+import { buildApp, type AppDeps } from '../../src/app.js';
 import { SESSION_COOKIE } from '../../src/auth.js';
 import type { Clock } from '../../src/clock.js';
 import { loadConfig, type AppConfig } from '../../src/config.js';
@@ -34,6 +34,8 @@ export interface TestAppOptions {
   routes?: (app: FastifyInstance) => void;
   /** Runs after migrations, before the app is built (e.g. create fixture tables). */
   prepare?: (database: TestDatabase) => Promise<void>;
+  /** Fastify logger options, e.g. a capturing `stream` to assert on log lines. */
+  logger?: AppDeps['logger'];
 }
 
 /** `cookie` request header from a response's Set-Cookie for the session. */
@@ -55,6 +57,7 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
     ...(options.clock ? { clock: options.clock } : {}),
     ...(options.syncEntities ? { syncEntities: options.syncEntities } : {}),
     ...(options.routes ? { routes: options.routes } : {}),
+    ...(options.logger ? { logger: options.logger } : {}),
   });
   await app.ready();
 

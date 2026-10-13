@@ -7,3 +7,6 @@ export * from './sort-key.js';
 export * from './tasks.js';
 export * from './settings.js';
 export * from './task-dates.js';
+export * from './civil-date.js';
+export * from './workday-calendar.js';
+export * from './holidays.js';

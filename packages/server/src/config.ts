@@ -15,6 +15,8 @@ export interface AppConfig {
   /** Built web app to serve as static files; omitted in API-only test runs. */
   webDistDir: string | undefined;
   defaultTimezone: string;
+  /** Base URL of the NateScarlet/holiday-cn year files (`<url>/<year>.json`), ADR-0006. */
+  holidayDataUrl: string;
   logLevel: string;
   /** First 管理员, created on start when the database has no user (see accounts.bootstrapAdmin). */
   initialAdmin: { username: string | undefined; password: string | undefined };
@@ -40,6 +42,7 @@ const envSchema = z.object({
   DATA_DIR: z.string().min(1).default('/data'),
   WEB_DIST_DIR: z.string().min(1).optional(),
   DEFAULT_TIMEZONE: z.string().min(1).default('Asia/Shanghai'),
+  HOLIDAY_DATA_URL: z.url().default('https://cdn.jsdelivr.net/gh/NateScarlet/holiday-cn@master'),
   INITIAL_ADMIN_USERNAME: z.string().trim().min(1).optional(),
   INITIAL_ADMIN_PASSWORD: z.string().min(1).optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
@@ -66,6 +69,7 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
     dataDir: parsed.DATA_DIR,
     webDistDir: parsed.WEB_DIST_DIR,
     defaultTimezone: parsed.DEFAULT_TIMEZONE,
+    holidayDataUrl: parsed.HOLIDAY_DATA_URL.replace(/\/+$/, ''),
     logLevel: parsed.LOG_LEVEL,
     initialAdmin: { username: parsed.INITIAL_ADMIN_USERNAME, password: parsed.INITIAL_ADMIN_PASSWORD },
   };
