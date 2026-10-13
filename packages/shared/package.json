@@ -13,6 +13,11 @@
       "source": "./src/lunar.ts",
       "types": "./dist/lunar.d.ts",
       "import": "./dist/lunar.js"
+    },
+    "./countdown": {
+      "source": "./src/countdown-dates.ts",
+      "types": "./dist/countdown-dates.d.ts",
+      "import": "./dist/countdown-dates.js"
     }
   },
   "files": [

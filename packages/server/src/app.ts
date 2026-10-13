@@ -16,6 +16,7 @@ import { attachmentRoutes } from './routes/attachments.js';
 import { authRoutes } from './routes/auth.js';
 import { calendarRoutes } from './routes/calendar.js';
 import { commentRoutes } from './routes/comments.js';
+import { countdownRoutes } from './routes/countdowns.js';
 import { channelRoutes } from './routes/channels.js';
 import { changesRoutes } from './routes/changes.js';
 import { createHolidayService, type HolidayService } from './holidays/service.js';
@@ -154,6 +155,7 @@ export async function buildApp(deps: AppDeps) {
   searchRoutes(app);
   reminderRoutes(app);
   focusRoutes(app);
+  countdownRoutes(app);
   deps.routes?.(app);
 
   if (config.webDistDir) {

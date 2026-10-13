@@ -1,4 +1,5 @@
 import { attachments, comments } from '../db/schema/attachments.js';
+import { countdowns } from '../db/schema/countdowns.js';
 import { filters } from '../db/schema/filters.js';
 import { tags } from '../db/schema/tags.js';
 import { attachmentToApi } from '../routes/attachments.js';
@@ -40,4 +41,5 @@ export const syncEntities: readonly SyncEntity[] = [
   { type: 'reminderDelivery', table: reminderDeliveries },
   { type: 'kanbanColumn', table: kanbanColumns },
   { type: 'focusSession', table: focusSessions },
+  { type: 'countdown', table: countdowns },
 ];

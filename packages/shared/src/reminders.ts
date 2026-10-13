@@ -173,7 +173,10 @@ export type SnoozeRequest = z.infer<typeof snoozeRequestSchema>;
 export const reminderFailureSchema = z.object({
   /** The 提醒投递记录 id. */
   id: z.uuid(),
-  taskId: z.uuid(),
+  /** The 任务, or null for a 倒数日 reminder (`countdownId`). */
+  taskId: z.uuid().nullable(),
+  countdownId: z.uuid().nullable(),
+  /** Title of the 任务, or name of the 倒数日. */
   taskTitle: z.string(),
   channelId: z.uuid(),
   channelName: z.string(),

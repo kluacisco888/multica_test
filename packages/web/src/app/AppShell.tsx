@@ -60,6 +60,7 @@ import { CalendarPane } from './CalendarPane.js';
 import { FocusPane } from './FocusPane.js';
 import { useFocusTimer } from './focusTimer.js';
 import { MatrixPane } from './MatrixPane.js';
+import { CountdownPane } from './CountdownPane.js';
 import { Rail } from './Rail.js';
 import { ReminderAlerts } from './ReminderAlerts.js';
 import { SettingsDialog, type SettingsTab } from './SettingsDialog.js';
@@ -256,7 +257,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const inbox = sidebar?.lists.find((l) => l.isInbox) ?? null;
   const currentTag = route.tagId ? (tags?.find((t) => t.id === route.tagId) ?? null) : null;
   const currentFilter = route.filterId ? (filters?.find((f) => f.id === route.filterId) ?? null) : null;
-  const crossListRoute = Boolean(route.matrix || route.focus || route.calendar || route.trash || route.tagId || route.smartId || route.filterId || (route.search !== null && route.search !== undefined));
+  const crossListRoute = Boolean(route.matrix || route.focus || route.countdowns || route.calendar || route.trash || route.tagId || route.smartId || route.filterId || (route.search !== null && route.search !== undefined));
   const currentList = useMemo(() => {
     if (!sidebar || crossListRoute) return null;
     return (route.listId ? sidebar.lists.find((l) => l.id === route.listId) : inbox) ?? null;
@@ -265,13 +266,13 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const view: ListPaneView | null = useMemo(() => {
     if (route.matrix) return matrixQuadrants ? { kind: 'matrix', quadrants: matrixQuadrants } : null;
     if (calendarRange) return { kind: 'calendar', range: calendarRange };
-    if (route.trash) return null;
+    if (route.trash || route.countdowns) return null;
     if (route.search !== null && route.search !== undefined) return { kind: 'search', query: route.search };
     if (route.smartId) return sidebar ? { kind: 'smart', id: route.smartId, inbox } : null;
     if (currentFilter) return { kind: 'filter', filter: currentFilter, inbox };
     if (currentTag) return { kind: 'tag', tag: currentTag, inbox };
     return currentList ? { kind: 'list', list: currentList } : null;
-  }, [route.matrix, matrixQuadrants, calendarRange, route.trash, route.search, route.smartId, sidebar, currentFilter, currentTag, currentList, inbox]);
+  }, [route.matrix, matrixQuadrants, calendarRange, route.trash, route.countdowns, route.search, route.smartId, sidebar, currentFilter, currentTag, currentList, inbox]);
 
   useEffect(() => {
     if (!calendarRange) return;
@@ -583,6 +584,12 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       setDialog({ kind: 'none' });
       setTasksEpoch((n) => n + 1);
     }
+  }
+
+  /** 倒数日 (spec 用户故事 99–101): 记录中, or 已归档 ones. */
+  function openCountdowns(archived = false) {
+    navigate({ listId: null, countdowns: archived ? 'archived' : 'active', taskId: null });
+    setDrawerOpen(false);
   }
 
   /** Click on an empty day or time slot of the 日历 (spec 用户故事 71): into the 收件箱 with that date. */
@@ -1015,19 +1022,19 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const timeline = view !== null && viewLayouts(view).includes('timeline') && viewOptions?.layout === 'timeline';
   const board = boardMode && !route.trash;
   // The 日历 takes the whole width too; its task opens beside it.
-  const showDetail = route.focus
+  const showDetail = route.focus || route.countdowns
     ? false
     : route.calendar || route.matrix
       ? selectedTask !== null
       : (!isMobile && !timeline && !board) || selectedTask !== null;
-  const sidebarVisible = isMobile ? drawerOpen : sidebarOpen && !route.calendar && !route.matrix && !route.focus;
+  const sidebarVisible = isMobile ? drawerOpen : sidebarOpen && !route.calendar && !route.matrix && !route.focus && !route.countdowns;
 
   return (
     <div
       className={`shell ${sidebarVisible ? 'shell-sidebar-open' : 'shell-sidebar-closed'} ${selectedTask ? 'shell-has-task' : ''} ${
         route.calendar ? 'shell-calendar' : ''}
       } ${route.focus ? 'shell-focus' : ''
-      } ${route.matrix ? 'shell-matrix' : ''} ${board ? 'shell-kanban' : ''}`}
+      } ${route.matrix ? 'shell-matrix' : ''} ${route.countdowns ? 'shell-countdowns' : ''} ${board ? 'shell-kanban' : ''}`}
     >
       {!isMobile && (
         <Rail
@@ -1038,8 +1045,9 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onCalendar={() => openCalendar()}
           onMatrix={openMatrix}
           onFocus={openFocus}
+          onCountdowns={() => openCountdowns()}
           onSearch={() => openSearch()}
-          active={route.calendar ? 'calendar' : route.matrix ? 'matrix' : route.focus ? 'focus' : view?.kind === 'search' ? 'search' : 'tasks'}
+          active={route.calendar ? 'calendar' : route.matrix ? 'matrix' : route.focus ? 'focus' : route.countdowns ? 'countdowns' : view?.kind === 'search' ? 'search' : 'tasks'}
         />
       )}
       {isMobile && drawerOpen && <div className="shell-scrim" aria-hidden="true" onClick={() => setDrawerOpen(false)} />}
@@ -1085,6 +1093,20 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onOpenCalendar={() => openCalendar()}
           onOpenMatrix={openMatrix}
           onOpenFocus={openFocus}
+          onOpenCountdowns={() => openCountdowns()}
+        />
+      )}
+      {route.countdowns && (
+        <CountdownPane
+          archived={route.countdowns === 'archived'}
+          today={today}
+          isMobile={isMobile}
+          sidebarVisible={sidebarVisible}
+          channels={channels}
+          allDayReminderTime={settings?.allDayReminderTime ?? DEFAULT_ALL_DAY_REMINDER_TIME}
+          onToggleSidebar={() => setDrawerOpen((v) => !v)}
+          onShowArchived={openCountdowns}
+          onError={fail}
         />
       )}
       {route.trash && (
@@ -1137,7 +1159,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           }}
         />
       )}
-      {!route.trash && !route.calendar && !route.matrix && !route.focus && !(isMobile && selectedTask) && timeline && view && (
+      {!route.trash && !route.calendar && !route.matrix && !route.focus && !route.countdowns && !(isMobile && selectedTask) && timeline && view && (
         <TimelinePane
           key={viewKey(view)}
           view={view}
@@ -1176,7 +1198,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onMoveTask={moveCalendarTask}
         />
       )}
-      {!route.trash && !route.calendar && !route.matrix && !route.focus && !(isMobile && selectedTask) && !timeline && (
+      {!route.trash && !route.calendar && !route.matrix && !route.focus && !route.countdowns && !(isMobile && selectedTask) && !timeline && (
         <TaskListPane
           // A new view starts with its sections expanded.
           key={view ? viewKey(view) : 'none'}

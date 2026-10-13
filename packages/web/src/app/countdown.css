@@ -1,0 +1,270 @@
+/* 倒数日 (EURO-26): layout measured from the reference 倒数纪念日 page (ADR-0007). */
+
+.countdown-pane {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  overflow-y: auto;
+  padding: 0 var(--space-5) var(--space-8) 22px;
+  background: var(--color-countdown-bg);
+}
+
+.countdown-header {
+  padding-left: 4px;
+}
+
+.countdown-title {
+  flex: 1;
+  overflow: visible;
+}
+
+/* The title is the 记录中 / 已归档 menu button: title-sized, like the reference. */
+.countdown-title .countdown-title-trigger {
+  gap: 2px;
+  min-height: 32px;
+  margin-left: calc(-1 * var(--space-1));
+  padding: 0 var(--space-1);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.countdown-title .countdown-title-trigger svg {
+  color: var(--color-text-secondary);
+}
+
+.countdown-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.countdown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--countdown-card-width));
+  gap: var(--countdown-gap);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.countdown-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: var(--countdown-card-height);
+  padding: var(--space-4);
+  background: var(--color-countdown-card);
+  border-radius: var(--radius-countdown-card);
+}
+
+.countdown-card-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 0;
+  font-size: var(--font-size-countdown-name);
+  font-weight: var(--font-weight-bold);
+  line-height: 26px;
+}
+
+.countdown-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 15px;
+  border-radius: 50%;
+  background: var(--color-brand-softer);
+}
+
+.countdown-card-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.countdown-card-figure {
+  margin: var(--space-1) 0 0;
+  padding: 0 var(--space-2);
+  font-family: var(--font-family-figures);
+  font-size: var(--font-size-countdown-figure);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.2;
+  letter-spacing: 1px;
+  color: var(--color-countdown-figure);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.countdown-card-figure-ymd {
+  font-size: calc(var(--font-size-countdown-figure) / 2);
+  line-height: calc(var(--font-size-countdown-figure) * 1.2);
+}
+
+.countdown-card-figure:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.countdown-card-caption {
+  max-width: 100%;
+  margin: var(--space-2) 0 0;
+  overflow: hidden;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 置顶 and the card menu: top right, shown on hover or focus (always on touch screens). */
+.countdown-card-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: var(--space-2);
+  opacity: 0;
+}
+
+.countdown-card:hover .countdown-card-actions,
+.countdown-card:focus-within .countdown-card-actions,
+.countdown-card-pinned .countdown-card-actions {
+  opacity: 1;
+}
+
+.countdown-card-pinned .countdown-card-actions .ui-menu-anchor {
+  opacity: 0;
+}
+
+.countdown-card:hover .countdown-card-actions .ui-menu-anchor,
+.countdown-card:focus-within .countdown-card-actions .ui-menu-anchor {
+  opacity: 1;
+}
+
+.countdown-card-actions .countdown-card-action {
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-hover);
+}
+
+.countdown-card-pinned .countdown-card-action[aria-pressed='true'] {
+  color: var(--color-brand-text);
+  background: var(--color-brand-softer);
+}
+
+@media (hover: none) {
+  .countdown-card-actions,
+  .countdown-card-actions .ui-menu-anchor {
+    opacity: 1;
+  }
+}
+
+.countdown-empty {
+  margin-top: var(--space-8);
+}
+
+/* ---- 添加 / 编辑倒数日 ---- */
+
+.countdown-calendar input[type='date'] {
+  margin-top: var(--space-2);
+}
+
+.countdown-segments {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--color-segment-bg);
+  border-radius: var(--radius-md);
+}
+
+.countdown-segment {
+  position: relative;
+  padding: 2px var(--space-4);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.countdown-segment-active {
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+.countdown-segment:has(:focus-visible) {
+  outline: 2px solid var(--color-focus);
+}
+
+.countdown-reminder-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+
+.countdown-reminder-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-md);
+}
+
+.countdown-reminder-time {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: var(--font-size-md);
+}
+
+.countdown-reminder-time input {
+  width: auto;
+}
+
+@media (max-width: 767px) {
+  .countdown-pane {
+    padding: 0 var(--space-5) var(--space-8);
+  }
+
+  .countdown-header {
+    padding-left: 0;
+  }
+
+  .countdown-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .countdown-card {
+    height: var(--countdown-card-height-mobile);
+    padding: var(--space-3);
+  }
+
+  .countdown-card-name {
+    font-size: var(--font-size-lg);
+  }
+
+  .countdown-card-figure {
+    font-size: var(--font-size-countdown-figure-mobile);
+  }
+
+  .countdown-card-figure-ymd {
+    font-size: var(--font-size-lg);
+    line-height: calc(var(--font-size-countdown-figure-mobile) * 1.2);
+  }
+}
+
+.countdown-calendar .countdown-segments {
+  justify-self: start;
+}

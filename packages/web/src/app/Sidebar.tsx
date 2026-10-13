@@ -64,6 +64,8 @@ interface SidebarProps {
   onOpenMatrix: () => void;
   /** 番茄专注 (likewise). */
   onOpenFocus: () => void;
+  /** 倒数日, likewise. */
+  onOpenCountdowns: () => void;
 }
 
 /** Order of the built-in rows, like the reference: date lists, then 收件箱, then the rest. */
@@ -438,6 +440,7 @@ export function Sidebar(props: SidebarProps) {
             <IconButton icon="calendar" label="日历" onClick={props.onOpenCalendar} />
             <IconButton icon="focus" label="番茄专注" onClick={props.onOpenFocus} />
             <IconButton icon="matrix" label="四象限" onClick={props.onOpenMatrix} />
+            <IconButton icon="countdown" label="倒数日" onClick={props.onOpenCountdowns} />
             <IconButton icon="search" label="搜索" onClick={props.onOpenSearch} />
             <IconButton icon="settings" label="设置" onClick={props.onOpenSettings} />
             <IconButton icon="close" label="关闭侧栏" onClick={props.onClose} />

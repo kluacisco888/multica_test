@@ -8,6 +8,7 @@ import './app/settings/settings.css';
 import './app/calendar.css';
 import './app/focus.css';
 import './app/matrix.css';
+import './app/countdown.css';
 import { restoreCachedTheme } from './app/theme.js';
 
 restoreCachedTheme();

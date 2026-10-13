@@ -76,7 +76,7 @@ async function checkTags(db: Executor, userId: string, tagIds: string[] | undefi
 const fitsDates = (r: Reminder, allDay: boolean | null) => allDay !== null && (allDay ? r.type === 'day' : r.type === 'before');
 
 /** Throws a 400 rejection unless every id is a live 通知渠道 of the user. */
-async function checkChannels(db: Executor, userId: string, ids: string[] | null | undefined): Promise<void> {
+export async function checkChannels(db: Executor, userId: string, ids: string[] | null | undefined): Promise<void> {
   if (!ids || ids.length === 0) return;
   const live = new Set((await liveChannels(db, userId)).map((c) => c.id));
   if (!ids.every((id) => live.has(id))) throw new Rejection(invalidChannels);

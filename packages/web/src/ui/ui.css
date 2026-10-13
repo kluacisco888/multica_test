@@ -343,7 +343,7 @@
   color: var(--color-text-secondary);
 }
 
-.field input:not([type='radio']),
+.field input:not([type='radio'], [type='checkbox']),
 .field select {
   min-height: var(--input-height);
   padding: 0 var(--space-3);

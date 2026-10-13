@@ -1,17 +1,21 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, min, sql } from 'drizzle-orm';
 import {
+  countdownReminderMessage,
   nextRetryAt,
   reminderMessage,
   reminderSchedule,
   REMINDER_ALERT_WINDOW_MS,
+  todayIn,
   withinCatchUp,
   type ChannelMessage,
   type ReminderAlert,
   type ReminderFailure,
 } from '@dida/shared';
+import { countdownReminderSchedule, lunarLabel, nextOccurrence } from '@dida/shared/countdown';
 import type { FastifyBaseLogger } from 'fastify';
 import type { Clock } from '../clock.js';
 import type { Db, Executor, Tx } from '../db/client.js';
+import { countdowns } from '../db/schema/countdowns.js';
 import { reminderDeliveries, type ChannelAttempt } from '../db/schema/reminders.js';
 import { notificationChannels } from '../db/schema/channels.js';
 import { userSettings } from '../db/schema/settings.js';
@@ -40,6 +44,8 @@ import type { SyncOps, SyncWriter } from '../sync/sync.js';
  */
 
 type DeliveryRow = typeof reminderDeliveries.$inferSelect;
+type CountdownRow = typeof countdowns.$inferSelect;
+type ScheduleSettings = { timeZone: string; allDayReminderTime: string };
 
 export interface TickResult {
   fired: number;
@@ -53,6 +59,8 @@ export interface TickResult {
 export interface ReminderService {
   /** Keep the scheduled deliveries of these tasks in step with them (called by the sync hook). */
   reconcile(ops: SyncOps, tx: Tx, userId: string, taskIds: string[]): Promise<void>;
+  /** The same for 倒数日 (called by the sync hook, and after each firing for the next year). */
+  reconcileCountdowns(ops: SyncOps, tx: Tx, userId: string, countdownIds: string[]): Promise<void>;
   /** Send everything due now. Runs one at a time. */
   tick(): Promise<TickResult>;
   /** Earliest pending fire or retry instant, if any. */
@@ -85,7 +93,30 @@ function desiredSchedule(task: TaskRow, settings: { timeZone: string; allDayRemi
   return reminderSchedule(task.reminders, taskDatesToApi(task), { timeZone: settings.timeZone, allDayTime: settings.allDayReminderTime });
 }
 
-function stillMatches(row: DeliveryRow, task: TaskRow | undefined, settings: { timeZone: string; allDayReminderTime: string }): boolean {
+const isLiveCountdown = (c: CountdownRow | undefined): c is CountdownRow => c !== undefined && c.deletedAt === null && c.archivedAt === null;
+
+/** The 倒数日's reminders, each at its first instant after `after`. */
+function countdownSchedule(c: CountdownRow, after: Date, settings: ScheduleSettings) {
+  return countdownReminderSchedule(c, after, { timeZone: settings.timeZone, allDayTime: settings.allDayReminderTime });
+}
+
+/** The 任务 or 倒数日 a delivery reminds of. */
+interface Subject {
+  task?: TaskRow;
+  countdown?: CountdownRow;
+}
+
+function stillMatches(row: DeliveryRow, subject: Subject, settings: ScheduleSettings): boolean {
+  if (row.countdownId) {
+    const c = subject.countdown;
+    if (!isLiveCountdown(c)) return false;
+    if (row.source === 'snooze') return true;
+    // Is this instant still the first firing of that reminder after (just before) it?
+    return countdownSchedule(c, new Date(row.fireAt.getTime() - 1), settings).some(
+      (d) => d.key === row.reminderKey && d.fireAt.getTime() === row.fireAt.getTime(),
+    );
+  }
+  const task = subject.task;
   if (!task || !isLive(task)) return false;
   // A 稍后提醒 was asked for explicitly: it stays while the task is open, whatever its dates.
   if (row.source === 'snooze') return true;
@@ -131,7 +162,7 @@ export function createReminderService(deps: {
       const desired = live ? desiredSchedule(task, settings) : [];
       const kept = new Set<string>();
       for (const row of scheduled.filter((r) => r.taskId === task.id)) {
-        if (stillMatches(row, task, settings)) {
+        if (stillMatches(row, { task }, settings)) {
           if (row.reminderKey) kept.add(`${row.reminderKey}|${row.fireAt.getTime()}`);
           continue;
         }
@@ -164,8 +195,57 @@ export function createReminderService(deps: {
     }
   }
 
+  async function reconcileCountdowns(ops: SyncOps, tx: Tx, userId: string, ids: string[]) {
+    if (ids.length === 0) return;
+    const now = clock.now();
+    const settings = await readSettings(tx, userId);
+    const rows = await tx.select().from(countdowns).where(and(eq(countdowns.userId, userId), inArray(countdowns.id, ids)));
+    const scheduled = await tx
+      .select()
+      .from(reminderDeliveries)
+      .where(
+        and(
+          eq(reminderDeliveries.userId, userId),
+          inArray(reminderDeliveries.countdownId, ids),
+          eq(reminderDeliveries.status, 'scheduled'),
+          isNull(reminderDeliveries.deletedAt),
+        ),
+      );
+    for (const c of rows) {
+      const desired = isLiveCountdown(c) ? countdownSchedule(c, now, settings) : [];
+      const kept = new Set<string>();
+      for (const row of scheduled.filter((r) => r.countdownId === c.id)) {
+        const wanted =
+          row.source === 'snooze' ? isLiveCountdown(c) : desired.some((d) => d.key === row.reminderKey && d.fireAt.getTime() === row.fireAt.getTime());
+        if (wanted) {
+          if (row.reminderKey) kept.add(`${row.reminderKey}|${row.fireAt.getTime()}`);
+          continue;
+        }
+        await ops.update(reminderDeliveries, row.id, { status: 'cancelled', nextAttemptAt: null });
+      }
+      for (const d of desired) {
+        if (kept.has(`${d.key}|${d.fireAt.getTime()}`)) continue;
+        await ops.insert(reminderDeliveries, {
+          taskId: null,
+          countdownId: c.id,
+          source: 'rule',
+          reminderKey: d.key,
+          fireAt: d.fireAt,
+          status: 'scheduled',
+          nextAttemptAt: d.fireAt,
+          channels: [],
+          firedAt: null,
+          alertDismissedAt: null,
+        });
+        wake(d.fireAt);
+      }
+    }
+  }
+
   // Every task write, from any route, reconciles that task's reminders.
   sync.onWrite(tasks, ({ ops, tx, userId, ids }) => reconcile(ops, tx, userId, ids));
+  // Likewise every 倒数日 write (edit, 归档, delete).
+  sync.onWrite(countdowns, ({ ops, tx, userId, ids }) => reconcileCountdowns(ops, tx, userId, ids));
   // 全天提醒时间 and the time zone move the reminders of 全天 tasks.
   sync.onWrite(userSettings, async ({ ops, tx, userId }) => {
     const withReminders = await tx
@@ -173,6 +253,11 @@ export function createReminderService(deps: {
       .from(tasks)
       .where(and(eq(tasks.userId, userId), eq(tasks.status, 'open'), isNull(tasks.deletedAt), sql`jsonb_array_length(${tasks.reminders}) > 0`));
     await reconcile(ops, tx, userId, withReminders.map((t) => t.id));
+    const countdownsWithReminders = await tx
+      .select({ id: countdowns.id })
+      .from(countdowns)
+      .where(and(eq(countdowns.userId, userId), isNull(countdowns.deletedAt), sql`jsonb_array_length(${countdowns.reminders}) > 0`));
+    await reconcileCountdowns(ops, tx, userId, countdownsWithReminders.map((c) => c.id));
   });
 
   async function lockDelivery(tx: Tx, id: string): Promise<DeliveryRow | undefined> {
@@ -180,9 +265,14 @@ export function createReminderService(deps: {
     return row;
   }
 
-  async function taskOf(db: Executor, row: DeliveryRow): Promise<TaskRow | undefined> {
+  async function subjectOf(db: Executor, row: DeliveryRow): Promise<Subject> {
+    if (row.countdownId) {
+      const [countdown] = await db.select().from(countdowns).where(eq(countdowns.id, row.countdownId));
+      return { countdown };
+    }
+    if (!row.taskId) return {};
     const [task] = await db.select().from(tasks).where(eq(tasks.id, row.taskId));
-    return task;
+    return { task };
   }
 
   /** Fire / re-check one due row; returns what to send, or null. */
@@ -191,21 +281,26 @@ export function createReminderService(deps: {
       const now = clock.now();
       const row = await lockDelivery(tx, id);
       if (!row || !ACTIVE.includes(row.status as (typeof ACTIVE)[number]) || !row.nextAttemptAt || row.nextAttemptAt > now) return null;
-      const task = await taskOf(tx, row);
+      const subject = await subjectOf(tx, row);
+      const { task, countdown } = subject;
       const settings = await readSettings(tx, userId);
 
       if (row.status === 'scheduled') {
-        if (!stillMatches(row, task, settings)) {
+        // A yearly 倒数日 goes on to next year's reminder whatever happens to this one.
+        const scheduleNext = () => (row.countdownId ? reconcileCountdowns(ops, tx, userId, [row.countdownId]) : Promise.resolve());
+        if (!stillMatches(row, subject, settings)) {
           await ops.update(reminderDeliveries, row.id, { status: 'cancelled', nextAttemptAt: null });
           result.cancelled += 1;
+          await scheduleNext();
           return null;
         }
         if (!withinCatchUp(row.fireAt, now)) {
           await ops.update(reminderDeliveries, row.id, { status: 'missed', nextAttemptAt: null });
           result.missed += 1;
+          await scheduleNext();
           return null;
         }
-        const wanted = task?.reminderChannelIds ?? null;
+        const wanted = (task ?? countdown)?.reminderChannelIds ?? null;
         const live = await liveChannels(tx, userId);
         const channels = live.filter((c) => (wanted ? wanted.includes(c.id) : c.isDefault));
         // Channels the task named that were deleted since: one failure each, shown in 发送失败的提醒.
@@ -246,8 +341,9 @@ export function createReminderService(deps: {
           nextAttemptAt: pending.length > 0 ? now : null,
         });
         result.fired += 1;
+        await scheduleNext();
         if (!fired || pending.length === 0) return null;
-        return { row: fired, task: task as TaskRow, settings };
+        return { row: fired, subject, settings };
       }
 
       // `delivering`: a retry is due. Only a retry that itself came due more than
@@ -261,8 +357,8 @@ export function createReminderService(deps: {
         await ops.update(reminderDeliveries, row.id, { status: 'done', channels, nextAttemptAt: null });
         return null;
       }
-      if (!task) return null;
-      return { row, task, settings };
+      if (!task && !countdown) return null;
+      return { row, subject, settings };
     });
   }
 
@@ -271,10 +367,8 @@ export function createReminderService(deps: {
     if (!plan) return;
     const sendAt = clock.now();
     const due = plan.row.channels.filter((c) => c.status === 'pending' && c.nextAttemptAt && Date.parse(c.nextAttemptAt) <= sendAt.getTime());
-    const message: ChannelMessage = reminderMessage(
-      { title: plan.task.title, dates: taskDatesToApi(plan.task) },
-      { now: sendAt, timeZone: plan.settings.timeZone },
-    );
+    const message = messageFor(plan.subject, sendAt, plan.settings.timeZone);
+    if (!message) return;
     // Network calls stay outside the transaction.
     const outcomes = new Map<string, Awaited<ReturnType<Notifier['send']>>>();
     for (const c of due) outcomes.set(c.channelId, await notifier.send(userId, c.channelId, message));
@@ -308,6 +402,14 @@ export function createReminderService(deps: {
     });
   }
 
+  function messageFor({ task, countdown }: Subject, now: Date, timeZone: string): ChannelMessage | null {
+    if (task) return reminderMessage({ title: task.title, dates: taskDatesToApi(task) }, { now, timeZone });
+    if (!countdown) return null;
+    const next = nextOccurrence(countdown, todayIn(now, timeZone));
+    const lunar = countdown.calendar === 'lunar' ? lunarLabel(next.date) : null;
+    return countdownReminderMessage({ name: countdown.name, calendar: countdown.calendar, lunar }, next.date, next.days);
+  }
+
   async function runTick(): Promise<TickResult> {
     const result: TickResult = { fired: 0, sent: 0, failed: 0, retrying: 0, cancelled: 0, missed: 0 };
     for (;;) {
@@ -332,6 +434,7 @@ export function createReminderService(deps: {
 
   return {
     reconcile,
+    reconcileCountdowns,
     tick() {
       const next = running.then(runTick, runTick);
       running = next.catch(() => undefined);
@@ -405,6 +508,7 @@ export function createReminderService(deps: {
         await ops.update(reminderDeliveries, row.id, { alertDismissedAt: now });
         await ops.insert(reminderDeliveries, {
           taskId: row.taskId,
+          countdownId: row.countdownId,
           source: 'snooze',
           reminderKey: null,
           fireAt,
@@ -421,9 +525,10 @@ export function createReminderService(deps: {
 
     async failures(userId) {
       const rows = await db
-        .select({ delivery: reminderDeliveries, title: tasks.title })
+        .select({ delivery: reminderDeliveries, taskTitle: tasks.title, countdownName: countdowns.name })
         .from(reminderDeliveries)
-        .innerJoin(tasks, eq(tasks.id, reminderDeliveries.taskId))
+        .leftJoin(tasks, eq(tasks.id, reminderDeliveries.taskId))
+        .leftJoin(countdowns, eq(countdowns.id, reminderDeliveries.countdownId))
         .where(
           and(
             eq(reminderDeliveries.userId, userId),
@@ -433,13 +538,14 @@ export function createReminderService(deps: {
         )
         .orderBy(desc(reminderDeliveries.fireAt), asc(reminderDeliveries.id))
         .limit(50);
-      return rows.flatMap(({ delivery, title }) =>
+      return rows.flatMap(({ delivery, taskTitle, countdownName }) =>
         delivery.channels
           .filter((c) => c.status === 'failed')
           .map((c) => ({
             id: delivery.id,
             taskId: delivery.taskId,
-            taskTitle: title,
+            countdownId: delivery.countdownId,
+            taskTitle: taskTitle ?? countdownName ?? '',
             channelId: c.channelId,
             channelName: c.channelName,
             fireAt: delivery.fireAt.toISOString(),
