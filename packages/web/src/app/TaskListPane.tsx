@@ -105,6 +105,7 @@ export function TaskListPane(props: TaskListPaneProps) {
     onSelectTask: props.onSelectTask,
     onToggleTask: props.onToggleTask,
     onIndent: indent,
+    indentable: view?.kind === 'list',
     timeZone: props.timeZone,
     now: props.now,
     tags: props.tags,
@@ -233,6 +234,8 @@ interface TaskRowsProps {
   onSelectTask: (taskId: string) => void;
   onToggleTask: (task: Task) => void;
   onIndent: (task: Task, outdent: boolean) => boolean;
+  /** False in a 标签 view: Tab / Shift+Tab don't indent there. */
+  indentable: boolean;
   timeZone: string;
   now: Date;
   tags: Tag[];
@@ -247,8 +250,20 @@ function TaskRows({ nodes, ...rest }: TaskRowsProps) {
 
 function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskNode<Task> }) {
   const { task, depth, children } = node;
-  const { selectedTaskId, collapsed, onToggleCollapsed, onSelectTask, onToggleTask, onIndent, timeZone, now, tags, listName, onOpenMenu } =
-    rest;
+  const {
+    selectedTaskId,
+    collapsed,
+    onToggleCollapsed,
+    onSelectTask,
+    onToggleTask,
+    onIndent,
+    indentable,
+    timeZone,
+    now,
+    tags,
+    listName,
+    onOpenMenu,
+  } = rest;
   const titleRef = useRef<HTMLButtonElement>(null);
   const taskTags = tagsOf(task, tags);
   const list = listName(task);
@@ -307,7 +322,7 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
           data-task-id={task.id}
           aria-current={selected ? 'true' : undefined}
           aria-description={task.priority !== 'none' ? PRIORITY_LABELS[task.priority] : undefined}
-          aria-keyshortcuts={selected && !done ? 'Tab Shift+Tab' : undefined}
+          aria-keyshortcuts={selected && !done && indentable ? 'Tab Shift+Tab' : undefined}
           onClick={() => onSelectTask(task.id)}
           onKeyDown={onKeyDown}
         >

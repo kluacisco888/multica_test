@@ -239,6 +239,9 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
 
   /** Tab / Shift+Tab (spec 用户故事 36). False when nothing can move, so Tab keeps moving focus. */
   function indentTask(task: Task, outdent: boolean): boolean {
+    // A 标签 view mixes 清单 and flattens trees: indenting there could move the task
+    // into another 清单, so Tab keeps its default meaning (move focus).
+    if (view?.kind !== 'list') return false;
     if (!listTasks || task.status === 'completed') return false;
     const plan = outdent ? planOutdent(listTasks, task.id) : planIndent(listTasks, task.id, (t) => t.status !== 'completed');
     if (plan.kind === 'none') return false;
@@ -451,6 +454,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onSelectTask={selectTask}
           onAddSubtask={addSubtask}
           onIndent={indentTask}
+          indentable={view?.kind === 'list'}
           onError={fail}
         />
       )}

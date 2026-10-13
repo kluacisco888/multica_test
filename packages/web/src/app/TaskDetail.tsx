@@ -32,6 +32,8 @@ interface TaskDetailProps {
   onSelectTask: (taskId: string) => void;
   onAddSubtask: (parent: Task, title: string) => Promise<boolean>;
   onIndent: (task: Task, outdent: boolean) => boolean;
+  /** False in a 标签 view, where 缩进 is not offered. */
+  indentable: boolean;
   onError: (error: unknown) => void;
 }
 
@@ -49,6 +51,7 @@ export function TaskDetail({
   onSelectTask,
   onAddSubtask,
   onIndent,
+  indentable,
   onError,
 }: TaskDetailProps) {
   const addSubtaskRef = useRef<HTMLInputElement>(null);
@@ -66,8 +69,8 @@ export function TaskDetail({
   const children = tasks
     .filter((t) => t.parentId === task.id)
     .sort((a, b) => compareSortKeys(a.sortOrder, b.sortOrder) || compareSortKeys(a.id, b.id));
-  const canIndent = !done && planIndent(tasks, task.id, (t) => t.status !== 'completed').kind !== 'none';
-  const canOutdent = !done && planOutdent(tasks, task.id).kind !== 'none';
+  const canIndent = indentable && !done && planIndent(tasks, task.id, (t) => t.status !== 'completed').kind !== 'none';
+  const canOutdent = indentable && !done && planOutdent(tasks, task.id).kind !== 'none';
   const checklist = task.kind === 'checklist';
   const change = (patch: UpdateTaskRequest) => void onChange(task, patch);
   const taskTags = tagsOf(task, tags);

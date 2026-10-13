@@ -233,3 +233,48 @@ test('nested 标签: tag tasks, a parent 标签 view includes its children, rena
   await expect(row(page, '开周会').getByRole('list', { name: '标签' })).toHaveCount(0);
   await expect(row(page, '写方案').getByRole('list', { name: '标签' })).toHaveText('工作');
 });
+
+test('Tab in a 标签 view moves focus and never moves a task to another 清单', async ({ page }) => {
+  test.skip(isMobile(page), 'keyboard only');
+  const user = createUser('tag-tab');
+  await logIn(page, user.username, user.password);
+
+  // Two 清单, one task in each, both carrying the same 标签.
+  const post = async (url: string, data: object) => {
+    const res = await page.request.post(url, { data });
+    expect(res.status(), await res.text()).toBe(201);
+    return (await res.json()) as { id: string };
+  };
+  const listA = await post('/api/lists', { name: '清单甲' });
+  const listB = await post('/api/lists', { name: '清单乙' });
+  const tag = await post('/api/tags', { name: '共同' });
+  await post('/api/tasks', { listId: listA.id, title: '甲的任务', tagIds: [tag.id] });
+  await post('/api/tasks', { listId: listB.id, title: '乙的任务', tagIds: [tag.id] });
+  const tasksOf = async (listId: string) => {
+    const res = await page.request.get(`/api/tasks?listId=${listId}`);
+    return ((await res.json()) as { tasks: { title: string; parentId: string | null }[] }).tasks;
+  };
+
+  await page.goto(`/tags/${tag.id}`);
+  await expect(listTitle(page)).toHaveText('共同');
+  const titles = openTasks(page).getByRole('button', { name: /的任务$/ });
+  await expect(titles).toHaveCount(2);
+
+  // Select the second row (it has a sibling above it, so in a 清单 Tab would indent).
+  const second = titles.nth(1);
+  await second.click();
+  await expect(second).not.toHaveAttribute('aria-keyshortcuts');
+  await second.focus();
+  await page.keyboard.press('Tab');
+  await expect(second).not.toBeFocused();
+  await expect(page.getByRole('list', { name: /的子任务」?$/ })).toHaveCount(0);
+
+  // 缩进 is not offered from the detail pane either.
+  await detail(page).getByRole('button', { name: '任务更多操作' }).click();
+  await expect(page.getByRole('menuitem', { name: '缩进（Tab）' })).toBeDisabled();
+  await page.keyboard.press('Escape');
+
+  // Both 清单 still hold exactly their own top-level task.
+  expect(await tasksOf(listA.id)).toEqual([expect.objectContaining({ title: '甲的任务', parentId: null })]);
+  expect(await tasksOf(listB.id)).toEqual([expect.objectContaining({ title: '乙的任务', parentId: null })]);
+});
