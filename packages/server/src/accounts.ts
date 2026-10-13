@@ -2,6 +2,7 @@ import { asc, count, eq, sql } from 'drizzle-orm';
 import { passwordSchema, usernameSchema } from '@dida/shared';
 import type { Clock } from './clock.js';
 import type { Db, Executor } from './db/client.js';
+import { isUniqueViolation } from './db/errors.js';
 import { users } from './db/schema/users.js';
 import { hashPassword, verifyPassword } from './password.js';
 import type { SessionStore } from './sessions.js';
@@ -80,11 +81,6 @@ function validPassword(password: string): string {
   const parsed = passwordSchema.safeParse(password);
   if (!parsed.success) throw new AccountError('invalid_password', parsed.error.issues[0]?.message ?? '密码不合法');
   return parsed.data;
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  const cause = (error as { cause?: { code?: string } }).cause ?? error;
-  return (cause as { code?: string }).code === '23505';
 }
 
 /** Key for the advisory lock that serializes the first-admin bootstrap across processes. */

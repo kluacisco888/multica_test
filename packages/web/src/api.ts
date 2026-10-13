@@ -1,9 +1,24 @@
 import {
   apiErrorSchema,
+  folderSchema,
+  listSchema,
   meResponseSchema,
+  sidebarResponseSchema,
+  taskSchema,
+  tasksResponseSchema,
   type ChangePasswordRequest,
+  type CreateFolderRequest,
+  type CreateListRequest,
+  type CreateTaskRequest,
   type CurrentUser,
+  type Folder,
   type LoginRequest,
+  type SidebarResponse,
+  type Task,
+  type TaskList,
+  type UpdateFolderRequest,
+  type UpdateListRequest,
+  type UpdateTaskRequest,
 } from '@dida/shared';
 
 /** A failed API call with the server's error code and Chinese message. */
@@ -53,6 +68,47 @@ export async function logout(): Promise<void> {
 
 export async function changePassword(request: ChangePasswordRequest): Promise<void> {
   await call('POST', '/api/auth/password', request);
+}
+
+export async function fetchSidebar(): Promise<SidebarResponse> {
+  return sidebarResponseSchema.parse(await (await call('GET', '/api/lists')).json());
+}
+
+export async function createList(request: CreateListRequest): Promise<TaskList> {
+  return listSchema.parse(await (await call('POST', '/api/lists', request)).json());
+}
+
+export async function updateList(id: string, patch: UpdateListRequest): Promise<TaskList> {
+  return listSchema.parse(await (await call('PATCH', `/api/lists/${encodeURIComponent(id)}`, patch)).json());
+}
+
+export async function deleteList(id: string): Promise<void> {
+  await call('DELETE', `/api/lists/${encodeURIComponent(id)}`);
+}
+
+export async function createFolder(request: CreateFolderRequest): Promise<Folder> {
+  return folderSchema.parse(await (await call('POST', '/api/folders', request)).json());
+}
+
+export async function updateFolder(id: string, patch: UpdateFolderRequest): Promise<Folder> {
+  return folderSchema.parse(await (await call('PATCH', `/api/folders/${encodeURIComponent(id)}`, patch)).json());
+}
+
+export async function deleteFolder(id: string): Promise<void> {
+  await call('DELETE', `/api/folders/${encodeURIComponent(id)}`);
+}
+
+export async function fetchTasks(listId: string): Promise<Task[]> {
+  const res = await call('GET', `/api/tasks?listId=${encodeURIComponent(listId)}`);
+  return tasksResponseSchema.parse(await res.json()).tasks;
+}
+
+export async function createTask(request: CreateTaskRequest): Promise<Task> {
+  return taskSchema.parse(await (await call('POST', '/api/tasks', request)).json());
+}
+
+export async function updateTask(id: string, patch: UpdateTaskRequest): Promise<Task> {
+  return taskSchema.parse(await (await call('PATCH', `/api/tasks/${encodeURIComponent(id)}`, patch)).json());
 }
 
 export function errorMessage(error: unknown): string {

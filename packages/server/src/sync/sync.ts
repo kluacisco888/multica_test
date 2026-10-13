@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm';
 import type { ChangesResponse, EntityChanges } from '@dida/shared';
 import type { Clock } from '../clock.js';
-import type { Db, Tx } from '../db/client.js';
+import type { Db, Executor, Tx } from '../db/client.js';
 import { userRevisions } from '../db/schema/users.js';
 import type { SyncColumnName, SyncEntity, SyncTable } from './columns.js';
 
@@ -89,7 +89,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * user's ids are indistinguishable from ids that never existed.
  */
 export async function findOwned<T extends SyncTable>(
-  db: Db,
+  db: Executor,
   table: T,
   userId: string,
   id: string,

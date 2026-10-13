@@ -1,0 +1,37 @@
+import type { FastifyReply } from 'fastify';
+import { isUniqueViolation } from '../db/errors.js';
+import { sendError } from '../http-errors.js';
+
+/* Error answers and the write wrapper shared by the resource routes. */
+
+export const notFound = (reply: FastifyReply) => sendError(reply, 404, 'not_found', '资源不存在');
+export const idTaken = (reply: FastifyReply) => sendError(reply, 409, 'conflict', '该 id 已被使用');
+export const inboxProtected = (reply: FastifyReply, action: string) =>
+  sendError(reply, 400, 'inbox_protected', `收件箱不能${action}`);
+export const invalidFolder = (reply: FastifyReply) => sendError(reply, 400, 'invalid_folder', '文件夹不存在');
+export const invalidList = (reply: FastifyReply) => sendError(reply, 400, 'invalid_list', '清单不存在');
+
+/** Thrown inside a transaction to roll it back and answer with an error. */
+export class Rejection extends Error {
+  constructor(readonly send: (reply: FastifyReply) => FastifyReply) {
+    super('rejected');
+  }
+}
+
+/** Run a write and answer with `ok(result)`; rejections and client-id collisions become error responses. */
+export async function respond<T>(
+  reply: FastifyReply,
+  write: () => Promise<T>,
+  ok: (result: T) => FastifyReply | object,
+): Promise<FastifyReply | object> {
+  let result: T;
+  try {
+    result = await write();
+  } catch (error) {
+    if (error instanceof Rejection) return error.send(reply);
+    if (isUniqueViolation(error)) return idTaken(reply);
+    throw error;
+  }
+  return ok(result);
+}
+

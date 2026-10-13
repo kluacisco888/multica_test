@@ -1,7 +1,14 @@
 import type { CurrentUser } from '@dida/shared';
 import { useState, type FormEvent } from 'react';
 import { errorMessage, login } from './api.js';
+import { Brand } from './ui/Brand.js';
+import { Button } from './ui/controls.js';
 
+/**
+ * 登录 page, laid out like the reference sign-in page: brand bar on top, a
+ * white card in the middle. Registration and third-party login do not exist
+ * here (spec: 不开放注册), so those parts of the reference are left out.
+ */
 export function LoginPage({ onLoggedIn }: { onLoggedIn: (user: CurrentUser) => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -27,17 +34,24 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: (user: CurrentUser) => v
   }
 
   return (
-    <main className="page page-center">
-      <section className="card" aria-labelledby="login-title">
-        <h1 id="login-title" className="card-title">
-          登录
-        </h1>
-        <form className="form" onSubmit={submit} noValidate>
-          <div className="field">
-            <label htmlFor="login-username">账号</label>
+    <div className="login-page">
+      <header className="login-topbar">
+        <Brand />
+      </header>
+      <main className="login-main">
+        <section className="login-card" aria-labelledby="login-title">
+          <h1 id="login-title" className="login-title">
+            登录
+          </h1>
+          <form className="login-form" onSubmit={submit} noValidate>
+            <label htmlFor="login-username" className="visually-hidden">
+              账号
+            </label>
             <input
               id="login-username"
+              className="login-input"
               name="username"
+              placeholder="账号"
               autoComplete="username"
               autoCapitalize="none"
               spellCheck={false}
@@ -47,13 +61,15 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: (user: CurrentUser) => v
               aria-describedby={error ? 'login-error' : undefined}
               required
             />
-          </div>
-          <div className="field">
-            <label htmlFor="login-password">密码</label>
+            <label htmlFor="login-password" className="visually-hidden">
+              密码
+            </label>
             <input
               id="login-password"
+              className="login-input"
               name="password"
               type="password"
+              placeholder="密码"
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -61,17 +77,18 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: (user: CurrentUser) => v
               aria-describedby={error ? 'login-error' : undefined}
               required
             />
-          </div>
-          {error && (
-            <p id="login-error" className="form-error" role="alert">
-              {error}
-            </p>
-          )}
-          <button type="submit" className="button button-primary" disabled={submitting}>
-            {submitting ? '正在登录…' : '登录'}
-          </button>
-        </form>
-      </section>
-    </main>
+            {error && (
+              <p id="login-error" className="form-error" role="alert">
+                {error}
+              </p>
+            )}
+            <Button type="submit" variant="primary" className="login-submit" disabled={submitting}>
+              {submitting ? '正在登录…' : '登录'}
+            </Button>
+          </form>
+          <p className="login-note">没有账号或忘记密码时，请联系管理员</p>
+        </section>
+      </main>
+    </div>
   );
 }

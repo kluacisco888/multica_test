@@ -1,9 +1,18 @@
 import { PASSWORD_MIN_LENGTH, type CurrentUser } from '@dida/shared';
 import { useId, useState, type FormEvent } from 'react';
-import { changePassword, errorMessage, logout } from './api.js';
+import { changePassword, errorMessage, logout } from '../api.js';
+import { Button, Dialog } from '../ui/controls.js';
 
-/** Placeholder signed-in page until EURO-6 builds the application shell. */
-export function HomePage({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut: () => void }) {
+/** 账户: who is signed in, change password, log out (spec 用户故事 7、8). */
+export function AccountDialog({
+  user,
+  onClose,
+  onLoggedOut,
+}: {
+  user: CurrentUser;
+  onClose: () => void;
+  onLoggedOut: () => void;
+}) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
 
@@ -20,26 +29,23 @@ export function HomePage({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   }
 
   return (
-    <div className="page">
-      <header className="topbar">
-        <p className="topbar-user">
-          已登录：<strong>{user.username}</strong>
-          {user.isAdmin && <span className="badge">管理员</span>}
-        </p>
-        <button type="button" className="button" onClick={handleLogout} disabled={loggingOut}>
-          退出登录
-        </button>
-      </header>
+    <Dialog title="账户" onClose={onClose} className="account-dialog">
+      <p className="account-user">
+        已登录：<strong>{user.username}</strong>
+        {user.isAdmin && <span className="badge">管理员</span>}
+      </p>
+      <ChangePasswordForm />
       {logoutError && (
-        <p className="form-error page-message" role="alert">
+        <p className="form-error" role="alert">
           {logoutError}
         </p>
       )}
-      <main className="page-main">
-        <h1 className="page-title">账户</h1>
-        <ChangePasswordForm />
-      </main>
-    </div>
+      <div className="ui-dialog-footer">
+        <Button onClick={handleLogout} disabled={loggingOut}>
+          退出登录
+        </Button>
+      </div>
+    </Dialog>
   );
 }
 
@@ -81,10 +87,10 @@ function ChangePasswordForm() {
   const errorId = `${id}-error`;
   const describedBy = error ? errorId : undefined;
   return (
-    <section className="card" aria-labelledby={`${id}-title`}>
-      <h2 id={`${id}-title`} className="card-title">
+    <section className="account-section" aria-labelledby={`${id}-title`}>
+      <h3 id={`${id}-title`} className="account-section-title">
         修改密码
-      </h2>
+      </h3>
       <form className="form" onSubmit={submit} noValidate>
         <div className="field">
           <label htmlFor={`${id}-current`}>当前密码</label>
@@ -136,9 +142,9 @@ function ChangePasswordForm() {
             密码已修改
           </p>
         )}
-        <button type="submit" className="button button-primary" disabled={submitting}>
+        <Button type="submit" variant="primary" disabled={submitting}>
           {submitting ? '正在保存…' : '修改密码'}
-        </button>
+        </Button>
       </form>
     </section>
   );
