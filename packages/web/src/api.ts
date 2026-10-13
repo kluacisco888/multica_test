@@ -5,6 +5,8 @@ import {
   type CreateChannelRequest,
   type NotificationChannel,
   type UpdateChannelRequest,
+  checklistItemSchema,
+  checklistItemsResponseSchema,
   folderSchema,
   holidayRefreshResponseSchema,
   holidayStatusSchema,
@@ -15,6 +17,8 @@ import {
   taskSchema,
   tasksResponseSchema,
   type ChangePasswordRequest,
+  type ChecklistItem,
+  type CreateChecklistItemRequest,
   type CreateFolderRequest,
   type CreateListRequest,
   type CreateTaskRequest,
@@ -27,6 +31,7 @@ import {
   type SidebarResponse,
   type Task,
   type TaskList,
+  type UpdateChecklistItemRequest,
   type UpdateFolderRequest,
   type UpdateListRequest,
   type UpdateSettingsRequest,
@@ -159,6 +164,24 @@ export async function deleteChannel(id: string): Promise<void> {
 /** 发送测试消息; rejects with the server's concrete reason when delivery fails. */
 export async function testChannel(id: string): Promise<void> {
   await call('POST', `/api/notification-channels/${encodeURIComponent(id)}/test`);
+}
+
+export async function fetchChecklistItems(taskId: string): Promise<ChecklistItem[]> {
+  const res = await call('GET', `/api/tasks/${encodeURIComponent(taskId)}/checklist-items`);
+  return checklistItemsResponseSchema.parse(await res.json()).items;
+}
+
+export async function createChecklistItem(taskId: string, request: CreateChecklistItemRequest): Promise<ChecklistItem> {
+  const res = await call('POST', `/api/tasks/${encodeURIComponent(taskId)}/checklist-items`, request);
+  return checklistItemSchema.parse(await res.json());
+}
+
+export async function updateChecklistItem(id: string, patch: UpdateChecklistItemRequest): Promise<ChecklistItem> {
+  return checklistItemSchema.parse(await (await call('PATCH', `/api/checklist-items/${encodeURIComponent(id)}`, patch)).json());
+}
+
+export async function deleteChecklistItem(id: string): Promise<void> {
+  await call('DELETE', `/api/checklist-items/${encodeURIComponent(id)}`);
 }
 
 export function errorMessage(error: unknown): string {

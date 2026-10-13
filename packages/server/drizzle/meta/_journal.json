@@ -43,6 +43,13 @@
       "when": 1791875865065,
       "tag": "0005_notification_channels",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791876207675,
+      "tag": "0006_subtasks_checklist",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
 import type { FastifyReply } from 'fastify';
+import { DEPTH_EXCEEDED_MESSAGE } from '@dida/shared';
 import { isUniqueViolation } from '../db/errors.js';
 import { sendError } from '../http-errors.js';
 
@@ -10,6 +11,12 @@ export const inboxProtected = (reply: FastifyReply, action: string) =>
   sendError(reply, 400, 'inbox_protected', `收件箱不能${action}`);
 export const invalidFolder = (reply: FastifyReply) => sendError(reply, 400, 'invalid_folder', '文件夹不存在');
 export const invalidList = (reply: FastifyReply) => sendError(reply, 400, 'invalid_list', '清单不存在');
+export const invalidParent = (reply: FastifyReply) =>
+  sendError(reply, 400, 'invalid_parent', '父任务不存在，或不能移到自己的子任务下面');
+export const depthExceeded = (reply: FastifyReply) => sendError(reply, 400, 'depth_exceeded', DEPTH_EXCEEDED_MESSAGE);
+export const notChecklist = (reply: FastifyReply) => sendError(reply, 400, 'not_checklist', '任务不是检查清单模式');
+export const checklistMode = (reply: FastifyReply) =>
+  sendError(reply, 400, 'checklist_mode', '检查清单模式的任务没有描述，请先切换为描述模式');
 
 /** Thrown inside a transaction to roll it back and answer with an error. */
 export class Rejection extends Error {

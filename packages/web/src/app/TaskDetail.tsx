@@ -1,22 +1,51 @@
-import { INBOX_NAME, type Task, type TaskList, type UpdateTaskRequest } from '@dida/shared';
+import {
+  compareSortKeys,
+  INBOX_NAME,
+  planIndent,
+  planOutdent,
+  type Task,
+  type TaskList,
+  type UpdateTaskRequest,
+} from '@dida/shared';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from 'react';
 import { TaskDateButton } from './DatePicker.js';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { IconButton, MenuButton, TaskCheckbox } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { Markdown } from '../ui/Markdown.js';
+import { ChecklistEditor } from './ChecklistEditor.js';
 
 interface TaskDetailProps {
   task: Task | null;
+  /** All tasks of the current 清单 (for the parent link and the 子任务 list). */
+  tasks: Task[];
   lists: TaskList[];
   isMobile: boolean;
   timeZone: string;
   now: Date;
   onBack: () => void;
   onChange: (task: Task, patch: UpdateTaskRequest) => Promise<Task | null>;
+  onSelectTask: (taskId: string) => void;
+  onAddSubtask: (parent: Task, title: string) => Promise<boolean>;
+  onIndent: (task: Task, outdent: boolean) => boolean;
+  onError: (error: unknown) => void;
 }
 
-/** Right-hand pane (desktop) or full page (mobile) for one 任务 (spec 用户故事 21、23–27、31). */
-export function TaskDetail({ task, lists, isMobile, timeZone, now, onBack, onChange }: TaskDetailProps) {
+/** Right-hand pane (desktop) or full page (mobile) for one 任务 (spec 用户故事 21、23–27、31、35–37). */
+export function TaskDetail({
+  task,
+  tasks,
+  lists,
+  isMobile,
+  timeZone,
+  now,
+  onBack,
+  onChange,
+  onSelectTask,
+  onAddSubtask,
+  onIndent,
+  onError,
+}: TaskDetailProps) {
+  const addSubtaskRef = useRef<HTMLInputElement>(null);
   if (!task) {
     return (
       <aside className="detail detail-empty" aria-label="任务详情">
@@ -27,6 +56,13 @@ export function TaskDetail({ task, lists, isMobile, timeZone, now, onBack, onCha
   }
   const list = lists.find((l) => l.id === task.listId);
   const done = task.status === 'completed';
+  const parent = task.parentId ? tasks.find((t) => t.id === task.parentId) : undefined;
+  const children = tasks
+    .filter((t) => t.parentId === task.id)
+    .sort((a, b) => compareSortKeys(a.sortOrder, b.sortOrder) || compareSortKeys(a.id, b.id));
+  const canIndent = !done && planIndent(tasks, task.id, (t) => t.status !== 'completed').kind !== 'none';
+  const canOutdent = !done && planOutdent(tasks, task.id).kind !== 'none';
+  const checklist = task.kind === 'checklist';
 
   return (
     <aside className="detail" aria-label="任务详情">
@@ -48,8 +84,27 @@ export function TaskDetail({ task, lists, isMobile, timeZone, now, onBack, onCha
         <span className="detail-status">{done ? '已完成' : ''}</span>
       </header>
       <div className="detail-body">
+        {parent && (
+          <button type="button" className="detail-parent" aria-label={`父任务：${parent.title}`} onClick={() => onSelectTask(parent.id)}>
+            <Icon name="subtask" size={14} />
+            <span className="detail-parent-title">{parent.title}</span>
+          </button>
+        )}
         <TitleEditor task={task} onSave={(title) => onChange(task, { title })} />
-        <DescriptionEditor task={task} onSave={(description) => onChange(task, { description })} />
+        {checklist ? (
+          <ChecklistEditor key={`${task.id}-${task.kind}`} taskId={task.id} onError={onError} />
+        ) : (
+          <DescriptionEditor key={`${task.id}-${task.kind}`} task={task} onSave={(description) => onChange(task, { description })} />
+        )}
+        <Subtasks
+          parent={task}
+          tasks={tasks}
+          childTasks={children}
+          inputRef={addSubtaskRef}
+          onSelectTask={onSelectTask}
+          onToggle={(child) => void onChange(child, { status: child.status === 'completed' ? 'open' : 'completed' })}
+          onAdd={(title) => onAddSubtask(task, title)}
+        />
       </div>
       <footer className="detail-footer">
         <MenuButton
@@ -69,6 +124,20 @@ export function TaskDetail({ task, lists, isMobile, timeZone, now, onBack, onCha
           <span>{list?.name ?? INBOX_NAME}</span>
           <Icon name="chevronDown" size={12} />
         </MenuButton>
+        <span className="detail-footer-spacer" />
+        <IconButton
+          icon={checklist ? 'text' : 'checklist'}
+          label={checklist ? '切换为描述' : '切换为检查清单'}
+          onClick={() => void onChange(task, { kind: checklist ? 'text' : 'checklist' })}
+        />
+        <MenuButton
+          label="任务更多操作"
+          items={[
+            { label: '添加子任务', icon: 'subtask', onSelect: () => addSubtaskRef.current?.focus() },
+            { label: '缩进（Tab）', icon: 'indent', disabled: !canIndent, onSelect: () => onIndent(task, false) },
+            { label: '取消缩进（Shift+Tab）', icon: 'outdent', disabled: !canOutdent, onSelect: () => onIndent(task, true) },
+          ]}
+        />
       </footer>
     </aside>
   );
@@ -186,6 +255,82 @@ function DescriptionEditor({ task, onSave }: { task: Task; onSave: (description:
       <IconButton icon="edit" label="编辑描述" size={16} className="detail-description-edit" onClick={startEditing} />
     </div>
   );
+}
+
+/** The 子任务 of the open task, one level, plus an input to add one (spec 用户故事 35). */
+function Subtasks({
+  parent,
+  tasks,
+  childTasks,
+  inputRef,
+  onSelectTask,
+  onToggle,
+  onAdd,
+}: {
+  parent: Task;
+  tasks: Task[];
+  childTasks: Task[];
+  inputRef: RefObject<HTMLInputElement | null>;
+  onSelectTask: (taskId: string) => void;
+  onToggle: (task: Task) => void;
+  onAdd: (title: string) => Promise<boolean>;
+}) {
+  const [title, setTitle] = useState('');
+  const [busy, setBusy] = useState(false);
+  // Count 子任务 at every level below, like the list shows them.
+  const below = countBelow(tasks, parent.id);
+  const doneBelow = countBelow(tasks, parent.id, (t) => t.status === 'completed');
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = title.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    if (await onAdd(trimmed)) setTitle('');
+    setBusy(false);
+  }
+
+  return (
+    <section className="subtasks" aria-label="子任务">
+      {childTasks.length > 0 && (
+        <>
+          <h2 className="subtasks-heading">
+            子任务 <span className="subtasks-count">{`${doneBelow}/${below}`}</span>
+          </h2>
+          <ul className="subtasks-list" aria-label="子任务列表">
+            {childTasks.map((child) => (
+              <li key={child.id} className={`subtask-row ${child.status === 'completed' ? 'subtask-row-done' : ''}`}>
+                <TaskCheckbox checked={child.status === 'completed'} label={child.title} onChange={() => onToggle(child)} />
+                <button type="button" className="subtask-title" onClick={() => onSelectTask(child.id)}>
+                  {child.title}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <form className="subtask-add" onSubmit={submit} aria-label="添加子任务">
+        <span className="subtask-add-icon" aria-hidden="true">
+          <Icon name="plus" size={14} />
+        </span>
+        <input
+          ref={inputRef}
+          className="subtask-add-input"
+          aria-label="添加子任务"
+          placeholder="添加子任务"
+          value={title}
+          maxLength={512}
+          onChange={(e) => setTitle(e.target.value)}
+          enterKeyHint="done"
+        />
+      </form>
+    </section>
+  );
+}
+
+function countBelow(tasks: Task[], id: string, match: (t: Task) => boolean = () => true): number {
+  const kids = tasks.filter((t) => t.parentId === id);
+  return kids.reduce((n, k) => n + (match(k) ? 1 : 0) + countBelow(tasks, k.id, match), 0);
 }
 
 /** Simple own line drawing for the empty detail pane. */

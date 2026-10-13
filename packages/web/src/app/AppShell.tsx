@@ -1,5 +1,8 @@
 import {
   DEFAULT_TIME_ZONE,
+  DEPTH_EXCEEDED_MESSAGE,
+  planIndent,
+  planOutdent,
   planSidebarDrop,
   type CurrentUser,
   type DropPosition,
@@ -168,15 +171,56 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     }
   }
 
+  /** Re-read the current 清单: a change may have cascaded to 子任务 / ancestors. */
+  async function reloadTasks() {
+    if (!currentListId) return;
+    const listId = currentListId;
+    try {
+      const items = await api.fetchTasks(listId);
+      setTasks((prev) => (prev && prev.listId !== listId ? prev : { listId, items }));
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  async function addSubtask(parent: Task, title: string) {
+    try {
+      putTask(await api.createTask({ parentId: parent.id, title }));
+      void reloadSidebar();
+      return true;
+    } catch (e) {
+      fail(e);
+      return false;
+    }
+  }
+
+  /** Tab / Shift+Tab (spec 用户故事 36). False when nothing can move, so Tab keeps moving focus. */
+  function indentTask(task: Task, outdent: boolean): boolean {
+    if (!listTasks || task.status === 'completed') return false;
+    const plan = outdent ? planOutdent(listTasks, task.id) : planIndent(listTasks, task.id, (t) => t.status !== 'completed');
+    if (plan.kind === 'none') return false;
+    if (plan.kind === 'too-deep') {
+      setError(DEPTH_EXCEEDED_MESSAGE);
+      return true;
+    }
+    // Optimistic, so the row lands under its new parent right away.
+    putTask({ ...task, parentId: plan.parentId, sortOrder: plan.sortOrder });
+    void changeTask(task, { parentId: plan.parentId, sortOrder: plan.sortOrder });
+    return true;
+  }
+
   async function changeTask(task: Task, patch: UpdateTaskRequest) {
     try {
       const updated = await api.updateTask(task.id, patch);
       putTask(updated);
+      if (patch.status !== undefined || patch.listId !== undefined || patch.parentId !== undefined) void reloadTasks();
       if (patch.status !== undefined || patch.listId !== undefined) void reloadSidebar();
       if (updated.listId !== currentList?.id && route.taskId === task.id) selectTask(null);
       return updated;
     } catch (e) {
       fail(e);
+      // Undo optimistic changes.
+      void reloadTasks();
       return null;
     }
   }
@@ -305,6 +349,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           onAddTask={addTask}
           onSelectTask={selectTask}
           onToggleTask={(task) => changeTask(task, { status: task.status === 'completed' ? 'open' : 'completed' })}
+          onIndent={indentTask}
           onEditList={currentList && !currentList.isInbox ? () => setDialog({ kind: 'list', list: currentList, folderId: currentList.folderId }) : null}
         />
       )}
@@ -312,12 +357,17 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
         <TaskDetail
           key={selectedTask?.id ?? 'empty'}
           task={selectedTask}
+          tasks={listTasks ?? []}
           lists={sidebar?.lists ?? []}
           isMobile={isMobile}
           timeZone={timeZone}
           now={now}
           onBack={() => selectTask(null)}
           onChange={changeTask}
+          onSelectTask={selectTask}
+          onAddSubtask={addSubtask}
+          onIndent={indentTask}
+          onError={fail}
         />
       )}
 

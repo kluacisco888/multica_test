@@ -107,6 +107,36 @@ const paths = {
       <path d="m4 7 8 6 8-6" />
     </>
   ),
+  /* 检查清单 mode: a ticked box and two lines. */
+  checklist: (
+    <>
+      <rect x="4" y="5" width="6" height="6" rx="1.2" />
+      <path d="m5.6 8 1.2 1.2 2-2.2M13 8h7M4 16.5h2M9 16.5h11" />
+    </>
+  ),
+  /* 描述 mode: text lines. */
+  text: <path d="M5 6.5h14M5 11h14M5 15.5h9" />,
+  indent: (
+    <>
+      <path d="M10 6h10M10 12h10M10 18h10" />
+      <path d="m4 9 3 3-3 3" />
+    </>
+  ),
+  outdent: (
+    <>
+      <path d="M10 6h10M10 12h10M10 18h10" />
+      <path d="M7 9 4 12l3 3" />
+    </>
+  ),
+  /* 子任务: a parent line with a child branching off. */
+  subtask: (
+    <>
+      <path d="M5 5v9a2 2 0 0 0 2 2h4" />
+      <rect x="13" y="13" width="7" height="6" rx="1.2" />
+      <path d="M9 6.5h11" />
+    </>
+  ),
+  grip: <path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" strokeWidth={2.75} />,
 } as const;
 
 export type IconName = keyof typeof paths;
