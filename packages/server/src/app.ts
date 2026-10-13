@@ -8,7 +8,10 @@ import { systemClock, type Clock } from './clock.js';
 import type { AppConfig } from './config.js';
 import type { Db } from './db/client.js';
 import { sendError } from './http-errors.js';
+import { createCredentialCipher } from './notify/credentials.js';
+import { createNotifier, type Notifier } from './notify/notifier.js';
 import { authRoutes } from './routes/auth.js';
+import { channelRoutes } from './routes/channels.js';
 import { changesRoutes } from './routes/changes.js';
 import { createHolidayService, type HolidayService } from './holidays/service.js';
 import { healthRoutes } from './routes/health.js';
@@ -39,6 +42,8 @@ declare module 'fastify' {
     accounts: Accounts;
     sessions: SessionStore;
     holidays: HolidayService;
+    /** Delivers messages to 通知渠道; shared by 提醒, 专注 and 习惯. */
+    notifier: Notifier;
   }
 }
 
@@ -78,6 +83,8 @@ export async function buildApp(deps: AppDeps) {
       timezone: config.defaultTimezone,
     }),
   );
+  const cipher = config.encryptionKey ? createCredentialCipher(config.encryptionKey) : null;
+  app.decorate('notifier', createNotifier({ db, cipher, clock }));
   await app.register(fastifyCookie);
   registerAuthentication(app, { sessions, config });
 
@@ -97,6 +104,7 @@ export async function buildApp(deps: AppDeps) {
   taskRoutes(app);
   settingsRoutes(app);
   holidayRoutes(app);
+  channelRoutes(app, { cipher });
   deps.routes?.(app);
 
   if (config.webDistDir) {

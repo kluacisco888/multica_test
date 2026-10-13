@@ -4,34 +4,38 @@ import { changePassword, errorMessage, logout } from '../api.js';
 import { Button, Dialog } from '../ui/controls.js';
 import { Icon, type IconName } from '../ui/Icon.js';
 import { HolidaySettings } from './HolidaySettings.js';
+import { NotificationSettings } from './settings/NotificationSettings.js';
 
-type SettingsTab = 'account' | 'datetime';
+export type SettingsTab = 'account' | 'datetime' | 'notifications';
 
 const TABS: { id: SettingsTab; label: string; icon: IconName }[] = [
   { id: 'account', label: '账户与安全', icon: 'user' },
   { id: 'datetime', label: '日期与时间', icon: 'clock' },
+  { id: 'notifications', label: '提醒与通知', icon: 'bell' },
 ];
 
 /**
  * 设置, laid out like 滴答's settings dialog: a tab list on the left, the
  * panel on the right. 账户与安全: who is signed in, change password, log out
  * (spec 用户故事 7、8). 日期与时间: the time zone (用户故事 26) and the
- * 节假日数据 card (用户故事 114).
+ * 节假日数据 card (用户故事 114). 提醒与通知: 通知渠道 (用户故事 74–77、85).
  */
 export function SettingsDialog({
   user,
+  initialTab = 'account',
   settings,
   onClose,
   onLoggedOut,
   onSaveSettings,
 }: {
   user: CurrentUser;
+  initialTab?: SettingsTab;
   settings: Settings | null;
   onClose: () => void;
   onLoggedOut: () => void;
   onSaveSettings: (patch: UpdateSettingsRequest) => Promise<boolean>;
 }) {
-  const [tab, setTab] = useState<SettingsTab>('account');
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
   const id = useId();
 
   function onTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
@@ -72,11 +76,9 @@ export function SettingsDialog({
           ))}
         </div>
         <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-tab-${tab}`} className="settings-panel">
-          {tab === 'account' ? (
-            <AccountPanel user={user} onLoggedOut={onLoggedOut} />
-          ) : (
-            <DateTimePanel settings={settings} onSave={onSaveSettings} />
-          )}
+          {tab === 'account' && <AccountPanel user={user} onLoggedOut={onLoggedOut} />}
+          {tab === 'datetime' && <DateTimePanel settings={settings} onSave={onSaveSettings} />}
+          {tab === 'notifications' && <NotificationsPanel />}
         </div>
       </div>
     </Dialog>
@@ -117,6 +119,18 @@ function AccountPanel({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut: (
         </Button>
       </div>
     </>
+  );
+}
+
+function NotificationsPanel() {
+  const id = useId();
+  return (
+    <section className="account-section" aria-labelledby={`${id}-title`}>
+      <h3 id={`${id}-title`} className="account-section-title">
+        提醒与通知
+      </h3>
+      <NotificationSettings />
+    </section>
   );
 }
 

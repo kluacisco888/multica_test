@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseEncryptionKey } from './notify/credentials.js';
 
 export type TrustProxy = boolean | number | string[];
 
@@ -18,6 +19,8 @@ export interface AppConfig {
   /** Base URL of the NateScarlet/holiday-cn year files (`<url>/<year>.json`), ADR-0006. */
   holidayDataUrl: string;
   logLevel: string;
+  /** AES-256-GCM key for 通知渠道 credentials (APP_ENCRYPTION_KEY); channels are unavailable without it. */
+  encryptionKey: Buffer | undefined;
   /** First 管理员, created on start when the database has no user (see accounts.bootstrapAdmin). */
   initialAdmin: { username: string | undefined; password: string | undefined };
 }
@@ -45,6 +48,7 @@ const envSchema = z.object({
   HOLIDAY_DATA_URL: z.url().default('https://cdn.jsdelivr.net/gh/NateScarlet/holiday-cn@master'),
   INITIAL_ADMIN_USERNAME: z.string().trim().min(1).optional(),
   INITIAL_ADMIN_PASSWORD: z.string().min(1).optional(),
+  APP_ENCRYPTION_KEY: z.string().optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 
@@ -60,6 +64,12 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
     throw new Error(`Invalid configuration: ${details}`);
   }
   const parsed = result.data;
+  let encryptionKey: Buffer | undefined;
+  try {
+    encryptionKey = parsed.APP_ENCRYPTION_KEY ? parseEncryptionKey(parsed.APP_ENCRYPTION_KEY) : undefined;
+  } catch (error) {
+    throw new Error(`Invalid configuration: ${(error as Error).message}`, { cause: error });
+  }
   return {
     host: parsed.HOST,
     port: parsed.PORT,
@@ -71,6 +81,7 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
     defaultTimezone: parsed.DEFAULT_TIMEZONE,
     holidayDataUrl: parsed.HOLIDAY_DATA_URL.replace(/\/+$/, ''),
     logLevel: parsed.LOG_LEVEL,
+    encryptionKey,
     initialAdmin: { username: parsed.INITIAL_ADMIN_USERNAME, password: parsed.INITIAL_ADMIN_PASSWORD },
   };
 }

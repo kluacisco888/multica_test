@@ -133,7 +133,7 @@ export async function readChanges(
         .from(userRevisions)
         .where(eq(userRevisions.userId, userId));
       const result: ChangesResponse = { revision: counter?.revision ?? 0, entities: {} };
-      for (const { type, table } of entities) {
+      for (const { type, table, serialize } of entities) {
         const rows = (await tx
           .select()
           .from(table)
@@ -149,7 +149,7 @@ export async function readChanges(
               deletedAt: json.deletedAt as string,
             });
           } else {
-            changes.upserts.push(json);
+            changes.upserts.push(serialize ? (serialize(row as never) as typeof json) : json);
           }
         }
         result.entities[type] = changes;

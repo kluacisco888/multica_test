@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import { afterEach, describe, expect, it } from 'vitest';
-import { startFakeSmtp, type FakeSmtpServer } from './fake-smtp.js';
+import { decodeMail, startFakeSmtp, type FakeSmtpServer } from './fake-smtp.js';
 
 describe('fake SMTP server', () => {
   let smtp: FakeSmtpServer;
@@ -33,6 +33,17 @@ describe('fake SMTP server', () => {
     });
     expect(mail?.subject).toContain('=?UTF-8?'); // non-ASCII subject arrives MIME-encoded
     expect(mail?.raw).toContain('Content-Type: text/plain');
+    expect(decodeMail(mail!.raw)).toEqual({ subject: '提醒：交周报', text: '交周报\n.\n第二行' });
+  });
+
+  it('decodes long base64 and quoted-printable bodies', async () => {
+    smtp = await startFakeSmtp();
+    const long = `${'很长的中文正文，'.repeat(30)}100% 完成`;
+    await transport().sendMail({ from: 'a@example.com', to: 'b@example.com', subject: '长'.repeat(40), text: long });
+    await transport().sendMail({ from: 'a@example.com', to: 'b@example.com', subject: 'ascii', text: `caf\u00e9 ${'x'.repeat(100)} 50%` });
+    const [first, second] = await smtp.waitForMessages(2);
+    expect(decodeMail(first!.raw)).toEqual({ subject: '长'.repeat(40), text: long });
+    expect(decodeMail(second!.raw).text).toBe(`caf\u00e9 ${'x'.repeat(100)} 50%`);
   });
 
   it('rejects wrong credentials', async () => {

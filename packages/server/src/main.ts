@@ -18,6 +18,10 @@ const app = await buildApp({
   logger: { level: config.logLevel },
 });
 
+if (!config.encryptionKey) {
+  app.log.warn('APP_ENCRYPTION_KEY is not set: 通知渠道 cannot be saved or used (generate one with `openssl rand -base64 32`)');
+}
+
 const bootstrap = await app.accounts.bootstrapAdmin(config.initialAdmin);
 if (bootstrap === 'created') {
   app.log.info({ username: config.initialAdmin.username }, 'created the initial administrator from .env');

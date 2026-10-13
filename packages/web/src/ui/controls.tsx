@@ -198,6 +198,39 @@ export function MenuButton({
 }
 
 /**
+ * Open a native <dialog> modally while mounted: focus is trapped, Esc calls
+ * `onClose`, and focus returns to the opener on unmount. Attach the ref to the
+ * <dialog>; layouts other than `Dialog` (e.g. 设置) use this directly.
+ */
+export function useModal(onClose: () => void) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    const opener = document.activeElement as HTMLElement | null;
+    dialog.showModal();
+    const handleCancel = (event: Event) => {
+      event.preventDefault();
+      // Only the topmost dialog handles Esc (nested dialogs, e.g. a form over 设置).
+      if (event.target === dialog) onCloseRef.current();
+    };
+    dialog.addEventListener('cancel', handleCancel);
+    return () => {
+      dialog.removeEventListener('cancel', handleCancel);
+      dialog.close();
+      opener?.focus?.();
+    };
+  }, []);
+
+  return ref;
+}
+
+/**
  * Modal dialog on the native <dialog> element: focus is trapped and Esc
  * closes it. Render it only while open; `onClose` fires on Esc / backdrop / ✕.
  */
@@ -214,29 +247,8 @@ export function Dialog({
   footer?: ReactNode;
   className?: string;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
+  const ref = useModal(onClose);
   const titleId = useId();
-  const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  });
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    const opener = document.activeElement as HTMLElement | null;
-    dialog.showModal();
-    const handleCancel = (event: Event) => {
-      event.preventDefault();
-      onCloseRef.current();
-    };
-    dialog.addEventListener('cancel', handleCancel);
-    return () => {
-      dialog.removeEventListener('cancel', handleCancel);
-      dialog.close();
-      opener?.focus?.();
-    };
-  }, []);
 
   return (
     <dialog

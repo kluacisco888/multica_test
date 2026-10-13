@@ -203,3 +203,42 @@ export async function startFakeSmtp(options: FakeSmtpOptions = {}): Promise<Fake
     },
   };
 }
+
+/** Decode RFC 2047 encoded words (`=?UTF-8?B?…?=` / `=?UTF-8?Q?…?=`) in a header value. */
+function decodeHeader(value: string): string {
+  return value
+    .replace(/\?=\s+=\?/g, '?==?')
+    .replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (_m, _charset: string, encoding: string, text: string) =>
+      encoding.toUpperCase() === 'B'
+        ? Buffer.from(text, 'base64').toString('utf8')
+        : decodeQuotedPrintable(text.replaceAll('_', ' ')),
+    );
+}
+
+/** Quoted-printable → UTF-8 text (soft line breaks removed, `=XX` bytes decoded together). */
+function decodeQuotedPrintable(text: string): string {
+  return decodeURIComponent(
+    text
+      .replace(/=\r?\n/g, '')
+      .replace(/%/g, '%25')
+      .replace(/=([0-9A-Fa-f]{2})/g, '%$1'),
+  );
+}
+
+/**
+ * Subject and text body of a single-part text mail as the recipient sees
+ * them: headers unfolded, encoded words and the transfer encoding decoded.
+ */
+export function decodeMail(raw: string): { subject: string | undefined; text: string } {
+  const split = raw.indexOf('\r\n\r\n');
+  const head = (split === -1 ? raw : raw.slice(0, split)).replace(/\r\n[ \t]+/g, ' ');
+  const body = split === -1 ? '' : raw.slice(split + 4);
+  const header = (name: string) => new RegExp(`^${name}: (.*)$`, 'im').exec(head)?.[1];
+  const encoding = header('Content-Transfer-Encoding')?.trim().toLowerCase();
+  const subject = header('Subject');
+  let text: string;
+  if (encoding === 'base64') text = Buffer.from(body.replace(/\s+/g, ''), 'base64').toString('utf8');
+  else if (encoding === 'quoted-printable') text = decodeQuotedPrintable(body);
+  else text = body;
+  return { subject: subject === undefined ? undefined : decodeHeader(subject), text: text.replace(/\r\n/g, '\n') };
+}

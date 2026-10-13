@@ -45,6 +45,8 @@ const child = spawn(process.execPath, [path.join(repoRoot, 'packages/server/dist
     WEB_DIST_DIR: path.join(repoRoot, 'packages/web/dist'),
     LOG_LEVEL: 'warn',
     HOLIDAY_DATA_URL: `http://127.0.0.1:${holidayPort}`,
+    // Fixed test key so 通知渠道 can be saved (e2e/notification-channels.spec.ts).
+    APP_ENCRYPTION_KEY: Buffer.alloc(32, 'e2e-key').toString('base64'),
     // First start creates this 管理员 (e2e/auth.spec.ts logs in with it).
     INITIAL_ADMIN_USERNAME: 'admin',
     INITIAL_ADMIN_PASSWORD: 'e2e-admin-password',

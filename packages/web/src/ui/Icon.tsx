@@ -94,6 +94,19 @@ const paths = {
       <path d="M12 7.5V12l3 2" />
     </>
   ),
+  bell: (
+    <>
+      <path d="M6.5 16.5V11a5.5 5.5 0 0 1 11 0v5.5l1.5 1.5H5Z" />
+      <path d="M10 20.5h4" />
+    </>
+  ),
+  send: <path d="M20 4 3.5 10.5l6.5 3 3 6.5Zm-10 9.5L20 4" />,
+  mail: (
+    <>
+      <rect x="3.5" y="5.5" width="17" height="13" rx="2" />
+      <path d="m4 7 8 6 8-6" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof paths;

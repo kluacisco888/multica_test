@@ -120,7 +120,7 @@ scripts/      # 备份、恢复、测试辅助
 | 假 SMTP / 假 Webhook 测试工具 | `pnpm test:fakes` | `packages/server/test/fakes/` |
 | Playwright 冒烟测试（1440px 和 390px） | `pnpm test:e2e` | `e2e/` |
 
-API 测试和 e2e 用的 PostgreSQL：设置了 `TEST_DATABASE_URL` 就用它（CI 就是这样）；否则自动启动 `docker-compose.test.yml`（项目 `dida-clone-test`，`127.0.0.1:55432`，数据在 tmpfs）。每个测试文件建一个独立的数据库。用完可以 `pnpm test:db:down`。
+API 测试和 e2e 用的 PostgreSQL：设置了 `TEST_DATABASE_URL` 就用它（CI 就是这样）；否则自动启动 `docker-compose.test.yml`（项目 `dida-clone-test`，`127.0.0.1:55432`，数据在 tmpfs）。每个测试文件建一个独立的数据库。用完可以 `pnpm test:db:down`。同一台机器上同时跑两套 e2e 时，给其中一套设 `E2E_PORT` 和 `E2E_DATABASE`（默认 18090 / `dida_e2e`）。
 
 写 API 测试用 `packages/server/test/support/test-app.ts` 的 `createTestApp()`：真实 Fastify + 迁移好的独立数据库，时钟可注入，`createUser()` 建用户并真实登录，返回带会话 Cookie 的请求头。e2e 用 `e2e/support.ts` 的 `createUser()`（调用构建好的 `dida` CLI）给每个测试建独立用户；e2e 服务器的初始管理员是 `admin` / `e2e-admin-password`。
 
@@ -148,6 +148,28 @@ CI 定义在 `ci/github-actions.yml`：lint、类型检查、四层测试，再�
 | `GET/PATCH /api/settings` | 设置：`timeZone`（IANA 名称，默认 `Asia/Shanghai`）。第一次修改时才建行，同步类型 `settings` |
 
 任务的 `dates`（`packages/shared/src/task-dates.ts`）：`null` 是不设日期；全天是 `{ allDay: true, startDate, dueDate }`，按日历日期存，不随时区换算；带时间是 `{ allDay: false, startAt, dueAt, timeZone }`，存 UTC 时间点，`timeZone` 由服务端按用户当时的设置写入，显示时一律用用户**当前**时区。`startDate` / `startAt` 为 null 就是只有截止日期。列表上的「今天 / 明天 / 周几 / 已过期」由 `describeTaskDates()` 算。
+
+### 通知渠道（ADR-0005）
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /api/notification-channels` | 当前用户的通知渠道，按创建时间排序；凭证只返回脱敏值（如 `https://open.feishu.cn/****90ab`、`****5678`） |
+| `POST /api/notification-channels` | `type` 为 `feishu`（`webhookUrl` 必填，`secret` 选填）或 `email`（`host`、`port`、`security`=`ssl`/`starttls`/`none`、`username`、`password` 即授权码、`to`）；`isDefault` 可以有多个 |
+| `PATCH /api/notification-channels/:id` | 凭证字段不传或传空字符串就保留原值；飞书 `secret: null` 关闭签名；渠道类型不能改 |
+| `DELETE /api/notification-channels/:id` | 软删除 |
+| `POST /api/notification-channels/:id/test` | 发送测试消息：成功 200，失败 502 `channel_send_failed`，`message` 是具体原因（飞书错误码、SMTP 返回等） |
+
+Webhook URL、签名 secret 和授权码用 `APP_ENCRYPTION_KEY` 做 AES-256-GCM 加密后存在 `notification_channels.credentials`（密文与用户 id、渠道 id 绑定），脱敏值另存一列，所以列表和 `/api/changes` 不需要解密，也不会带出密文。没配 `APP_ENCRYPTION_KEY` 时应用照常启动，但保存和测试渠道返回 503 `encryption_key_missing`。
+
+提醒、专注、习惯统一用 `app.notifier` 发消息（`src/notify/notifier.ts`）：
+
+```ts
+const ids = await app.notifier.defaultChannelIds(userId);
+const result = await app.notifier.send(userId, channelId, { title: '提醒：交周报', body: '今天 18:00' });
+// { ok: true } | { ok: false, error: '具体原因', retryable: boolean }  —— 不抛异常
+```
+
+`retryable` 为 true 表示网络错误、超时、HTTP 5xx、SMTP 4xx 这类可以稍后重试的失败；授权码错误、签名错误等需要用户改配置的为 false。
 
 排序键是分数索引（`packages/shared/src/sort-key.ts`），拖拽只改被拖动的那一条；侧栏拖放规则在 `packages/shared/src/sidebar-order.ts`。界面的设计 token 和组件约定见 `packages/web/src/ui/README.md`。
 
