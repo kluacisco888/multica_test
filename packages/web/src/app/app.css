@@ -170,7 +170,7 @@ body {
   width: 28px;
   height: 28px;
   color: var(--color-on-brand);
-  background: var(--color-brand);
+  background: var(--color-button-primary);
 }
 
 .rail-items {
@@ -186,7 +186,7 @@ body {
   place-items: center;
   width: 36px;
   height: 36px;
-  color: rgb(255 255 255 / 0.75);
+  color: var(--color-on-rail-muted);
   border-radius: var(--radius-lg);
 }
 
@@ -196,7 +196,7 @@ body {
 }
 
 .rail-item-active {
-  background: rgb(255 255 255 / 0.18);
+  background: var(--color-rail-active);
 }
 
 /* ---- Sidebar ---- */
@@ -352,7 +352,7 @@ body {
 }
 
 .sidebar-row-menu .ui-icon-button:hover {
-  background: rgb(0 0 0 / 0.05);
+  background: var(--color-icon-hover);
 }
 
 /* Drop indicators while dragging. */
@@ -414,7 +414,7 @@ body {
 }
 
 .sidebar-section-actions .ui-icon-button:hover {
-  background: rgb(0 0 0 / 0.05);
+  background: var(--color-icon-hover);
 }
 
 /* ---- Task list pane ---- */
@@ -661,7 +661,7 @@ span.task-row-expand {
 
 .tag-chip-remove:hover {
   color: var(--color-text);
-  background: rgb(0 0 0 / 0.06);
+  background: var(--color-icon-hover);
 }
 
 .task-section {

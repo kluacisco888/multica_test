@@ -223,6 +223,20 @@ const paths = {
     </>
   ),
   /** 排序 / 分组: up and down arrows like the reference's ⇅. */
+  /** 外观: a paint roller, like the reference's 设置 entry. */
+  palette: (
+    <>
+      <rect x="4.5" y="4" width="13" height="5" rx="1.5" />
+      <path d="M17.5 6.5h1.5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-7v2.5" />
+      <rect x="10.5" y="14" width="3" height="6" rx="1" />
+    </>
+  ),
+  keyboard: (
+    <>
+      <rect x="3" y="6" width="18" height="12" rx="2" />
+      <path d="M7 10h.01M10.5 10h.01M14 10h.01M17.5 10h.01M8 14.5h8" />
+    </>
+  ),
   sort: <path d="M8 4.5v15M4.5 8 8 4.5 11.5 8M16 19.5v-15M12.5 16l3.5 3.5 3.5-3.5" />,
   /** 过滤器 */
   filter: <path d="M4.5 5.5h15l-5.75 7v5.25l-3.5 1.75v-7Z" />,

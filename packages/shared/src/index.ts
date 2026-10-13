@@ -25,3 +25,4 @@ export * from './search.js';
 export * from './timeline.js';
 export * from './calendar.js';
 export * from './reminders.js';
+export * from './theme.js';
