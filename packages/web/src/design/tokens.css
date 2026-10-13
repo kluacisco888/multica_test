@@ -87,6 +87,7 @@
   --sidebar-item-height: 38px;
   --task-row-height: 40px;
   --subtask-indent: 24px; /* one 子任务 level in the task list */
+  --checklist-grip-width: 12px; /* drag handle of a 检查项 */
   --checklist-row-height: 34px; /* 检查项 / 子任务 rows in the detail pane */
   --input-height: 36px;
   --date-popover-width: 264px;
