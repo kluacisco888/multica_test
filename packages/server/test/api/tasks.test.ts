@@ -83,7 +83,7 @@ describe('tasks API', () => {
       expect(res.json().error.code).toBe('invalid_request');
     }
     const task = await createTask(alice, { title: 'ok' });
-    for (const patch of [{ title: '' }, { status: 'abandoned' }, { status: 'done' }, { userId: bob.id }, { completedAt: null }]) {
+    for (const patch of [{ title: '' }, { status: 'done' }, { userId: bob.id }, { completedAt: null }]) {
       expect((await api(alice, 'PATCH', `/api/tasks/${task.id}`, patch)).statusCode, JSON.stringify(patch)).toBe(400);
     }
   });

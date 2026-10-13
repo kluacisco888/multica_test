@@ -15,6 +15,7 @@ import { lists, tasks } from '../db/schema/tasks.js';
 import { sendValidationError } from '../http-errors.js';
 import { compareTasks, ensureInbox, taskDateColumns, taskToApi, topOfList, type TaskRow } from '../organize.js';
 import { readSettings } from '../settings.js';
+import { moveToTrash } from '../trash.js';
 import { findOwned } from '../sync/sync.js';
 import {
   ancestorsOf,
@@ -46,7 +47,7 @@ async function checkTags(db: Executor, userId: string, tagIds: string[] | undefi
 
 /**
  * 任务: quick add, edit, Markdown 描述, complete, move, dates (spec 用户故事 20、21、23–27、31、40),
- * 子任务 trees and 检查清单 mode (用户故事 35–37), 优先级 (22) and 标签 (18).
+ * 子任务 trees and 检查清单 mode (用户故事 35–37), 优先级 (22), 标签 (18), 放弃 (28) and 删除 (29).
  */
 export function taskRoutes(app: FastifyInstance) {
   app.get('/api/tasks', async (request, reply) => {
@@ -133,6 +134,7 @@ export function taskRoutes(app: FastifyInstance) {
             description,
             status: 'open',
             completedAt: null,
+            abandonedAt: null,
             priority,
             tagIds,
             sortOrder: sortOrder ?? (await topOfList(tx, userId, list.id)),
@@ -214,28 +216,50 @@ export function taskRoutes(app: FastifyInstance) {
             ...(movedList ? { listId: targetList } : {}),
             ...(reparented ? { parentId: targetParent } : {}),
             ...(newSortOrder ? { sortOrder: newSortOrder } : {}),
-            ...(status === 'completed' ? { status, completedAt: task.completedAt ?? now } : {}),
-            ...(status === 'open' ? { status, completedAt: null } : {}),
+            ...(status === 'completed' ? { status, completedAt: task.completedAt ?? now, abandonedAt: null } : {}),
+            ...(status === 'abandoned' ? { status, abandonedAt: task.abandonedAt ?? now, completedAt: null } : {}),
+            ...(status === 'open' ? { status, completedAt: null, abandonedAt: null } : {}),
           });
           if (!row) throw new Rejection(notFound);
 
-          // Cascades: the subtree follows the task into its 清单; completing completes the
-          // open 子任务 below; re-opening re-opens completed ancestors.
+          // Cascades: the subtree follows the task into its 清单; completing / abandoning
+          // completes / abandons the open 子任务 below; re-opening re-opens closed ancestors.
           for (const child of subtree) {
             const patch = {
               ...(movedList ? { listId: targetList } : {}),
               ...(status === 'completed' && child.status === 'open' ? { status: 'completed' as const, completedAt: now } : {}),
+              ...(status === 'abandoned' && child.status === 'open' ? { status: 'abandoned' as const, abandonedAt: now } : {}),
             };
             if (Object.keys(patch).length > 0) await ops.update(tasks, child.id, patch);
           }
           if (status === 'open') {
             for (const ancestor of ancestorsOf(listRows, task.id)) {
-              if (ancestor.status === 'completed') await ops.update(tasks, ancestor.id, { status: 'open', completedAt: null });
+              if (ancestor.status !== 'open') {
+                await ops.update(tasks, ancestor.id, { status: 'open', completedAt: null, abandonedAt: null });
+              }
             }
           }
           return row;
         }),
       (row) => taskToApi(row),
+    );
+  });
+
+  /** 删除: into the 回收站 with its 子任务 (spec 用户故事 29). */
+  app.delete<Params>('/api/tasks/:id', async (request, reply) => {
+    const userId = sessionUser(request).id;
+    if (!(await findOwned(app.db, tasks, userId, request.params.id))) return notFound(reply);
+    return respond(
+      reply,
+      () =>
+        app.sync.transaction(userId, async (ops, tx) => {
+          await lockTaskTrees(tx, userId);
+          const task = await findOwned(tx, tasks, userId, request.params.id);
+          if (!task) throw new Rejection(notFound);
+          await moveToTrash(ops, tx, userId, task, await liveTasksOfList(tx, userId, task.listId));
+          return task;
+        }),
+      () => reply.code(204).send(),
     );
   });
 }

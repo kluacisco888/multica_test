@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { checklistToDescription, compareSortKeys, descriptionToChecklist, keyBetween, MAX_TASK_DEPTH, sortKeysBetween, subtreeHeight, taskDepth } from '@dida/shared';
 import type { Executor, Tx } from './db/client.js';
 import { checklistItems, tasks } from './db/schema/tasks.js';
@@ -99,14 +99,4 @@ export async function descriptionFromChecklist(ops: SyncOps, tx: Tx, userId: str
   const items = await liveChecklistItems(tx, userId, taskId);
   for (const item of items) await ops.softDelete(checklistItems, item.id);
   return checklistToDescription(items);
-}
-
-/** Tombstone every live 检查项 of the given tasks (their tasks are being deleted). */
-export async function deleteChecklistItemsOf(ops: SyncOps, tx: Tx, userId: string, taskIds: string[]): Promise<void> {
-  if (taskIds.length === 0) return;
-  const items = await tx
-    .select({ id: checklistItems.id })
-    .from(checklistItems)
-    .where(and(eq(checklistItems.userId, userId), inArray(checklistItems.taskId, taskIds), isNull(checklistItems.deletedAt)));
-  for (const item of items) await ops.softDelete(checklistItems, item.id);
 }

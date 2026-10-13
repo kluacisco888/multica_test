@@ -110,6 +110,7 @@ export function listToApi(row: ListRow): TaskList {
     folderId: row.folderId,
     sortOrder: row.sortOrder,
     isInbox: row.isInbox,
+    archivedAt: row.archivedAt ? iso(row.archivedAt) : null,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
     revision: row.revision,
@@ -126,6 +127,7 @@ export function taskToApi(row: TaskRow): Task {
     description: row.description,
     status: row.status,
     completedAt: row.completedAt ? iso(row.completedAt) : null,
+    abandonedAt: row.abandonedAt ? iso(row.abandonedAt) : null,
     sortOrder: row.sortOrder,
     dates: taskDatesToApi(row),
     priority: row.priority,
@@ -195,12 +197,14 @@ export async function endOfTagLevel(db: Executor, userId: string, parentId: stri
   return keyBetween(maxKey(rows.map((r) => r.key)), null);
 }
 
-/** List order: open tasks by sort key, then completed ones, most recently completed first. */
+const closedAt = (t: TaskRow) => (t.completedAt ?? t.abandonedAt)?.getTime() ?? 0;
+
+/** List order: open tasks by sort key, then closed ones (完成 or 放弃), most recently closed first. */
 export function compareTasks(a: TaskRow, b: TaskRow): number {
-  const doneA = a.status === 'completed';
-  const doneB = b.status === 'completed';
+  const doneA = a.status !== 'open';
+  const doneB = b.status !== 'open';
   if (doneA !== doneB) return doneA ? 1 : -1;
-  if (doneA) return (b.completedAt?.getTime() ?? 0) - (a.completedAt?.getTime() ?? 0);
+  if (doneA) return closedAt(b) - closedAt(a) || compareSortKeys(a.id, b.id);
   return compareSortKeys(a.sortOrder, b.sortOrder) || compareSortKeys(a.id, b.id);
 }
 

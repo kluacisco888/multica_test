@@ -7,15 +7,19 @@ import { useCallback, useEffect, useState } from 'react';
  *   /lists/<listId>/tasks/<taskId> → a 清单 with a 任务 open in the detail pane
  *   /tags/<tagId>                  → a 标签 (a parent 标签 includes its children)
  *   /tags/<tagId>/tasks/<taskId>   → a 标签 with a 任务 open
+ *   /trash                         → the 回收站
  */
 
 export interface Route {
   listId: string | null;
   tagId?: string | null;
   taskId: string | null;
+  /** The 回收站 smart list. */
+  trash?: boolean;
 }
 
 export function parseRoute(pathname: string): Route {
+  if (/^\/trash\/?$/.test(pathname)) return { listId: null, tagId: null, taskId: null, trash: true };
   const match = /^\/(lists|tags)\/([^/]+)(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
   if (!match) return { listId: null, tagId: null, taskId: null };
   const id = decodeURIComponent(match[2] as string);
@@ -23,7 +27,8 @@ export function parseRoute(pathname: string): Route {
   return match[1] === 'tags' ? { listId: null, tagId: id, taskId } : { listId: id, tagId: null, taskId };
 }
 
-export function routePath({ listId, tagId, taskId }: Route): string {
+export function routePath({ listId, tagId, taskId, trash }: Route): string {
+  if (trash) return '/trash';
   let base: string;
   if (tagId) base = `/tags/${encodeURIComponent(tagId)}`;
   else if (listId) base = `/lists/${encodeURIComponent(listId)}`;
@@ -46,7 +51,7 @@ export function useRoute(): [Route, (next: Route, options?: { replace?: boolean 
       if (options?.replace) window.history.replaceState(null, '', path);
       else window.history.pushState(null, '', path);
     }
-    setRoute({ tagId: null, ...next });
+    setRoute({ tagId: null, trash: false, ...next });
   }, []);
 
   return [route, navigate];

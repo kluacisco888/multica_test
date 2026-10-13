@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { ChangesResponse, EntityChanges } from '@dida/shared';
 import type { Clock } from '../clock.js';
 import type { Db, Executor, Tx } from '../db/client.js';
@@ -21,8 +21,15 @@ export interface SyncOps {
   insert<T extends SyncTable>(table: T, values: SyncInsert<T>): Promise<Row<T>>;
   /** Update a live record of this user; null when missing, deleted or owned by someone else. */
   update<T extends SyncTable>(table: T, id: string, patch: SyncPatch<T>): Promise<Row<T> | null>;
-  /** Soft delete; null when missing, already deleted or owned by someone else. */
-  softDelete<T extends SyncTable>(table: T, id: string): Promise<Row<T> | null>;
+  /** Soft delete (with `patch` written in the same step); null when missing, already deleted or owned by someone else. */
+  softDelete<T extends SyncTable>(table: T, id: string, patch?: SyncPatch<T>): Promise<Row<T> | null>;
+  /** Bring a tombstone of this user back to life (回收站 还原); null when it is not a tombstone of this user. */
+  restore<T extends SyncTable>(table: T, id: string, patch: SyncPatch<T>): Promise<Row<T> | null>;
+  /**
+   * Change a tombstone of this user without reviving it (回收站 彻底删除 clears
+   * its content). It gets a new revision, so sync clients see the tombstone again.
+   */
+  updateTombstone<T extends SyncTable>(table: T, id: string, patch: SyncPatch<T>): Promise<Row<T> | null>;
 }
 
 export interface SyncWriter {
@@ -48,6 +55,10 @@ function liveRecord(table: SyncTable, userId: string, id: string) {
   return and(eq(table.id, id), eq(table.userId, userId), isNull(table.deletedAt));
 }
 
+function tombstoneRecord(table: SyncTable, userId: string, id: string) {
+  return and(eq(table.id, id), eq(table.userId, userId), isNotNull(table.deletedAt));
+}
+
 function createOps(tx: Tx, userId: string, clock: Clock): SyncOps {
   return {
     async insert(table, values) {
@@ -68,13 +79,31 @@ function createOps(tx: Tx, userId: string, clock: Clock): SyncOps {
         .returning()) as unknown as Row<typeof table>[];
       return rows[0] ?? null;
     },
-    async softDelete(table, id) {
+    async softDelete(table, id, patch = {}) {
       const revision = await nextRevision(tx, userId);
       const now = clock.now();
       const rows = (await tx
         .update(table)
-        .set({ deletedAt: now, updatedAt: now, revision } as never)
+        .set({ ...patch, deletedAt: now, updatedAt: now, revision } as never)
         .where(liveRecord(table, userId, id))
+        .returning()) as unknown as Row<typeof table>[];
+      return rows[0] ?? null;
+    },
+    async restore(table, id, patch) {
+      const revision = await nextRevision(tx, userId);
+      const rows = (await tx
+        .update(table)
+        .set({ ...patch, deletedAt: null, updatedAt: clock.now(), revision } as never)
+        .where(tombstoneRecord(table, userId, id))
+        .returning()) as unknown as Row<typeof table>[];
+      return rows[0] ?? null;
+    },
+    async updateTombstone(table, id, patch) {
+      const revision = await nextRevision(tx, userId);
+      const rows = (await tx
+        .update(table)
+        .set({ ...patch, updatedAt: clock.now(), revision } as never)
+        .where(tombstoneRecord(table, userId, id))
         .returning()) as unknown as Row<typeof table>[];
       return rows[0] ?? null;
     },
@@ -149,7 +178,7 @@ export async function readChanges(
               deletedAt: json.deletedAt as string,
             });
           } else {
-            changes.upserts.push(serialize ? (serialize(row as never) as typeof json) : json);
+            changes.upserts.push(serialize ? (toJson(serialize(row as never) as Record<string, unknown>) as typeof json) : json);
           }
         }
         result.entities[type] = changes;

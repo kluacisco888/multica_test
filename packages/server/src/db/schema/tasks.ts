@@ -28,6 +28,8 @@ export const lists = pgTable(
     folderId: uuid().references(() => folders.id),
     sortOrder: text().notNull(),
     isInbox: boolean().notNull().default(false),
+    /** 归档: hidden from the sidebar tree and its tasks kept out of every 智能清单; null while not archived. */
+    archivedAt: timestamp({ withTimezone: true }),
   },
   (t) => [
     syncIndex('lists', t),
@@ -60,6 +62,8 @@ export const tasks = pgTable(
     description: text().notNull().default(''),
     status: text({ enum: ['open', 'completed', 'abandoned'] }).notNull().default('open'),
     completedAt: timestamp({ withTimezone: true }),
+    /** 放弃: set while `status` is `abandoned`. */
+    abandonedAt: timestamp({ withTimezone: true }),
     sortOrder: text().notNull(),
     allDay: boolean(),
     startDate: date(),
@@ -71,9 +75,18 @@ export const tasks = pgTable(
     priority: text({ enum: ['none', 'low', 'medium', 'high'] }).notNull().default('none'),
     /** 标签 ids (no FK on array elements; routes only store live, own 标签 and deleting a 标签 strips it). */
     tagIds: uuid().array().notNull().default(sql`'{}'::uuid[]`),
+    /**
+     * 回收站: the 任务 whose deletion tombstoned this row (its own id for the
+     * task the user deleted, the deleted ancestor for its 子任务). Restore and
+     * 彻底删除 act on the whole batch. Null for rows not in the 回收站.
+     */
+    trashRootId: uuid(),
+    /** Content cleared (彻底删除 or the 30-day cleanup); the tombstone stays (ADR-0004). */
+    purgedAt: timestamp({ withTimezone: true }),
   },
   (t) => [
     syncIndex('tasks', t),
+    index('tasks_trash_idx').on(t.userId, t.trashRootId).where(sql`${t.trashRootId} IS NOT NULL`),
     index('tasks_user_list_idx').on(t.userId, t.listId),
     index('tasks_parent_idx').on(t.parentId),
     index('tasks_tag_ids_idx').using('gin', t.tagIds),
@@ -103,6 +116,8 @@ export const checklistItems = pgTable(
     completed: boolean().notNull().default(false),
     /** Fractional key among the 检查项 of the task. */
     sortOrder: text().notNull(),
+    /** 回收站 batch, like `tasks.trash_root_id`: the 检查项 was tombstoned because that 任务 was deleted. */
+    trashRootId: uuid(),
   },
   (t) => [syncIndex('checklist_items', t), index('checklist_items_task_idx').on(t.taskId)],
 );

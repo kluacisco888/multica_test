@@ -22,6 +22,7 @@ import {
   tagsResponseSchema,
   taskSchema,
   tasksResponseSchema,
+  trashResponseSchema,
   type ChangePasswordRequest,
   type ChecklistItem,
   type CreateChecklistItemRequest,
@@ -40,6 +41,7 @@ import {
   type TasksQuery,
   type Task,
   type TaskList,
+  type TrashedTask,
   type UpdateChecklistItemRequest,
   type UpdateFolderRequest,
   type UpdateListRequest,
@@ -137,6 +139,28 @@ export async function createTask(request: CreateTaskRequest): Promise<Task> {
 
 export async function updateTask(id: string, patch: UpdateTaskRequest): Promise<Task> {
   return taskSchema.parse(await (await call('PATCH', `/api/tasks/${encodeURIComponent(id)}`, patch)).json());
+}
+
+/** 删除: the task (with its 子任务) moves to the 回收站. */
+export async function deleteTask(id: string): Promise<void> {
+  await call('DELETE', `/api/tasks/${encodeURIComponent(id)}`);
+}
+
+export async function fetchTrash(): Promise<TrashedTask[]> {
+  return trashResponseSchema.parse(await (await call('GET', '/api/trash')).json()).tasks;
+}
+
+export async function restoreTask(id: string): Promise<Task> {
+  return taskSchema.parse(await (await call('POST', `/api/trash/${encodeURIComponent(id)}/restore`)).json());
+}
+
+/** 彻底删除 one task from the 回收站. */
+export async function purgeTask(id: string): Promise<void> {
+  await call('DELETE', `/api/trash/${encodeURIComponent(id)}`);
+}
+
+export async function emptyTrash(): Promise<void> {
+  await call('DELETE', '/api/trash');
 }
 
 export async function fetchSettings(): Promise<Settings> {

@@ -22,10 +22,12 @@ import { listRoutes } from './routes/lists.js';
 import { settingsRoutes } from './routes/settings.js';
 import { tagRoutes } from './routes/tags.js';
 import { taskRoutes } from './routes/tasks.js';
+import { trashRoutes } from './routes/trash.js';
 import { createSessionStore, type SessionStore } from './sessions.js';
 import type { SyncEntity } from './sync/columns.js';
 import { syncEntities as registeredSyncEntities } from './sync/registry.js';
 import { createSyncWriter, type SyncWriter } from './sync/sync.js';
+import { createTrashService, type TrashService } from './trash.js';
 
 export interface AppDeps {
   config: AppConfig;
@@ -47,6 +49,8 @@ declare module 'fastify' {
     holidays: HolidayService;
     /** Delivers messages to 通知渠道; shared by 提醒, 专注 and 习惯. */
     notifier: Notifier;
+    /** 回收站: restore, 彻底删除 and the 30-day cleanup job. */
+    trash: TrashService;
   }
 }
 
@@ -73,7 +77,9 @@ export async function buildApp(deps: AppDeps) {
 
   app.decorate('clock', clock);
   app.decorate('db', db);
-  app.decorate('sync', createSyncWriter(db, clock));
+  const sync = createSyncWriter(db, clock);
+  app.decorate('sync', sync);
+  app.decorate('trash', createTrashService({ db, sync, clock }));
   app.decorate('accounts', accounts);
   app.decorate('sessions', sessions);
   app.decorate(
@@ -111,6 +117,7 @@ export async function buildApp(deps: AppDeps) {
   channelRoutes(app, { cipher });
   checklistRoutes(app);
   tagRoutes(app);
+  trashRoutes(app);
   deps.routes?.(app);
 
   if (config.webDistDir) {

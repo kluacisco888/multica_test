@@ -33,9 +33,25 @@ export function tagItems(task: Task, tags: Tag[], onChange: (patch: UpdateTaskRe
   }));
 }
 
-export function taskContextSections(task: Task, tags: Tag[], onChange: (patch: UpdateTaskRequest) => void): ContextMenuSection[] {
+/** 放弃 / 取消放弃 and 删除 (spec 用户故事 28、29), shared by the right-click menu and the detail's more menu. */
+export function taskActionItems(task: Task, onChange: (patch: UpdateTaskRequest) => void, onDelete: () => void): MenuItem[] {
+  return [
+    task.status === 'abandoned'
+      ? { label: '取消放弃', icon: 'restore', onSelect: () => onChange({ status: 'open' }) }
+      : { label: '放弃', icon: 'abandon', onSelect: () => onChange({ status: 'abandoned' }) },
+    { label: '删除', icon: 'trash', danger: true, onSelect: onDelete },
+  ];
+}
+
+export function taskContextSections(
+  task: Task,
+  tags: Tag[],
+  onChange: (patch: UpdateTaskRequest) => void,
+  onDelete: () => void,
+): ContextMenuSection[] {
   const sections: ContextMenuSection[] = [{ label: '优先级', layout: 'row', items: priorityItems(task, onChange) }];
   if (tags.length > 0) sections.push({ label: '标签', multiple: true, items: tagItems(task, tags, onChange) });
+  sections.push({ items: taskActionItems(task, onChange, onDelete) });
   return sections;
 }
 

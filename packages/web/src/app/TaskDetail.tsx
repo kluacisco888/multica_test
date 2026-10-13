@@ -15,7 +15,7 @@ import { IconButton, MenuButton, TaskCheckbox } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { Markdown } from '../ui/Markdown.js';
 import { ChecklistEditor } from './ChecklistEditor.js';
-import { chipStyle, priorityItems, tagItems, tagsOf } from './taskMeta.js';
+import { chipStyle, priorityItems, tagItems, tagsOf, taskActionItems } from './taskMeta.js';
 
 interface TaskDetailProps {
   task: Task | null;
@@ -32,6 +32,8 @@ interface TaskDetailProps {
   onSelectTask: (taskId: string) => void;
   onAddSubtask: (parent: Task, title: string) => Promise<boolean>;
   onIndent: (task: Task, outdent: boolean) => boolean;
+  /** 删除: into the 回收站. */
+  onDelete: (task: Task) => void;
   /** False in a 标签 view, where 缩进 is not offered. */
   indentable: boolean;
   onError: (error: unknown) => void;
@@ -51,6 +53,7 @@ export function TaskDetail({
   onSelectTask,
   onAddSubtask,
   onIndent,
+  onDelete,
   indentable,
   onError,
 }: TaskDetailProps) {
@@ -64,12 +67,13 @@ export function TaskDetail({
     );
   }
   const list = lists.find((l) => l.id === task.listId);
-  const done = task.status === 'completed';
+  const done = task.status !== 'open';
+  const abandoned = task.status === 'abandoned';
   const parent = task.parentId ? tasks.find((t) => t.id === task.parentId) : undefined;
   const children = tasks
     .filter((t) => t.parentId === task.id)
     .sort((a, b) => compareSortKeys(a.sortOrder, b.sortOrder) || compareSortKeys(a.id, b.id));
-  const canIndent = indentable && !done && planIndent(tasks, task.id, (t) => t.status !== 'completed').kind !== 'none';
+  const canIndent = indentable && !done && planIndent(tasks, task.id, (t) => t.status === 'open').kind !== 'none';
   const canOutdent = indentable && !done && planOutdent(tasks, task.id).kind !== 'none';
   const checklist = task.kind === 'checklist';
   const change = (patch: UpdateTaskRequest) => void onChange(task, patch);
@@ -81,6 +85,7 @@ export function TaskDetail({
         {isMobile && <IconButton icon="chevronLeft" label="返回列表" onClick={onBack} />}
         <TaskCheckbox
           checked={done}
+          abandoned={abandoned}
           label={task.title}
           priority={task.priority}
           onChange={() => change({ status: done ? 'open' : 'completed' })}
@@ -93,7 +98,7 @@ export function TaskDetail({
           isMobile={isMobile}
           onSave={(dates) => void onChange(task, { dates })}
         />
-        <span className="detail-status">{done ? '已完成' : ''}</span>
+        <span className="detail-status">{abandoned ? '已放弃' : done ? '已完成' : ''}</span>
         <MenuButton
           label={`优先级：${PRIORITY_LABELS[task.priority]}`}
           icon="flag"
@@ -147,7 +152,7 @@ export function TaskDetail({
           childTasks={children}
           inputRef={addSubtaskRef}
           onSelectTask={onSelectTask}
-          onToggle={(child) => void onChange(child, { status: child.status === 'completed' ? 'open' : 'completed' })}
+          onToggle={(child) => void onChange(child, { status: child.status !== 'open' ? 'open' : 'completed' })}
           onAdd={(title) => onAddSubtask(task, title)}
         />
       </div>
@@ -156,7 +161,8 @@ export function TaskDetail({
           label={`所属清单：${list?.name ?? INBOX_NAME}`}
           align="start"
           className="detail-move"
-          items={lists.map((l) => ({
+          // An archived 清单 is no place to move a task to (unless it is already there).
+          items={lists.filter((l) => l.archivedAt === null || l.id === task.listId).map((l) => ({
             label: l.name,
             icon: l.isInbox ? 'inbox' : 'list',
             checked: l.id === task.listId,
@@ -181,6 +187,7 @@ export function TaskDetail({
             { label: '添加子任务', icon: 'subtask', onSelect: () => addSubtaskRef.current?.focus() },
             { label: '缩进（Tab）', icon: 'indent', disabled: !canIndent, onSelect: () => onIndent(task, false) },
             { label: '取消缩进（Shift+Tab）', icon: 'outdent', disabled: !canOutdent, onSelect: () => onIndent(task, true) },
+            ...taskActionItems(task, change, () => onDelete(task)),
           ]}
         />
       </footer>
@@ -216,7 +223,7 @@ function TitleEditor({ task, onSave }: { task: Task; onSave: (title: string) => 
   return (
     <textarea
       ref={ref}
-      className={`detail-title ${task.status === 'completed' ? 'detail-title-done' : ''}`}
+      className={`detail-title ${task.status !== 'open' ? 'detail-title-done' : ''}`}
       aria-label="任务标题"
       rows={1}
       maxLength={512}
@@ -324,7 +331,7 @@ function Subtasks({
   const [busy, setBusy] = useState(false);
   // Count 子任务 at every level below, like the list shows them.
   const below = countBelow(tasks, parent.id);
-  const doneBelow = countBelow(tasks, parent.id, (t) => t.status === 'completed');
+  const doneBelow = countBelow(tasks, parent.id, (t) => t.status === 'completed'); // 放弃 never counts as done
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -344,8 +351,13 @@ function Subtasks({
           </h2>
           <ul className="subtasks-list" aria-label="子任务列表">
             {childTasks.map((child) => (
-              <li key={child.id} className={`subtask-row ${child.status === 'completed' ? 'subtask-row-done' : ''}`}>
-                <TaskCheckbox checked={child.status === 'completed'} label={child.title} onChange={() => onToggle(child)} />
+              <li key={child.id} className={`subtask-row ${child.status !== 'open' ? 'subtask-row-done' : ''}`}>
+                <TaskCheckbox
+                  checked={child.status !== 'open'}
+                  abandoned={child.status === 'abandoned'}
+                  label={child.title}
+                  onChange={() => onToggle(child)}
+                />
                 <button type="button" className="subtask-title" onClick={() => onSelectTask(child.id)}>
                   {child.title}
                 </button>

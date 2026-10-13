@@ -153,12 +153,16 @@ CI 定义在 `ci/github-actions.yml`：lint、类型检查、四层测试，再�
 | 接口 | 说明 |
 | --- | --- |
 | `GET /api/lists` | 侧栏：`lists`（收件箱在最前，首次访问时自动创建）、`folders`、`openTaskCounts` |
-| `POST/PATCH/DELETE /api/lists[/:id]` | 清单：名称、颜色、图标、`folderId`、`sortOrder`。收件箱不能改、不能删（400 `inbox_protected`）；删除清单会一起删除其中的任务 |
+| `POST/PATCH/DELETE /api/lists[/:id]` | 清单：名称、颜色、图标、`folderId`、`sortOrder`。收件箱不能改、不能删、不能归档（400 `inbox_protected`）；`archived: true/false` 归档 / 取消归档（响应里的 `archivedAt`），归档的清单仍在 `GET /api/lists` 里返回，由前端放进「已归档的清单」，其中的任务不进任何智能清单（`src/smart-lists.ts`）；删除清单会把其中的任务移进回收站，还原时回到收件箱 |
 | `POST/PATCH/DELETE /api/folders[/:id]` | 文件夹（只有一层）：名称、`collapsed`、`sortOrder`。删除文件夹时，其中的清单移到文件夹原来的位置 |
 | `GET /api/tasks?listId=` 或 `?tagId=` | 未完成任务按排序键，已完成任务在后、最近完成的在前；按标签查看时跨清单，父标签包含子标签的任务 |
-| `GET/POST/PATCH /api/tasks[/:id]` | 不指定清单进收件箱；新建和移入的任务排在最前；`status` 在 `open` / `completed` 之间切换；`priority`：`high` / `medium` / `low` / `none`；`tagIds` 整体替换，只能用自己未删除的标签（否则 400 `invalid_tags`）；`dates` 见下 |
+| `GET/POST/PATCH /api/tasks[/:id]` | 不指定清单进收件箱；新建和移入的任务排在最前；`status`：`open` / `completed` / `abandoned`（放弃，`abandonedAt` 记时间，`completedAt` 为空，不算完成）；`priority`：`high` / `medium` / `low` / `none`；`tagIds` 整体替换，只能用自己未删除的标签（否则 400 `invalid_tags`）；`dates` 见下 |
 | `parentId`（POST / PATCH） | 子任务：跟父任务在同一个清单，新建时排在兄弟任务最后；最多 5 层（根任务算第 1 层），超过返回 400 `depth_exceeded`；父任务不存在、是别人的、是自己或自己的子任务返回 400 `invalid_parent`。移到别的清单时整棵子树一起走，子任务移走后变成顶层任务 |
-| 完成规则 | 完成任务会把下面所有未完成的子任务一起完成；取消完成父任务不动子任务；取消完成子任务会把已完成的上级一起取消完成 |
+| 完成规则 | 完成（放弃）任务会把下面所有未完成的子任务一起完成（放弃）；取消完成父任务不动子任务；把子任务改回未完成会把已完成或已放弃的上级一起改回未完成 |
+| `DELETE /api/tasks/:id` | 删除：任务连同子任务、检查项移进回收站（软删除，`/api/changes` 里是墓碑），204 |
+| `GET /api/trash` | 回收站：用户删除的那个任务（子任务跟着它，不单独列出），最近删除的在前，带 `deletedAt` |
+| `POST /api/trash/:id/restore` | 还原：任务、子任务和检查项一起恢复（新修订号）；原清单已删除就回到收件箱，父任务不在了就变成顶层任务 |
+| `DELETE /api/trash/:id`、`DELETE /api/trash` | 彻底删除一个 / 清空回收站：清空标题、描述、日期、标签和检查项文字，墓碑保留。后台任务 `trash.purge`（pg-boss，每天 03:30 和启动时各一次）对删除满 30 天的任务做同样的清理 |
 | `kind`（PATCH） | `text` ⇄ `checklist`：描述每个非空行变成一个检查项（去掉 `- `、`1. `、`[x]` 等列表标记，`[x]` 记为已勾选），描述清空；切回时每个检查项变成一行描述（勾选状态不保留），检查项删除（墓碑） |
 | `GET/POST /api/tasks/:id/checklist-items` | 检查项列表 / 新建（只能加到检查清单模式的任务上，否则 400 `not_checklist`），默认排在最后 |
 | `PATCH/DELETE /api/checklist-items/:id` | 勾选、改文字、`sortOrder` 排序；删除是软删除。检查项在 `/api/changes` 里的实体类型是 `checklistItem` |
