@@ -19,7 +19,7 @@ export const CLI_USAGE = `用法: dida <命令> [参数]
 
   create-user <账号> [--admin]   新建用户（--admin 设为管理员），随后输入密码
   reset-password <账号>          重置密码，随后输入新密码；该用户所有会话立即失效
-  disable-user <账号>            停用用户：无法登录，已有会话立即失效
+  disable-user <账号>            停用用户：无法登录，已有会话立即失效（不能停用最后一个管理员）
   enable-user <账号>             重新启用用户
   list-users                     列出所有用户
 

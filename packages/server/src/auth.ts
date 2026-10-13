@@ -11,6 +11,8 @@ export interface ApiRoute {
   method: string;
   url: string;
   public: boolean;
+  /** Under `/api/admin/`: also requires a 管理员 (403 otherwise). */
+  admin: boolean;
 }
 
 declare module 'fastify' {
@@ -65,10 +67,27 @@ function isApiRoute(url: string) {
   return url === '/api' || url.startsWith('/api/');
 }
 
+/** The 后台: every route under this prefix is for 管理员 only. */
+export const ADMIN_API_PREFIX = '/api/admin/';
+
+function isAdminRoute(url: string) {
+  return url === '/api/admin' || url.startsWith(ADMIN_API_PREFIX);
+}
+
+/**
+ * preHandler after `authenticate`: 403 unless the session user is a 管理员.
+ * `isAdmin` is read with the session on every request, so a demoted or
+ * disabled 管理员 loses access immediately.
+ */
+const requireAdmin: preHandlerHookHandler = async (request, reply) => {
+  if (!request.user?.isAdmin) await sendError(reply, 403, 'forbidden', '需要管理员权限');
+};
+
 /**
  * Install session authentication. Every `/api` route requires a session unless
  * it declares `config: { public: true }` — new resource routes are protected by
- * default and cannot forget it.
+ * default and cannot forget it. Routes under `/api/admin/` additionally require
+ * a 管理员; they cannot be made public.
  */
 export function registerAuthentication(app: FastifyInstance, deps: { sessions: SessionStore; config: AppConfig }) {
   app.decorateRequest('user', null);
@@ -90,14 +109,18 @@ export function registerAuthentication(app: FastifyInstance, deps: { sessions: S
 
   const requireSession: onRouteHookHandler = (route) => {
     if (!isApiRoute(route.url)) return;
+    const admin = isAdminRoute(route.url);
+    if (admin && route.config?.public) throw new Error(`${route.url}: admin routes cannot be public`);
     for (const method of [route.method].flat()) {
-      if (method !== 'HEAD') apiRoutes.push({ method, url: route.url, public: route.config?.public === true });
+      if (method !== 'HEAD') apiRoutes.push({ method, url: route.url, public: route.config?.public === true, admin });
     }
     if (route.config?.public) return;
     const existing = route.preHandler;
-    const handlers: preHandlerHookHandler[] = existing === undefined ? [] : Array.isArray(existing) ? existing : [existing];
-    if (handlers.includes(app.authenticate as preHandlerHookHandler)) return;
-    route.preHandler = [app.authenticate as preHandlerHookHandler, ...handlers];
+    const handlers: preHandlerHookHandler[] = (existing === undefined ? [] : Array.isArray(existing) ? existing : [existing]).filter(
+      (h) => h !== app.authenticate && h !== requireAdmin,
+    );
+    const guards = [app.authenticate as preHandlerHookHandler, ...(admin ? [requireAdmin] : [])];
+    route.preHandler = [...guards, ...handlers];
   };
   app.addHook('onRoute', requireSession);
 }

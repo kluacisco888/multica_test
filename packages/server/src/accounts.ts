@@ -1,5 +1,5 @@
-import { asc, count, eq, sql } from 'drizzle-orm';
-import { passwordSchema, usernameSchema } from '@dida/shared';
+import { and, asc, count, eq, isNull, ne, sql } from 'drizzle-orm';
+import { CANNOT_DISABLE_SELF_MESSAGE, LAST_ADMIN_MESSAGE, passwordSchema, usernameSchema } from '@dida/shared';
 import type { Clock } from './clock.js';
 import type { Db, Executor } from './db/client.js';
 import { isUniqueViolation } from './db/errors.js';
@@ -25,7 +25,9 @@ export type AccountErrorCode =
   | 'invalid_password'
   | 'username_taken'
   | 'user_not_found'
-  | 'wrong_password';
+  | 'wrong_password'
+  | 'cannot_disable_self'
+  | 'last_admin';
 
 export class AccountError extends Error {
   constructor(
@@ -46,15 +48,19 @@ export type BootstrapResult = 'created' | 'users_exist' | 'not_configured';
 export interface Accounts {
   create(input: { username: string; password: string; isAdmin?: boolean }): Promise<Account>;
   findByUsername(username: string): Promise<Account | null>;
+  findById(id: string): Promise<Account | null>;
   list(): Promise<Account[]>;
   /** Check credentials for login. Takes about the same time whether or not the user exists. */
   verifyLogin(username: string, password: string): Promise<LoginResult>;
   /** The user changes their own password; other sessions are logged out. */
   changePassword(userId: string, currentPassword: string, newPassword: string, keepSessionId: string): Promise<void>;
-  /** Admin / CLI reset; logs the user out everywhere. */
-  resetPassword(username: string, newPassword: string): Promise<Account>;
-  /** Disabling logs the user out everywhere and blocks login; enabling allows login again. */
-  setDisabled(username: string, disabled: boolean): Promise<Account>;
+  /** Admin / CLI reset; logs the user out everywhere (except `keepSessionId`: an admin resetting their own). */
+  resetPassword(username: string, newPassword: string, options?: { keepSessionId?: string }): Promise<Account>;
+  /**
+   * Disabling logs the user out everywhere and blocks login; enabling allows
+   * login again. Never disables `actorId` itself, nor the last enabled 管理员.
+   */
+  setDisabled(username: string, disabled: boolean, options?: { actorId?: string }): Promise<Account>;
   /** First start: create the 管理员 from `.env` when the database has no user at all. */
   bootstrapAdmin(initial: { username?: string | undefined; password?: string | undefined }): Promise<BootstrapResult>;
 }
@@ -85,6 +91,8 @@ function validPassword(password: string): string {
 
 /** Key for the advisory lock that serializes the first-admin bootstrap across processes. */
 const BOOTSTRAP_LOCK = 0x6469_6461; // "dida"
+/** Serializes disabling 管理员, so two of them cannot disable each other at once. */
+const ADMIN_DISABLE_LOCK = 0x6469_6462;
 
 export function createAccounts(db: Db, sessions: SessionStore, clock: Clock): Accounts {
   // Verified against when the username does not exist, so timing does not reveal accounts.
@@ -128,6 +136,11 @@ export function createAccounts(db: Db, sessions: SessionStore, clock: Clock): Ac
       return row ? toAccount(row) : null;
     },
 
+    async findById(id) {
+      const [row] = await db.select().from(users).where(eq(users.id, id));
+      return row ? toAccount(row) : null;
+    },
+
     async list() {
       const rows = await db.select().from(users).orderBy(asc(users.createdAt), asc(users.username));
       return rows.map(toAccount);
@@ -159,7 +172,7 @@ export function createAccounts(db: Db, sessions: SessionStore, clock: Clock): Ac
       await sessions.revokeAllForUser(userId, keepSessionId);
     },
 
-    async resetPassword(username, newPassword) {
+    async resetPassword(username, newPassword, { keepSessionId } = {}) {
       const row = await requireUser(username);
       const passwordHash = await hashPassword(validPassword(newPassword));
       const [updated] = await db
@@ -167,18 +180,31 @@ export function createAccounts(db: Db, sessions: SessionStore, clock: Clock): Ac
         .set({ passwordHash, updatedAt: clock.now() })
         .where(eq(users.id, row.id))
         .returning();
-      await sessions.revokeAllForUser(row.id);
+      await sessions.revokeAllForUser(row.id, keepSessionId);
       return toAccount(updated ?? row);
     },
 
-    async setDisabled(username, disabled) {
+    async setDisabled(username, disabled, { actorId } = {}) {
       const row = await requireUser(username);
-      const now = clock.now();
-      const [updated] = await db
-        .update(users)
-        .set({ disabledAt: disabled ? (row.disabledAt ?? now) : null, updatedAt: now })
-        .where(eq(users.id, row.id))
-        .returning();
+      if (disabled && row.id === actorId) throw new AccountError('cannot_disable_self', CANNOT_DISABLE_SELF_MESSAGE);
+      const updated = await db.transaction(async (tx) => {
+        if (disabled && row.isAdmin) {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(${ADMIN_DISABLE_LOCK})`);
+          const [others] = await tx
+            .select({ n: count() })
+            .from(users)
+            .where(and(eq(users.isAdmin, true), isNull(users.disabledAt), ne(users.id, row.id)));
+          if ((others?.n ?? 0) === 0) throw new AccountError('last_admin', LAST_ADMIN_MESSAGE);
+        }
+        const now = clock.now();
+        const [result] = await tx
+          .update(users)
+          // Keep the original time when disabling twice.
+          .set({ disabledAt: disabled ? sql`coalesce(${users.disabledAt}, ${now})` : null, updatedAt: now })
+          .where(eq(users.id, row.id))
+          .returning();
+        return result;
+      });
       if (disabled) await sessions.revokeAllForUser(row.id);
       return toAccount(updated ?? row);
     },

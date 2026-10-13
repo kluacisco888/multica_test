@@ -1,5 +1,9 @@
 import {
+  adminUserSchema,
+  adminUsersResponseSchema,
   apiErrorSchema,
+  type AdminUser,
+  type CreateUserRequest,
   channelsResponseSchema,
   notificationChannelSchema,
   type CreateChannelRequest,
@@ -210,4 +214,23 @@ export async function deleteTag(id: string): Promise<void> {
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiCallError) return error.message;
   return '网络错误，请稍后重试';
+}
+
+/* ---- 后台 (管理员 only; everyone else gets 403) ---- */
+
+export async function fetchAdminUsers(): Promise<AdminUser[]> {
+  return adminUsersResponseSchema.parse(await (await call('GET', '/api/admin/users')).json()).users;
+}
+
+export async function createAdminUser(request: CreateUserRequest): Promise<AdminUser> {
+  return adminUserSchema.parse(await (await call('POST', '/api/admin/users', request)).json());
+}
+
+/** 停用 / 启用 a 用户. */
+export async function setUserDisabled(id: string, disabled: boolean): Promise<AdminUser> {
+  return adminUserSchema.parse(await (await call('PATCH', `/api/admin/users/${encodeURIComponent(id)}`, { disabled })).json());
+}
+
+export async function resetUserPassword(id: string, password: string): Promise<void> {
+  await call('POST', `/api/admin/users/${encodeURIComponent(id)}/password`, { password });
 }

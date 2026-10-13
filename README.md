@@ -46,12 +46,23 @@ compose 项目名固定为 `dida-clone`，只有 `app` 和 `postgres` 两个服�
 ```bash
 docker compose exec app dida create-user <账号> [--admin]   # 新建用户，随后输入两次密码
 docker compose exec app dida reset-password <账号>          # 忘记密码时重置；该用户所有会话立即失效
-docker compose exec app dida disable-user <账号>            # 停用：无法登录，已有会话立即失效
+docker compose exec app dida disable-user <账号>            # 停用：无法登录，已有会话立即失效；不能停用最后一个管理员
 docker compose exec app dida enable-user <账号>             # 重新启用
 docker compose exec app dida list-users
 ```
 
 密码不走命令行参数（会留在 shell 历史和 `ps` 里）：在终端里是隐藏输入，非交互时从标准输入读一行，例如 `printf '%s\n' '新密码' | docker compose exec -T app dida reset-password admin`。密码至少 8 位。
+
+### 后台
+
+管理员在 设置 →「用户管理」里添加用户、停用和启用用户、重置密码；普通用户看不到这个分类。接口都在 `/api/admin/` 下，`src/auth.ts` 对这个前缀统一加管理员检查：未登录 401，登录了但不是管理员 403 `forbidden`。角色和停用状态每次请求都从数据库读，降级或停用立即生效。
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /api/admin/users` | 所有用户（不含密码哈希），按创建时间排序 |
+| `POST /api/admin/users` | `username`、`password`（至少 8 位）、`isAdmin` 选填；重名 409 `username_taken` |
+| `PATCH /api/admin/users/:id` | `{ "disabled": true/false }`。停用后该用户所有会话立即失效；不能停用自己（400 `cannot_disable_self`），不能停用最后一个未停用的管理员（400 `last_admin`，CLI 同样适用） |
+| `POST /api/admin/users/:id/password` | `{ "password": "…" }`，204。该用户所有会话失效；重置自己的密码时保留当前会话 |
 
 ## 备份与恢复
 

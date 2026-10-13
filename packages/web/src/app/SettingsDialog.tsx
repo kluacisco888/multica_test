@@ -5,20 +5,24 @@ import { Button, Dialog } from '../ui/controls.js';
 import { Icon, type IconName } from '../ui/Icon.js';
 import { HolidaySettings } from './HolidaySettings.js';
 import { NotificationSettings } from './settings/NotificationSettings.js';
+import { UserAdmin } from './settings/UserAdmin.js';
 
-export type SettingsTab = 'account' | 'datetime' | 'notifications';
+export type SettingsTab = 'account' | 'datetime' | 'notifications' | 'users';
 
 const TABS: { id: SettingsTab; label: string; icon: IconName }[] = [
   { id: 'account', label: '账户与安全', icon: 'user' },
   { id: 'datetime', label: '日期与时间', icon: 'clock' },
   { id: 'notifications', label: '提醒与通知', icon: 'bell' },
 ];
+/** The 后台, last in the list and only for 管理员 (others never see the entry). */
+const ADMIN_TAB: (typeof TABS)[number] = { id: 'users', label: '用户管理', icon: 'users' };
 
 /**
  * 设置, laid out like 滴答's settings dialog: a tab list on the left, the
  * panel on the right. 账户与安全: who is signed in, change password, log out
  * (spec 用户故事 7、8). 日期与时间: the time zone (用户故事 26) and the
  * 节假日数据 card (用户故事 114). 提醒与通知: 通知渠道 (用户故事 74–77、85).
+ * 用户管理 (管理员 only): the 后台 (用户故事 9).
  */
 export function SettingsDialog({
   user,
@@ -35,20 +39,21 @@ export function SettingsDialog({
   onLoggedOut: () => void;
   onSaveSettings: (patch: UpdateSettingsRequest) => Promise<boolean>;
 }) {
-  const [tab, setTab] = useState<SettingsTab>(initialTab);
+  const tabs = user.isAdmin ? [...TABS, ADMIN_TAB] : TABS;
+  const [tab, setTab] = useState<SettingsTab>(tabs.some((t) => t.id === initialTab) ? initialTab : 'account');
   const id = useId();
 
   function onTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
-    const index = TABS.findIndex((t) => t.id === tab);
+    const index = tabs.findIndex((t) => t.id === tab);
     const next =
       event.key === 'Home'
         ? 0
         : event.key === 'End'
-          ? TABS.length - 1
-          : (index + (event.key === 'ArrowDown' ? 1 : -1) + TABS.length) % TABS.length;
-    const target = TABS[next] as (typeof TABS)[number];
+          ? tabs.length - 1
+          : (index + (event.key === 'ArrowDown' ? 1 : -1) + tabs.length) % tabs.length;
+    const target = tabs[next] as (typeof tabs)[number];
     setTab(target.id);
     document.getElementById(`${id}-tab-${target.id}`)?.focus();
   }
@@ -57,7 +62,7 @@ export function SettingsDialog({
     <Dialog title="设置" onClose={onClose} className="settings-dialog">
       <div className="settings-layout">
         <div role="tablist" aria-orientation="vertical" aria-label="设置分类" className="settings-tabs">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button
               key={t.id}
               id={`${id}-tab-${t.id}`}
@@ -79,6 +84,7 @@ export function SettingsDialog({
           {tab === 'account' && <AccountPanel user={user} onLoggedOut={onLoggedOut} />}
           {tab === 'datetime' && <DateTimePanel settings={settings} onSave={onSaveSettings} />}
           {tab === 'notifications' && <NotificationsPanel />}
+          {tab === 'users' && user.isAdmin && <UsersPanel user={user} />}
         </div>
       </div>
     </Dialog>
@@ -130,6 +136,18 @@ function NotificationsPanel() {
         提醒与通知
       </h3>
       <NotificationSettings />
+    </section>
+  );
+}
+
+function UsersPanel({ user }: { user: CurrentUser }) {
+  const id = useId();
+  return (
+    <section className="account-section" aria-labelledby={`${id}-title`}>
+      <h3 id={`${id}-title`} className="account-section-title">
+        用户管理
+      </h3>
+      <UserAdmin currentUser={user} />
     </section>
   );
 }
