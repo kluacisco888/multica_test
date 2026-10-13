@@ -1,4 +1,18 @@
-import { LIST_COLORS, LIST_ICONS, type Folder, type Tag, type TaskList } from '@dida/shared';
+import {
+  FILTER_DATE_LABELS,
+  FILTER_DATE_OPTIONS,
+  LIST_COLORS,
+  LIST_ICONS,
+  PRIORITIES,
+  PRIORITY_LABELS,
+  type Filter,
+  type FilterDate,
+  type FilterRules,
+  type Folder,
+  type Priority,
+  type Tag,
+  type TaskList,
+} from '@dida/shared';
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Button, Dialog } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
@@ -8,6 +22,7 @@ export interface ListDraft {
   color: string | null;
   icon: string | null;
   folderId: string | null;
+  excludeFromSmartLists: boolean;
 }
 
 const COLOR_NAMES: Record<(typeof LIST_COLORS)[number], string> = {
@@ -42,6 +57,7 @@ export function ListDialog({
   const [color, setColor] = useState<string | null>(list?.color ?? null);
   const [icon, setIcon] = useState<string | null>(list?.icon ?? null);
   const [folderId, setFolderId] = useState<string | null>(list ? list.folderId : defaultFolderId);
+  const [excludeFromSmartLists, setExcludeFromSmartLists] = useState(list?.excludeFromSmartLists ?? false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -52,7 +68,7 @@ export function ListDialog({
       return;
     }
     setSaving(true);
-    await onSave({ name: name.trim(), color, icon, folderId });
+    await onSave({ name: name.trim(), color, icon, folderId, excludeFromSmartLists });
     setSaving(false);
   }
 
@@ -117,6 +133,21 @@ export function ListDialog({
             ))}
           </select>
         </div>
+        <div className="field field-switch">
+          <label htmlFor={`${id}-exclude`}>不进智能清单</label>
+          <input
+            id={`${id}-exclude`}
+            type="checkbox"
+            role="switch"
+            className="ui-switch"
+            checked={excludeFromSmartLists}
+            aria-describedby={`${id}-exclude-hint`}
+            onChange={(e) => setExcludeFromSmartLists(e.target.checked)}
+          />
+          <p id={`${id}-exclude-hint`} className="field-hint">
+            打开后，这个清单里的任务不会出现在今天、明天、最近7天等智能清单里，但仍然能被搜索到，也能被过滤器选中
+          </p>
+        </div>
         <div className="ui-dialog-footer">
           <Button onClick={onCancel}>取消</Button>
           <Button type="submit" variant="primary" disabled={saving}>
@@ -125,6 +156,149 @@ export function ListDialog({
         </div>
       </form>
     </Dialog>
+  );
+}
+
+export interface FilterDraft {
+  name: string;
+  rules: FilterRules;
+}
+
+const EMPTY_RULES: FilterRules = { listIds: [], tagIds: [], untagged: false, dates: [], priorities: [] };
+
+/** Add or remove `value` from a list of choices. */
+function toggled<T>(values: readonly T[], value: T, on: boolean): T[] {
+  return on ? [...values.filter((v) => v !== value), value] : values.filter((v) => v !== value);
+}
+
+/**
+ * Create or edit a 过滤器 (spec 用户故事 62): a name and four conditions. Any
+ * value ticked in a condition matches; every condition with a tick must match.
+ */
+export function FilterDialog({
+  filter,
+  lists,
+  tags,
+  onCancel,
+  onSave,
+}: {
+  filter: Filter | null;
+  /** 清单 in sidebar order. */
+  lists: TaskList[];
+  /** 标签 in display order. */
+  tags: Tag[];
+  onCancel: () => void;
+  onSave: (draft: FilterDraft) => Promise<void>;
+}) {
+  const id = useId();
+  const [name, setName] = useState(filter?.name ?? '');
+  const [rules, setRules] = useState<FilterRules>(filter?.rules ?? EMPTY_RULES);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const set = <K extends keyof FilterRules>(key: K, value: FilterRules[K]) => setRules((r) => ({ ...r, [key]: value }));
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!name.trim()) {
+      setError('请输入过滤器名称');
+      return;
+    }
+    setSaving(true);
+    await onSave({ name: name.trim(), rules });
+    setSaving(false);
+  }
+
+  return (
+    <Dialog title={filter ? '编辑过滤器' : '添加过滤器'} onClose={onCancel} className="filter-dialog">
+      <form className="form" onSubmit={submit} noValidate>
+        <div className="field">
+          <label htmlFor={`${id}-name`}>名称</label>
+          <input
+            id={`${id}-name`}
+            value={name}
+            maxLength={64}
+            autoFocus
+            onChange={(e) => setName(e.target.value)}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? `${id}-error` : undefined}
+          />
+          {error && (
+            <p id={`${id}-error`} className="form-error" role="alert">
+              {error}
+            </p>
+          )}
+        </div>
+        <p className="field-hint">每一项里勾选的条件满足任意一个即可；没有勾选的项不限制。</p>
+        <ChoiceGroup legend="清单" empty="所有清单">
+          {lists.map((list) => (
+            <Choice
+              key={list.id}
+              label={list.name}
+              checked={rules.listIds.includes(list.id)}
+              onChange={(on) => set('listIds', toggled(rules.listIds, list.id, on))}
+            />
+          ))}
+        </ChoiceGroup>
+        <ChoiceGroup legend="标签" empty="所有标签">
+          {tags.map((tag) => (
+            <Choice
+              key={tag.id}
+              label={tag.parentId ? `${tags.find((t) => t.id === tag.parentId)?.name ?? ''}/${tag.name}` : tag.name}
+              checked={rules.tagIds.includes(tag.id)}
+              onChange={(on) => set('tagIds', toggled(rules.tagIds, tag.id, on))}
+            />
+          ))}
+          <Choice label="无标签" checked={rules.untagged} onChange={(on) => set('untagged', on)} />
+        </ChoiceGroup>
+        <ChoiceGroup legend="日期" empty="所有日期">
+          {FILTER_DATE_OPTIONS.map((option: FilterDate) => (
+            <Choice
+              key={option}
+              label={FILTER_DATE_LABELS[option]}
+              checked={rules.dates.includes(option)}
+              onChange={(on) => set('dates', toggled(rules.dates, option, on))}
+            />
+          ))}
+        </ChoiceGroup>
+        <ChoiceGroup legend="优先级" empty="所有优先级">
+          {PRIORITIES.map((priority: Priority) => (
+            <Choice
+              key={priority}
+              label={PRIORITY_LABELS[priority]}
+              checked={rules.priorities.includes(priority)}
+              onChange={(on) => set('priorities', toggled(rules.priorities, priority, on))}
+            />
+          ))}
+        </ChoiceGroup>
+        <div className="ui-dialog-footer">
+          <Button onClick={onCancel}>取消</Button>
+          <Button type="submit" variant="primary" disabled={saving}>
+            {saving ? '正在保存…' : '保存'}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+function ChoiceGroup({ legend, empty, children }: { legend: string; empty: string; children: ReactNode }) {
+  return (
+    <fieldset className="field filter-choices">
+      <legend>
+        {legend}
+        <span className="filter-choices-empty">（不勾选即{empty}）</span>
+      </legend>
+      <div className="filter-choice-options">{children}</div>
+    </fieldset>
+  );
+}
+
+function Choice({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className={`filter-choice ${checked ? 'filter-choice-on' : ''}`}>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span>{label}</span>
+    </label>
   );
 }
 

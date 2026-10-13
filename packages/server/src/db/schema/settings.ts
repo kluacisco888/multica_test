@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import type { ViewOptions } from '@dida/shared';
 import { syncColumns, syncIndex } from '../../sync/columns.js';
 
 /**
@@ -12,6 +13,10 @@ export const userSettings = pgTable(
     ...syncColumns(),
     /** IANA time zone for timed task dates (spec 用户故事 26). */
     timeZone: text().notNull(),
+    /** 智能清单 hidden from the sidebar (spec 用户故事 60). */
+    hiddenSmartLists: text().array().notNull().default(sql`'{}'::text[]`),
+    /** View key → 排序 / 分组 (spec 用户故事 64). */
+    viewOptions: jsonb().$type<Record<string, ViewOptions>>().notNull().default({}),
   },
   (t) => [
     syncIndex('user_settings', t),

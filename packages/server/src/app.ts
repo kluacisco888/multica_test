@@ -21,7 +21,9 @@ import { createHolidayService, type HolidayService } from './holidays/service.js
 import { healthRoutes } from './routes/health.js';
 import { holidayRoutes } from './routes/holidays.js';
 import { checklistRoutes } from './routes/checklist.js';
+import { filterRoutes } from './routes/filters.js';
 import { listRoutes } from './routes/lists.js';
+import { searchRoutes } from './routes/search.js';
 import { settingsRoutes } from './routes/settings.js';
 import { tagRoutes } from './routes/tags.js';
 import { taskRoutes } from './routes/tasks.js';
@@ -133,6 +135,8 @@ export async function buildApp(deps: AppDeps) {
   trashRoutes(app);
   attachmentRoutes(app);
   commentRoutes(app);
+  filterRoutes(app);
+  searchRoutes(app);
   deps.routes?.(app);
 
   if (config.webDistDir) {

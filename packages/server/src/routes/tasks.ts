@@ -10,6 +10,7 @@ import {
 } from '@dida/shared';
 import { sessionUser } from '../auth.js';
 import type { Executor } from '../db/client.js';
+import { filters } from '../db/schema/filters.js';
 import { tags } from '../db/schema/tags.js';
 import { lists, tasks } from '../db/schema/tasks.js';
 import { sendValidationError } from '../http-errors.js';
@@ -17,6 +18,7 @@ import { compareTasks, ensureInbox, taskDateColumns, taskToApi, topOfList, type 
 import { readSettings } from '../settings.js';
 import { moveToTrash } from '../trash.js';
 import { findOwned } from '../sync/sync.js';
+import { filterTasks, smartListTasks } from '../task-views.js';
 import {
   ancestorsOf,
   checklistFromDescription,
@@ -55,6 +57,16 @@ export function taskRoutes(app: FastifyInstance) {
     const query = tasksQuerySchema.safeParse(request.query);
     if (!query.success) return sendValidationError(reply, query.error);
     const userId = sessionUser(request).id;
+    if ('smart' in query.data) {
+      const response: TasksResponse = { tasks: await smartListTasks(app.db, userId, query.data.smart, app.clock.now()) };
+      return response;
+    }
+    if ('filterId' in query.data) {
+      const filter = await findOwned(app.db, filters, userId, query.data.filterId);
+      if (!filter) return notFound(reply);
+      const response: TasksResponse = { tasks: await filterTasks(app.db, userId, filter, app.clock.now()) };
+      return response;
+    }
     let scope;
     if ('listId' in query.data) {
       const list = await findOwned(app.db, lists, userId, query.data.listId);

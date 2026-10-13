@@ -2152,3 +2152,154 @@ span.task-row-expand {
     height: 60vh;
   }
 }
+
+/* ---- 智能清单 / 过滤器 / 搜索 (EURO-13) ---- */
+
+/* Where a 搜索 result matched (描述 / 检查项 / 评论). */
+.task-row-match {
+  display: flex;
+  flex: none;
+  align-items: center;
+  align-self: stretch;
+  margin-left: -6px;
+  padding: 0 0 0 var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.search-box {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  height: var(--input-height);
+  padding: 0 var(--space-3);
+  background: var(--color-bg-input);
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+}
+
+.search-box:focus-within {
+  background: var(--color-bg);
+  border-color: var(--color-brand);
+}
+
+.search-box-icon {
+  display: inline-grid;
+  place-items: center;
+  margin-right: var(--space-2);
+  color: var(--color-text-placeholder);
+}
+
+.search-box-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  font: inherit;
+  font-size: var(--font-size-md);
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+
+.search-box-input::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+/* 清单 dialog: 不进智能清单 switch with its hint below. */
+.field-switch {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: var(--space-3);
+}
+
+.field-switch .field-hint {
+  grid-column: 1 / -1;
+}
+
+/* 过滤器 dialog: one fieldset of toggle chips per condition. */
+.filter-choices {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.filter-choices legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.filter-choices-empty {
+  margin-left: var(--space-1);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+}
+
+.filter-choice-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.filter-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: 15px;
+  cursor: pointer;
+}
+
+.filter-choice input {
+  margin: 0;
+  accent-color: var(--color-brand);
+}
+
+.filter-choice-on {
+  color: var(--color-brand-text);
+  background: var(--color-brand-softer);
+  border-color: var(--color-brand);
+}
+
+.filter-choice:focus-within {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+/* 设置 → 智能清单 */
+.smart-settings {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  background: var(--color-bg-card);
+  border-radius: var(--radius-card);
+}
+
+.smart-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--settings-row-height);
+  padding: 0 var(--space-4);
+  font-size: var(--font-size-md);
+}
+
+.smart-settings-row + .smart-settings-row {
+  border-top: 1px solid var(--color-divider);
+}
+
+.ui-dialog.filter-dialog {
+  width: min(520px, calc(100vw - 2 * var(--space-4)));
+  overflow-y: auto;
+}

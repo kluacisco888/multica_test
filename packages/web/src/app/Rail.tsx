@@ -10,11 +10,16 @@ export function Rail({
   onOpenAccount,
   onOpenSettings,
   onHome,
+  onSearch,
+  searchActive,
 }: {
   user: CurrentUser;
   onOpenAccount: () => void;
   onOpenSettings: () => void;
   onHome: () => void;
+  /** 全局搜索 (spec 用户故事 63). */
+  onSearch: () => void;
+  searchActive: boolean;
 }) {
   return (
     <nav className="rail" aria-label="模块">
@@ -23,13 +28,28 @@ export function Rail({
       </button>
       <ul className="rail-items">
         <li>
-          <a className="rail-item rail-item-active" href="/"
+          <a className={`rail-item ${searchActive ? '' : 'rail-item-active'}`} href="/"
             onClick={(e) => {
               e.preventDefault();
               onHome();
             }}
-            aria-current="page" aria-label="任务" title="任务">
+            aria-current={searchActive ? undefined : 'page'} aria-label="任务" title="任务">
             <Icon name="task" size={22} />
+          </a>
+        </li>
+        <li>
+          <a
+            className={`rail-item ${searchActive ? 'rail-item-active' : ''}`}
+            href="/search"
+            onClick={(e) => {
+              e.preventDefault();
+              onSearch();
+            }}
+            aria-current={searchActive ? 'page' : undefined}
+            aria-label="搜索"
+            title="搜索"
+          >
+            <Icon name="search" size={22} />
           </a>
         </li>
       </ul>

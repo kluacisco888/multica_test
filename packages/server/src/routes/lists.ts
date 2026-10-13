@@ -60,7 +60,7 @@ export function listRoutes(app: FastifyInstance) {
     const body = createListRequestSchema.safeParse(request.body);
     if (!body.success) return sendValidationError(reply, body.error);
     const userId = sessionUser(request).id;
-    const { id, name, color = null, icon = null, folderId = null, sortOrder } = body.data;
+    const { id, name, color = null, icon = null, folderId = null, excludeFromSmartLists = false, sortOrder } = body.data;
     return respond(
       reply,
       () =>
@@ -72,6 +72,7 @@ export function listRoutes(app: FastifyInstance) {
             color,
             icon,
             folderId,
+            excludeFromSmartLists,
             isInbox: false,
             sortOrder: sortOrder ?? (await endOfSidebarLevel(tx, userId, folderId)),
           });

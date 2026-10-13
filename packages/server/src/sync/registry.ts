@@ -1,10 +1,12 @@
 import { attachments, comments } from '../db/schema/attachments.js';
+import { filters } from '../db/schema/filters.js';
 import { tags } from '../db/schema/tags.js';
 import { attachmentToApi } from '../routes/attachments.js';
 import { commentToApi } from '../routes/comments.js';
 import { userSettings } from '../db/schema/settings.js';
 import { notificationChannels } from '../db/schema/channels.js';
 import { channelToApi } from '../notify/notifier.js';
+import { filterToApi } from '../routes/filters.js';
 import { checklistItems, folders, lists, tasks } from '../db/schema/tasks.js';
 import type { SyncEntity } from './columns.js';
 
@@ -31,4 +33,5 @@ export const syncEntities: readonly SyncEntity[] = [
   { type: 'tag', table: tags },
   { type: 'attachment', table: attachments, serialize: attachmentToApi },
   { type: 'comment', table: comments, serialize: commentToApi },
+  { type: 'filter', table: filters, serialize: filterToApi },
 ];

@@ -31,6 +31,8 @@ export const lists = pgTable(
     isInbox: boolean().notNull().default(false),
     /** 归档: hidden from the sidebar tree and its tasks kept out of every 智能清单; null while not archived. */
     archivedAt: timestamp({ withTimezone: true }),
+    /** 不进智能清单 (spec 用户故事 17). */
+    excludeFromSmartLists: boolean().notNull().default(false),
   },
   (t) => [
     syncIndex('lists', t),
