@@ -1,0 +1,47 @@
+name: dida-clone
+
+# `cp .env.example .env && docker compose up -d`
+# Everything is scoped to the compose project (default `dida-clone`):
+# containers, the network and the two volumes. No container_name is set, so
+# another project name (`-p` / COMPOSE_PROJECT_NAME) gives a fully separate copy.
+services:
+  app:
+    build: .
+    image: dida-clone-app:local
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      # Fixed inside the container; the host side is APP_BIND:APP_PORT below.
+      HOST: 0.0.0.0
+      PORT: "8090"
+      DATA_DIR: /data
+      DATABASE_URL: postgres://dida:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/dida
+    ports:
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8090}:8090"
+    volumes:
+      - appdata:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dida
+      POSTGRES_DB: dida
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    # No published port: only the app container can reach the database.
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dida -d dida"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:
+  appdata:

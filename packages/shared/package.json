@@ -1,0 +1,29 @@
+{
+  "name": "@dida/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./lunar": {
+      "source": "./src/lunar.ts",
+      "types": "./dist/lunar.d.ts",
+      "import": "./dist/lunar.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "lunar-javascript": "1.7.7",
+    "zod": "4.6.6"
+  }
+}
