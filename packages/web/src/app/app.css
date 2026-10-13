@@ -1163,7 +1163,8 @@ span.task-row-expand {
   cursor: pointer;
 }
 
-.date-tab[aria-selected='true'] {
+.date-tab[aria-selected='true'],
+.date-tab[aria-checked='true'] {
   font-weight: var(--font-weight-medium);
   color: var(--color-text);
   background: var(--color-bg);
@@ -1350,6 +1351,114 @@ span.task-row-expand {
   inset: 0;
   z-index: 29;
   background: var(--color-bg-overlay);
+}
+
+/* ---- 重复 (row in the date picker, 自定义重复 editor) ---- */
+
+.date-trigger-repeat {
+  flex: none;
+}
+
+.date-row-repeat {
+  padding-right: 0;
+}
+
+.date-row-label {
+  flex: none;
+}
+
+.date-repeat-menu {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.date-repeat-trigger {
+  max-width: 100%;
+  color: var(--color-text-secondary);
+}
+
+.date-row-repeat .date-repeat-trigger svg {
+  flex: none;
+}
+
+.date-repeat-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.date-repeat-menu .ui-menu {
+  /* The 重复 row sits at the bottom of the picker (and of the screen on mobile): open upwards. */
+  top: auto;
+  bottom: calc(100% + var(--space-1));
+  min-width: 220px;
+}
+
+.repeat-editor {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.repeat-editor-title {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+}
+
+.repeat-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
+.repeat-field .settings-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.repeat-interval {
+  flex: none;
+  width: 64px;
+}
+
+.repeat-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+
+.repeat-weekday {
+  justify-self: center;
+  width: 100%;
+  max-width: var(--date-day-size);
+  aspect-ratio: 1;
+  padding: 0;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  background: var(--color-bg-input);
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.repeat-weekday:hover {
+  background: var(--color-bg-hover);
+}
+
+.repeat-weekday[aria-pressed='true'] {
+  color: var(--color-on-brand);
+  background: var(--color-button-primary);
+}
+
+.repeat-summary {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 
 /* ---- Settings dialog ---- */

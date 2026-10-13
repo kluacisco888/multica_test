@@ -93,10 +93,11 @@ export function TaskDetail({
         <span className="detail-header-divider" aria-hidden="true" />
         <TaskDateButton
           dates={task.dates}
+          repeat={task.repeat}
           timeZone={timeZone}
           now={now}
           isMobile={isMobile}
-          onSave={(dates) => void onChange(task, { dates })}
+          onSave={(dates, repeat) => void onChange(task, dates ? { dates, repeat } : { dates: null })}
         />
         <span className="detail-status">{abandoned ? '已放弃' : done ? '已完成' : ''}</span>
         <MenuButton

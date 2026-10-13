@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { sortKeySchema } from './lists.js';
+import { repeatRuleSchema } from './repeat-rule.js';
 import { taskDatesInputSchema, taskDatesSchema } from './task-dates.js';
 
 /*
@@ -63,6 +64,8 @@ export const taskSchema = z.object({
   priority: prioritySchema,
   /** 标签 ids, in the order they were added. */
   tagIds: z.array(z.uuid()),
+  /** 重复规则; null: not a 重复任务. Always null when the task has no date. */
+  repeat: repeatRuleSchema.nullable(),
 });
 export type Task = z.infer<typeof taskSchema>;
 
@@ -83,6 +86,8 @@ export const createTaskRequestSchema = z.object({
   sortOrder: sortKeySchema.optional(),
   priority: prioritySchema.optional(),
   tagIds: tagIdsSchema.optional(),
+  /** 重复规则; needs `dates`. */
+  repeat: repeatRuleSchema.nullable().optional(),
 });
 export type CreateTaskRequest = z.input<typeof createTaskRequestSchema>;
 
@@ -113,6 +118,11 @@ export const updateTaskRequestSchema = z
     priority: prioritySchema,
     /** Replaces the 任务's 标签. */
     tagIds: tagIdsSchema,
+    /**
+     * Replace the 重复规则; null stops repeating. Needs a date; clearing the
+     * dates also clears the rule. Completing a 重复任务 generates its next instance.
+     */
+    repeat: repeatRuleSchema.nullable(),
   })
   .partial()
   .strict();

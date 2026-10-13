@@ -15,3 +15,4 @@ export * from './civil-date.js';
 export * from './workday-calendar.js';
 export * from './holidays.js';
 export * from './admin.js';
+export * from './repeat-rule.js';

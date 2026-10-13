@@ -27,7 +27,8 @@ import {
   liveTasksOfList,
   lockTaskTrees,
 } from '../task-tree.js';
-import { checklistMode, depthExceeded, invalidList, invalidParent, invalidTags, notFound, Rejection, respond } from './respond.js';
+import { generateNextInstance } from '../repeat.js';
+import { checklistMode, depthExceeded, invalidList, invalidParent, invalidTags, notFound, Rejection, repeatNeedsDate, respond } from './respond.js';
 import { liveTags } from './tags.js';
 
 type Params = { Params: { id: string } };
@@ -83,7 +84,8 @@ export function taskRoutes(app: FastifyInstance) {
     const body = createTaskRequestSchema.safeParse(request.body);
     if (!body.success) return sendValidationError(reply, body.error);
     const userId = sessionUser(request).id;
-    const { id, listId, parentId, title, description = '', sortOrder, dates = null, priority = 'none', tagIds = [] } = body.data;
+    const { id, listId, parentId, title, description = '', sortOrder, dates = null, priority = 'none', tagIds = [], repeat = null } = body.data;
+    if (repeat && !dates) return repeatNeedsDate(reply);
 
     if (parentId) {
       // A 子任务 goes into its parent's 清单.
@@ -109,6 +111,7 @@ export function taskRoutes(app: FastifyInstance) {
               completedAt: null,
               priority,
               tagIds,
+              repeat,
               sortOrder: sortOrder ?? endOfChildren(siblings, parent.id),
             });
           }),
@@ -137,6 +140,7 @@ export function taskRoutes(app: FastifyInstance) {
             abandonedAt: null,
             priority,
             tagIds,
+            repeat,
             sortOrder: sortOrder ?? (await topOfList(tx, userId, list.id)),
           });
         }),
@@ -150,7 +154,14 @@ export function taskRoutes(app: FastifyInstance) {
     if (!found) return notFound(reply);
     const body = updateTaskRequestSchema.safeParse(request.body);
     if (!body.success) return sendValidationError(reply, body.error);
-    const { status, listId, parentId, kind, sortOrder, description, dates, ...fields } = body.data;
+    const { status, listId, parentId, kind, sortOrder, description, dates, repeat, ...fields } = body.data;
+    // A 重复规则 needs a date; clearing the dates stops the repeat too.
+    const hasDate = dates !== undefined ? dates !== null : found.allDay !== null;
+    if (repeat && !hasDate) return repeatNeedsDate(reply);
+    const repeatPatch = dates === null ? { repeat: null } : repeat !== undefined ? { repeat } : {};
+    // Completing a 重复任务 generates the next instance, dated with the 工作日日历.
+    const completing = status === 'completed' && found.status === 'open' && (repeatPatch.repeat ?? found.repeat) != null;
+    const calendar = completing ? await app.holidays.calendar() : null;
 
     return respond(
       reply,
@@ -208,8 +219,10 @@ export function taskRoutes(app: FastifyInstance) {
           }
 
           const now = app.clock.now();
+          const wasOpen = task.status === 'open';
           const row = await ops.update(tasks, task.id, {
             ...fields,
+            ...repeatPatch,
             ...(dates !== undefined ? await dateColumns(tx, userId, dates) : {}),
             ...(newDescription !== undefined ? { description: newDescription } : {}),
             ...(kind !== undefined ? { kind } : {}),
@@ -238,6 +251,10 @@ export function taskRoutes(app: FastifyInstance) {
                 await ops.update(tasks, ancestor.id, { status: 'open', completedAt: null, abandonedAt: null });
               }
             }
+          }
+          if (calendar && wasOpen && row.status === 'completed') {
+            const { timeZone } = await readSettings(tx, userId);
+            await generateNextInstance(ops, tx, { task: row, userId, now, userTimeZone: timeZone, calendar });
           }
           return row;
         }),

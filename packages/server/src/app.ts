@@ -23,6 +23,7 @@ import { settingsRoutes } from './routes/settings.js';
 import { tagRoutes } from './routes/tags.js';
 import { taskRoutes } from './routes/tasks.js';
 import { trashRoutes } from './routes/trash.js';
+import { recomputeNextInstances } from './repeat.js';
 import { createSessionStore, type SessionStore } from './sessions.js';
 import type { SyncEntity } from './sync/columns.js';
 import { syncEntities as registeredSyncEntities } from './sync/registry.js';
@@ -92,6 +93,11 @@ export async function buildApp(deps: AppDeps) {
       timezone: config.defaultTimezone,
     }),
   );
+  // 节假日数据更新: open next instances of 重复任务 move to the corrected 工作日 (用户故事 50).
+  app.holidays.onUpdated(async ({ calendar }) => {
+    const moved = await recomputeNextInstances(db, app.sync, calendar);
+    if (moved.length > 0) app.log.info({ tasks: moved.length }, 'repeat instances recomputed after holiday data update');
+  });
   const cipher = config.encryptionKey ? createCredentialCipher(config.encryptionKey) : null;
   app.decorate('notifier', createNotifier({ db, cipher, clock }));
   await app.register(fastifyCookie);
