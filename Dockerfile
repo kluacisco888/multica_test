@@ -29,7 +29,9 @@ WORKDIR /app
 COPY --from=build --chown=node:node /out ./
 COPY --from=build --chown=node:node /repo/packages/web/dist ./web
 # Named volume mounted here inherits this ownership on first use.
-RUN mkdir -p /data/attachments && chown -R node:node /data
+RUN mkdir -p /data/attachments && chown -R node:node /data \
+ && printf '#!/bin/sh\nexec node /app/dist/cli.js "$@"\n' > /usr/local/bin/dida \
+ && chmod 755 /usr/local/bin/dida
 USER node
 EXPOSE 8090
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \

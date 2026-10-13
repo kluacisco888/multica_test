@@ -10,7 +10,7 @@ export function changesRoutes(
   app: FastifyInstance,
   deps: { db: Db; syncEntities: readonly SyncEntity[] },
 ) {
-  app.get('/api/changes', { preHandler: app.authenticate }, async (request, reply) => {
+  app.get('/api/changes', async (request, reply) => {
     const query = changesQuerySchema.safeParse(request.query);
     if (!query.success) return sendValidationError(reply, query.error);
     const user = sessionUser(request);

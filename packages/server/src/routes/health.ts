@@ -5,7 +5,7 @@ import type { AppConfig } from '../config.js';
 import type { Db } from '../db/client.js';
 
 export function healthRoutes(app: FastifyInstance, deps: { db: Db; config: AppConfig }) {
-  app.get('/api/health', async (request, reply) => {
+  app.get('/api/health', { config: { public: true } }, async (request, reply) => {
     let dbOk = true;
     try {
       await deps.db.execute(sql`select 1`);

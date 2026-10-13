@@ -1,13 +1,17 @@
 import path from 'node:path';
+import fastifyCookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import Fastify, { type FastifyServerOptions } from 'fastify';
-import { noSessionResolver, type ResolveUser } from './auth.js';
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
+import { createAccounts, type Accounts } from './accounts.js';
+import { registerAuthentication } from './auth.js';
 import { systemClock, type Clock } from './clock.js';
 import type { AppConfig } from './config.js';
 import type { Db } from './db/client.js';
 import { sendError } from './http-errors.js';
+import { authRoutes } from './routes/auth.js';
 import { changesRoutes } from './routes/changes.js';
 import { healthRoutes } from './routes/health.js';
+import { createSessionStore, type SessionStore } from './sessions.js';
 import type { SyncEntity } from './sync/columns.js';
 import { syncEntities as registeredSyncEntities } from './sync/registry.js';
 import { createSyncWriter, type SyncWriter } from './sync/sync.js';
@@ -16,15 +20,19 @@ export interface AppDeps {
   config: AppConfig;
   db: Db;
   clock?: Clock;
-  resolveUser?: ResolveUser;
   syncEntities?: readonly SyncEntity[];
   logger?: FastifyServerOptions['logger'];
+  /** Extra routes (tests register fixture resource routes); added after the built-in ones. */
+  routes?: (app: FastifyInstance) => void;
 }
 
 declare module 'fastify' {
   interface FastifyInstance {
     clock: Clock;
+    db: Db;
     sync: SyncWriter;
+    accounts: Accounts;
+    sessions: SessionStore;
   }
 }
 
@@ -36,7 +44,8 @@ function trustHops(hops: number) {
 export async function buildApp(deps: AppDeps) {
   const { config, db } = deps;
   const clock = deps.clock ?? systemClock;
-  const resolveUser = deps.resolveUser ?? noSessionResolver;
+  const sessions = createSessionStore(db, clock);
+  const accounts = createAccounts(db, sessions, clock);
 
   const app = Fastify({
     logger: deps.logger ?? false,
@@ -49,16 +58,12 @@ export async function buildApp(deps: AppDeps) {
   });
 
   app.decorate('clock', clock);
+  app.decorate('db', db);
   app.decorate('sync', createSyncWriter(db, clock));
-  app.decorateRequest('user', null);
-  app.decorate('authenticate', async function authenticate(request, reply) {
-    const user = await resolveUser(request);
-    if (!user) {
-      await sendError(reply, 401, 'unauthorized', '未登录或会话已过期');
-      return;
-    }
-    request.user = user;
-  });
+  app.decorate('accounts', accounts);
+  app.decorate('sessions', sessions);
+  await app.register(fastifyCookie);
+  registerAuthentication(app, { sessions, config });
 
   app.setErrorHandler((error, request, reply) => {
     const status = (error as { statusCode?: number }).statusCode ?? 500;
@@ -70,7 +75,9 @@ export async function buildApp(deps: AppDeps) {
   });
 
   healthRoutes(app, { db, config });
+  authRoutes(app, { accounts, sessions, config });
   changesRoutes(app, { db, syncEntities: deps.syncEntities ?? registeredSyncEntities });
+  deps.routes?.(app);
 
   if (config.webDistDir) {
     await app.register(fastifyStatic, { root: path.resolve(config.webDistDir) });

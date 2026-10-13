@@ -1,44 +1,49 @@
-import { healthResponseSchema } from '@dida/shared';
+import type { CurrentUser } from '@dida/shared';
 import { useEffect, useState } from 'react';
+import { fetchCurrentUser } from './api.js';
+import { HomePage } from './HomePage.js';
+import { LoginPage } from './LoginPage.js';
 
-type Status = 'checking' | 'ok' | 'down';
-
-const STATUS_TEXT: Record<Status, string> = {
-  checking: '正在检查服务状态…',
-  ok: '服务正常',
-  down: '服务不可用',
-};
+type AuthState = { status: 'loading' } | { status: 'error' } | { status: 'anonymous' } | { status: 'ready'; user: CurrentUser };
 
 /**
- * Placeholder shell for the skeleton task: proves the single image serves the
- * web app and that it can reach the API. EURO-6 replaces it with the real
- * application shell matched against the reference screenshots.
+ * Login gate. EURO-6 replaces `HomePage` with the real application shell; the
+ * login page's appearance is matched against the reference screenshots later.
  */
 export function App() {
-  const [status, setStatus] = useState<Status>('checking');
+  const [auth, setAuth] = useState<AuthState>({ status: 'loading' });
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetch('/api/health', { signal: controller.signal })
-      .then(async (res) => {
-        const body = healthResponseSchema.safeParse(await res.json());
-        setStatus(res.ok && body.success && body.data.status === 'ok' ? 'ok' : 'down');
+    let cancelled = false;
+    fetchCurrentUser()
+      .then((user) => {
+        if (!cancelled) setAuth(user ? { status: 'ready', user } : { status: 'anonymous' });
       })
       .catch((error: unknown) => {
-        if (!controller.signal.aborted) {
-          console.error(error);
-          setStatus('down');
-        }
+        console.error(error);
+        if (!cancelled) setAuth({ status: 'error' });
       });
-    return () => controller.abort();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  return (
-    <main className="shell">
-      <h1>dida-clone</h1>
-      <p role="status" aria-live="polite" className={`status status-${status}`}>
-        {STATUS_TEXT[status]}
-      </p>
-    </main>
-  );
+  switch (auth.status) {
+    case 'loading':
+      return (
+        <main className="page page-center">
+          <p role="status">正在加载…</p>
+        </main>
+      );
+    case 'error':
+      return (
+        <main className="page page-center">
+          <p role="alert">服务不可用，请稍后刷新重试</p>
+        </main>
+      );
+    case 'anonymous':
+      return <LoginPage onLoggedIn={(user) => setAuth({ status: 'ready', user })} />;
+    case 'ready':
+      return <HomePage user={auth.user} onLoggedOut={() => setAuth({ status: 'anonymous' })} />;
+  }
 }
