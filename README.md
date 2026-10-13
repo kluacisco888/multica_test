@@ -35,6 +35,24 @@ compose 项目名固定为 `dida-clone`，只有 `app` 和 `postgres` 两个服�
 
 `GET /api/health` 返回数据库状态，以及应用按 `TRUST_PROXY` 解析后看到的 `request.protocol/host/ip`，可以用来确认反向代理配置是否生效。
 
+## 账户
+
+不开放注册。第一个管理员在**第一次启动**时按 `.env` 的 `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` 创建：只在数据库里还没有任何用户时生效，重复启动不会重复创建，之后改 `.env` 里的密码也不会覆盖已有密码。没填 `INITIAL_ADMIN_PASSWORD` 的话，用下面的 `create-user` 建。
+
+登录后会话保存在 httpOnly Cookie `dida_session` 里（SameSite=Lax；`PUBLIC_URL` 是 https 时加 Secure），30 天不用才过期，使用期间自动续期。服务端只保存令牌的 SHA-256；密码用 argon2id 哈希。修改密码会让其他设备上的登录失效。
+
+管理命令在容器里运行（`dida` 是 `node /app/dist/cli.js` 的包装）：
+
+```bash
+docker compose exec app dida create-user <账号> [--admin]   # 新建用户，随后输入两次密码
+docker compose exec app dida reset-password <账号>          # 忘记密码时重置；该用户所有会话立即失效
+docker compose exec app dida disable-user <账号>            # 停用：无法登录，已有会话立即失效
+docker compose exec app dida enable-user <账号>             # 重新启用
+docker compose exec app dida list-users
+```
+
+密码不走命令行参数（会留在 shell 历史和 `ps` 里）：在终端里是隐藏输入，非交互时从标准输入读一行，例如 `printf '%s\n' '新密码' | docker compose exec -T app dida reset-password admin`。密码至少 8 位。
+
 ## 备份与恢复
 
 ```bash
@@ -104,7 +122,7 @@ scripts/      # 备份、恢复、测试辅助
 
 API 测试和 e2e 用的 PostgreSQL：设置了 `TEST_DATABASE_URL` 就用它（CI 就是这样）；否则自动启动 `docker-compose.test.yml`（项目 `dida-clone-test`，`127.0.0.1:55432`，数据在 tmpfs）。每个测试文件建一个独立的数据库。用完可以 `pnpm test:db:down`。
 
-写 API 测试用 `packages/server/test/support/test-app.ts` 的 `createTestApp()`：真实 Fastify + 迁移好的独立数据库，时钟可注入，用 `createUser()` 拿到带会话头的测试用户。
+写 API 测试用 `packages/server/test/support/test-app.ts` 的 `createTestApp()`：真实 Fastify + 迁移好的独立数据库，时钟可注入，`createUser()` 建用户并真实登录，返回带会话 Cookie 的请求头。e2e 用 `e2e/support.ts` 的 `createUser()`（调用构建好的 `dida` CLI）给每个测试建独立用户；e2e 服务器的初始管理员是 `admin` / `e2e-admin-password`。
 
 ### CI
 
@@ -115,4 +133,5 @@ CI 定义在 `ci/github-actions.yml`：lint、类型检查、四层测试，再�
 - 新建同步实体的表时，展开 `syncColumns()`（UUID 主键、`user_id`、`created_at`、`updated_at`、`revision`、`deleted_at`）并加 `syncIndex()`，然后在 `packages/server/src/sync/registry.ts` 注册。
 - 写这些表一律通过 `app.sync.transaction(userId, ops => ...)`：`ops.insert / update / softDelete` 会分配该用户新的修订号、按注入的时钟写 `updated_at`，删除只写 `deleted_at` 留下墓碑，并且只能改自己的数据。
 - `GET /api/changes?since=<revision>` 按实体类型返回 `upserts` 和 `tombstones`，以及当前 `revision`，下一次把它作为 `since` 传回。
-- 需要登录的接口用 `{ preHandler: app.authenticate }`。会话由 EURO-5 实现，在那之前所有这类接口都返回 401。
+- `/api` 下的接口默认都要登录（`src/auth.ts` 在 `onRoute` 里统一加 `app.authenticate`），未登录返回 401；只有声明了 `config: { public: true }` 的才公开（目前只有 health、login、logout，`test/api/access-control.test.ts` 会核对这份清单并逐个检查其余接口返回 401）。处理函数里用 `sessionUser(request)` 拿当前用户。
+- 按 id 读资源用 `findOwned(app.db, table, userId, id)`，写用 `app.sync.transaction`：别人的、已删除的、不存在的、非法 id 一律返回 null，接口统一回 404。

@@ -17,6 +17,15 @@ const app = await buildApp({
   logger: { level: config.logLevel },
 });
 
+const bootstrap = await app.accounts.bootstrapAdmin(config.initialAdmin);
+if (bootstrap === 'created') {
+  app.log.info({ username: config.initialAdmin.username }, 'created the initial administrator from .env');
+} else if (bootstrap === 'not_configured' && (await app.accounts.list()).length === 0) {
+  app.log.warn(
+    'no user exists: set INITIAL_ADMIN_USERNAME / INITIAL_ADMIN_PASSWORD in .env, or run `dida create-user <name> --admin`',
+  );
+}
+
 let closing = false;
 async function shutdown(signal: string) {
   if (closing) return;

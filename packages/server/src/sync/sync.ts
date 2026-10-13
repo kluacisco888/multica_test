@@ -81,6 +81,24 @@ function createOps(tx: Tx, userId: string, clock: Clock): SyncOps {
   };
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * A live record of `userId`, or null when it does not exist, is deleted, or
+ * belongs to another user. Resource routes answer null with 404, so another
+ * user's ids are indistinguishable from ids that never existed.
+ */
+export async function findOwned<T extends SyncTable>(
+  db: Db,
+  table: T,
+  userId: string,
+  id: string,
+): Promise<Row<T> | null> {
+  if (!UUID.test(id)) return null;
+  const rows = (await db.select().from(table as SyncTable).where(liveRecord(table, userId, id))) as Row<T>[];
+  return rows[0] ?? null;
+}
+
 export function createSyncWriter(db: Db, clock: Clock): SyncWriter {
   return {
     transaction(userId, fn) {

@@ -5,11 +5,11 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
-import { databaseUrl, ensureTestPostgres } from './test-postgres.mjs';
+import { databaseUrl, E2E_DATABASE, ensureTestPostgres } from './test-postgres.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const adminUrl = ensureTestPostgres();
-const database = 'dida_e2e';
+const database = E2E_DATABASE;
 
 const admin = new pg.Client({ connectionString: adminUrl });
 await admin.connect();
@@ -28,6 +28,9 @@ const child = spawn(process.execPath, [path.join(repoRoot, 'packages/server/dist
     DATA_DIR: path.join(repoRoot, 'test-results', 'e2e-data'),
     WEB_DIST_DIR: path.join(repoRoot, 'packages/web/dist'),
     LOG_LEVEL: 'warn',
+    // First start creates this 管理员 (e2e/auth.spec.ts logs in with it).
+    INITIAL_ADMIN_USERNAME: 'admin',
+    INITIAL_ADMIN_PASSWORD: 'e2e-admin-password',
   },
 });
 for (const signal of /** @type {const} */ (['SIGINT', 'SIGTERM'])) {

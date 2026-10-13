@@ -16,6 +16,8 @@ export interface AppConfig {
   webDistDir: string | undefined;
   defaultTimezone: string;
   logLevel: string;
+  /** First 管理员, created on start when the database has no user (see accounts.bootstrapAdmin). */
+  initialAdmin: { username: string | undefined; password: string | undefined };
 }
 
 function parseTrustProxy(value: string): TrustProxy {
@@ -38,6 +40,8 @@ const envSchema = z.object({
   DATA_DIR: z.string().min(1).default('/data'),
   WEB_DIST_DIR: z.string().min(1).optional(),
   DEFAULT_TIMEZONE: z.string().min(1).default('Asia/Shanghai'),
+  INITIAL_ADMIN_USERNAME: z.string().trim().min(1).optional(),
+  INITIAL_ADMIN_PASSWORD: z.string().min(1).optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 
@@ -63,5 +67,6 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
     webDistDir: parsed.WEB_DIST_DIR,
     defaultTimezone: parsed.DEFAULT_TIMEZONE,
     logLevel: parsed.LOG_LEVEL,
+    initialAdmin: { username: parsed.INITIAL_ADMIN_USERNAME, password: parsed.INITIAL_ADMIN_PASSWORD },
   };
 }

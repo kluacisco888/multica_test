@@ -39,6 +39,17 @@ describe('loadConfig', () => {
     expect(loadConfig({ ...base, TRUST_PROXY: value }).trustProxy).toEqual(expected);
   });
 
+  it('reads the initial administrator, treating empty values as unset', () => {
+    expect(loadConfig({ ...base, INITIAL_ADMIN_USERNAME: 'admin', INITIAL_ADMIN_PASSWORD: 's3cret-pass' }).initialAdmin).toEqual({
+      username: 'admin',
+      password: 's3cret-pass',
+    });
+    expect(loadConfig({ ...base, INITIAL_ADMIN_USERNAME: 'admin', INITIAL_ADMIN_PASSWORD: '' }).initialAdmin).toEqual({
+      username: 'admin',
+      password: undefined,
+    });
+  });
+
   it('rejects missing DATABASE_URL and invalid values with a readable message', () => {
     expect(() => loadConfig({})).toThrow(/DATABASE_URL/);
     expect(() => loadConfig({ ...base, PORT: '70000' })).toThrow(/PORT/);
