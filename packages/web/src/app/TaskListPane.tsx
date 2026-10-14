@@ -17,6 +17,7 @@ import {
   type KanbanColumn,
   type SearchMatchField,
   type SmartParseResult,
+  type TaskDatesInput,
   type Tag,
   type Task,
   type TaskList,
@@ -68,6 +69,8 @@ interface TaskListPaneProps {
   onAddTask: (title: string, smart: SmartParseResult | null) => Promise<boolean>;
   /** 智能识别 for 添加任务 and the 看板 column quick add; null while loading or switched off. */
   smart: SmartAddOptions | null;
+  /** The date 添加任务 gives new tasks here (今天, 明天 …): 智能识别's anchor. */
+  addDates: TaskDatesInput | null;
   onSelectTask: (taskId: string) => void;
   onToggleTask: (task: Task) => void;
   /**
@@ -384,6 +387,7 @@ export function TaskListPane(props: TaskListPaneProps) {
           target={props.addTarget}
           onAdd={props.onAddTask}
           smart={props.smart}
+          defaultDates={props.addDates}
         />}
 
       {boardMode ? (

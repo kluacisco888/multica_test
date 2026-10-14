@@ -1,4 +1,4 @@
-import { parseSmartInput, type SmartInputSettings, type SmartParseResult, type SmartToken } from '@dida/shared';
+import { parseSmartInput, type SmartInputSettings, type SmartParseResult, type SmartToken, type TaskDatesInput } from '@dida/shared';
 import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type InputHTMLAttributes } from 'react';
 import { Icon } from '../ui/Icon.js';
 
@@ -31,8 +31,12 @@ export interface SmartTitle {
   reset: () => void;
 }
 
-/** The text of a new-task field and what 智能识别 finds in it (spec 用户故事 51–58). */
-export function useSmartTitle(smart: SmartAddOptions | null): SmartTitle {
+/**
+ * The text of a new-task field and what 智能识别 finds in it (spec 用户故事 51–58).
+ * `defaultDates`: the date the field adds by itself (the clicked 日历 day or
+ * slot, tomorrow in 明天 …), the anchor when no date is typed.
+ */
+export function useSmartTitle(smart: SmartAddOptions | null, defaultDates: TaskDatesInput | null = null): SmartTitle {
   const [text, setTextState] = useState('');
   const [ignored, setIgnored] = useState<string[]>([]);
   const parsed = useMemo(() => {
@@ -44,8 +48,9 @@ export function useSmartTitle(smart: SmartAddOptions | null): SmartTitle {
       lists: smart.lists,
       keepText: smart.settings.keepText,
       ignored,
+      defaultDates,
     });
-  }, [smart, text, ignored]);
+  }, [smart, text, ignored, defaultDates]);
   const tokens = parsed?.tokens ?? [];
   return {
     text,
@@ -153,12 +158,15 @@ export function QuickAdd({
   target,
   onAdd,
   smart,
+  defaultDates = null,
 }: {
   target: string;
   onAdd: (title: string, smart: SmartParseResult | null) => Promise<boolean>;
   smart: SmartAddOptions | null;
+  /** The date the view gives new tasks (今天 / 明天 …). */
+  defaultDates?: TaskDatesInput | null;
 }) {
-  const title = useSmartTitle(smart);
+  const title = useSmartTitle(smart, defaultDates);
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {

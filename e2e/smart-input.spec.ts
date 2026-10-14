@@ -165,7 +165,7 @@ test('模糊时间 settings change what 上午 means', async ({ page }) => {
 
 // --- the other 新建任务 fields: 看板, 四象限, 日历 -------------------------------
 
-type ApiTask = { id: string; title: string; priority: string; tagIds: string[]; listId: string; dates: Record<string, unknown> | null };
+type ApiTask = { id: string; title: string; priority: string; tagIds: string[]; listId: string; dates: Record<string, unknown> | null; reminders: unknown[] };
 
 async function apiTasks(page: Page, query: string): Promise<ApiTask[]> {
   const res = await page.request.get(`/api/tasks?${query}`);
@@ -327,4 +327,66 @@ test('保留识别文字 and the 智能识别 switch apply to the 看板, 四象
   await page.getByRole('button', { name: /，新建任务$/ }).first().click();
   await page.getByRole('textbox', { name: '新任务标题' }).fill('明天上午打电话');
   await expect(page.getByTestId('smart-highlights')).toHaveCount(0);
+});
+
+test('四象限: a recognised !低 overrides the quadrant’s 优先级', async ({ page }) => {
+  const user = createUser('smart-matrix-low');
+  await logIn(page, user.username, user.password);
+  await openModule(page, '四象限');
+  await expect(page.getByRole('heading', { level: 1, name: '四象限' })).toBeVisible();
+
+  await page.getByRole('button', { name: '在「重要且紧急」中添加任务' }).click();
+  const input = page.getByRole('textbox', { name: '添加任务到「重要且紧急」' });
+  await input.fill('整理邮件 !低');
+  await expect(token(page, '优先级“!低”')).toBeVisible();
+  await input.press('Enter');
+
+  // 低优先级 belongs to 不重要但紧急 by default: the task moves there.
+  await expect(page.getByRole('region', { name: '不重要但紧急', exact: true }).getByRole('button', { name: '整理邮件', exact: true })).toBeVisible();
+  expect((await taskTitled(page, 'smart=notImportant', '整理邮件')).priority).toBe('low');
+});
+
+test('日历: a time or a 提醒 alone keeps the clicked day', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-13T04:00:00.000Z'));
+  const user = createUser('smart-calendar-anchor');
+  await logIn(page, user.username, user.password);
+  await openModule(page, '日历');
+  await expect(page.getByRole('heading', { level: 1, name: '2026年10月' })).toBeVisible();
+  const range = 'from=2026-09-28&to=2026-11-08';
+  const cell = (label: string) => page.getByRole('button', { name: new RegExp(`^${label} .*，新建任务$`) });
+  const input = page.getByRole('textbox', { name: '新任务标题' });
+
+  await cell('10月22日').click();
+  await input.fill('下午3点开会');
+  await expect(token(page, '时间“下午3点”')).toBeVisible();
+  await input.press('Enter');
+  expect((await taskTitled(page, range, '开会')).dates).toMatchObject({ allDay: false, dueAt: shanghaiAt('2026-10-22', '15:00') });
+  await page.keyboard.press('Escape');
+
+  await cell('10月23日').click();
+  await input.fill('提醒我交报告');
+  await input.press('Enter');
+  expect(await taskTitled(page, range, '交报告')).toMatchObject({
+    dates: { allDay: true, dueDate: '2026-10-23' },
+    reminders: [{ type: 'day', daysBefore: 0, time: null }],
+  });
+});
+
+test('明天: 提醒我续费 stays tomorrow, with a reminder', async ({ page }) => {
+  const user = createUser('smart-tomorrow');
+  await logIn(page, user.username, user.password);
+  const sidebar = await openSidebar(page);
+  await sidebar.getByRole('list', { name: '智能清单' }).getByRole('link', { name: /^明天/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: '明天' })).toBeVisible();
+
+  await quickAdd(page).fill('提醒我续费');
+  await expect(token(page, '提醒“提醒我”')).toBeVisible();
+  await quickAdd(page).press('Enter');
+  // Still in 明天 once saved.
+  await expect(page.getByRole('main').getByRole('button', { name: '续费', exact: true })).toBeVisible();
+  const tomorrow = shanghaiDate(1);
+  expect(await taskTitled(page, `from=${tomorrow}&to=${tomorrow}`, '续费')).toMatchObject({
+    dates: { allDay: true, dueDate: tomorrow },
+    reminders: [{ type: 'day', daysBefore: 0, time: null }],
+  });
 });

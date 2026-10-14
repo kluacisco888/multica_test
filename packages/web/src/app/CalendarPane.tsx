@@ -100,6 +100,8 @@ interface DragState {
 
 interface QuickAddState {
   date: string;
+  /** The task's dates from the clicked day or slot. */
+  dates: TaskDatesInput;
   /** `HH:mm` for a time slot; null: all-day. */
   time: string | null;
   x: number;
@@ -182,6 +184,7 @@ export function CalendarPane(props: CalendarPaneProps) {
     setQuickAdd({
       date,
       time,
+      dates: time ? { allDay: false, startAt: null, dueAt: zonedToInstant(date, time, timeZone) } : { allDay: true, startDate: null, dueDate: date },
       x: fromPointer ? event.clientX : rect.left + 8,
       y: fromPointer ? event.clientY : rect.top + 8,
       opener: event.currentTarget,
@@ -329,10 +332,7 @@ export function CalendarPane(props: CalendarPaneProps) {
           }}
           smart={props.smart}
           onSubmit={async (taskTitle, parsed) => {
-            const dates: TaskDatesInput = quickAdd.time
-              ? { allDay: false, startAt: null, dueAt: zonedToInstant(quickAdd.date, quickAdd.time, timeZone) }
-              : { allDay: true, startDate: null, dueDate: quickAdd.date };
-            const ok = await props.onCreateTask(taskTitle, dates, parsed);
+            const ok = await props.onCreateTask(taskTitle, quickAdd.dates, parsed);
             if (ok) setQuickAdd(null);
             return ok;
           }}
@@ -803,7 +803,8 @@ function QuickAddPopover({
   onSubmit: (title: string, smart: SmartParseResult | null) => Promise<boolean>;
   smart: SmartAddOptions | null;
 }) {
-  const title = useSmartTitle(smart);
+  // The clicked day or slot is 智能识别's anchor: a time alone goes on that day, a 提醒 alone keeps it.
+  const title = useSmartTitle(smart, state.dates);
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLFormElement>(null);
   const when = `${dayLabel(state.date)}${state.time ? ` ${state.time}` : ''}`;

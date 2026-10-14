@@ -1279,6 +1279,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
             onToggleSidebar={() => (isMobile ? setDrawerOpen((v) => !v) : setSidebarOpen((v) => !v))}
             onAddTask={addTask}
             smart={smartAdd}
+            addDates={addTarget?.request.dates ?? null}
             onSelectTask={selectTask}
             onToggleTask={(task) => changeTask(task, { status: task.status !== 'open' ? 'open' : 'completed' })}
             onIndent={indentTask}

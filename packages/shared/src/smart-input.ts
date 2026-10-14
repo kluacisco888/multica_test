@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { daysInMonth } from './civil-date.js';
 import type { RepeatRuleInput } from './repeat-rule.js';
 import { reminderFits, sortReminders, timeOfDaySchema, type Reminder } from './reminders.js';
-import { addDays, todayIn, weekday, zonedToInstant, type TaskDatesInput } from './task-dates.js';
+import { addDays, todayIn, weekday, zonedDateTime, zonedToInstant, type TaskDates, type TaskDatesInput } from './task-dates.js';
+import { TAG_NAME_MAX_LENGTH } from './tags.js';
 import type { CreateTaskRequest, Priority } from './tasks.js';
 
 /*
@@ -28,6 +29,14 @@ import type { CreateTaskRequest, Priority } from './tasks.js';
  *     name first), !高 / !中 / !低.
  *
  * Each kind is set once: a second date (time, 重复, 优先级, 清单) stays text.
+ *
+ * The view's own date (`defaultDates`: the clicked day or slot in the 日历,
+ * tomorrow in 明天 …) is the anchor when no date is written: a time alone
+ * goes on that day, a 提醒 alone keeps the day or slot, a 重复规则 starts
+ * from it. Without an anchor it is today.
+ *
+ * Not recognised (stays text): a #标签 longer than TAG_NAME_MAX_LENGTH, and
+ * *提前N分钟 / 小时 when the task ends up 全天 (it could not hold them).
  */
 
 export const DEFAULT_SMART_INPUT_SETTINGS = {
@@ -85,6 +94,8 @@ export interface SmartParseContext {
   keepText?: boolean;
   /** Texts the user cancelled (点一下取消识别): they stay plain text. */
   ignored?: readonly string[];
+  /** The view's date or slot, used when no date is written (see above). */
+  defaultDates?: TaskDatesInput | null;
 }
 
 export interface SmartParseResult {
@@ -164,7 +175,8 @@ interface Draft {
   /** The rule's first date when no date is written. */
   repeatAnchor?: string;
   remindMe?: boolean;
-  before: { minutes?: number; days: number; unit: 'minute' | 'day' }[];
+  /** `token`: index of its token, dropped when the lead does not fit the dates. */
+  before: { minutes?: number; days: number; unit: 'minute' | 'day'; token?: number }[];
   priority?: Priority;
   tagNames: string[];
   listId?: string;
@@ -172,6 +184,8 @@ interface Draft {
 
 interface Env {
   today: string;
+  /** Where 重复规则 without a date start: the anchor's day, else today. */
+  startDay: string;
   ctx: SmartParseContext;
   isWorkday: (date: string) => boolean;
 }
@@ -329,7 +343,7 @@ function matchRepeat(text: string, i: number, env: Env): Found | null {
     length,
     apply: (d) => Object.assign(d, { repeat, repeatAnchor: anchor }),
   });
-  const { today } = env;
+  const today = env.startDay;
   let m = exec(REPEAT_RES.workday, text, i);
   if (m) return found(m[0].length, { freq: 'workday' }, firstFrom(today, env.isWorkday));
   m = exec(REPEAT_RES.restday, text, i);
@@ -389,6 +403,7 @@ function matchSymbol(text: string, i: number, env: Env): Found | null {
     const m = exec(re('[#＃]([^\\s#＃]+)'), text, i);
     if (!m) return null;
     const name = m[1] as string;
+    if (name.length > TAG_NAME_MAX_LENGTH) return null;
     return { kind: 'tag', length: m[0].length, apply: (d) => void (d.tagNames.includes(name) || d.tagNames.push(name)) };
   }
   if (c === '~' || c === '～') {
@@ -420,8 +435,11 @@ function exec(regex: RegExp, text: string, i: number): RegExpExecArray | null {
 const SINGLE: readonly SmartTokenKind[] = ['date', 'time', 'repeat', 'priority', 'list'];
 
 export function parseSmartInput(text: string, ctx: SmartParseContext): SmartParseResult {
+  const today = todayIn(ctx.now, ctx.timeZone);
+  const anchor = ctx.defaultDates ?? null;
   const env: Env = {
-    today: todayIn(ctx.now, ctx.timeZone),
+    today,
+    startDay: anchor ? anchorDay(anchor, ctx.timeZone) : today,
     ctx,
     isWorkday: ctx.isWorkday ?? ((date) => weekday(date) !== 0 && weekday(date) !== 6),
   };
@@ -443,11 +461,19 @@ export function parseSmartInput(text: string, ctx: SmartParseContext): SmartPars
     if (ignored.has(token.text)) continue;
     if (SINGLE.includes(token.kind) && seen.has(token.kind)) continue;
     seen.add(token.kind);
+    const leads = draft.before.length;
     found.apply(draft);
+    if (draft.before.length > leads) (draft.before[leads] as Draft['before'][number]).token = tokens.length;
     tokens.push(token);
   }
 
-  return { tokens, title: cleanTitle(text, tokens, ctx.keepText ?? false), ...settle(draft, env) };
+  const { dropped, ...settled } = settle(draft, env);
+  const kept = tokens.filter((_, index) => !dropped.has(index));
+  return { tokens: kept, title: cleanTitle(text, kept, ctx.keepText ?? false), ...settled };
+}
+
+function anchorDay(dates: TaskDatesInput, timeZone: string): string {
+  return dates.allDay ? dates.dueDate : zonedDateTime(dates.dueAt, timeZone).date;
 }
 
 function cleanTitle(text: string, tokens: SmartToken[], keepText: boolean): string {
@@ -464,23 +490,34 @@ function cleanTitle(text: string, tokens: SmartToken[], keepText: boolean): stri
   return title || whole;
 }
 
-function settle(d: Draft, env: Env): Omit<SmartParseResult, 'tokens' | 'title'> {
+function settle(d: Draft, env: Env): Omit<SmartParseResult, 'tokens' | 'title'> & { dropped: Set<number> } {
   const { ctx, today } = env;
-  const hasReminder = d.remindMe || d.before.length > 0;
-  let date = d.date ?? d.repeatAnchor;
-  if (!date && d.time) {
-    // Today, or tomorrow once the time has passed.
-    date = Date.parse(zonedToInstant(today, d.time, ctx.timeZone)) <= ctx.now.getTime() ? addDays(today, 1) : today;
-  }
-  if (!date && hasReminder) date = today;
+  const anchor = ctx.defaultDates ?? null;
+  const timedAt = (date: string, time: string): TaskDatesInput => ({ allDay: false, startAt: null, dueAt: zonedToInstant(date, time, ctx.timeZone) });
+  const allDayOn = (date: string): TaskDatesInput => ({ allDay: true, startDate: null, dueDate: date });
+  // Leads an all-day task can hold: 提醒我 and *提前N天.
+  const allDayReminder = d.remindMe || d.before.some((b) => b.unit === 'day');
 
   let dates: TaskDatesInput | null = null;
-  if (date) dates = d.time ? { allDay: false, startAt: null, dueAt: zonedToInstant(date, d.time, ctx.timeZone) } : { allDay: true, startDate: null, dueDate: date };
+  const written = d.date ?? d.repeatAnchor;
+  if (written) dates = d.time ? timedAt(written, d.time) : allDayOn(written);
+  else if (d.time) {
+    // On the anchor's day; without one today, or tomorrow once the time has passed.
+    const day = anchor ? anchorDay(anchor, ctx.timeZone) : Date.parse(zonedToInstant(today, d.time, ctx.timeZone)) <= ctx.now.getTime() ? addDays(today, 1) : today;
+    dates = timedAt(day, d.time);
+  } else if (anchor) {
+    // Only 提醒: they go on the view's own day or slot.
+    if (anchor.allDay ? allDayReminder : d.remindMe || d.before.length > 0) dates = anchor;
+  } else if (allDayReminder) dates = allDayOn(today);
 
   const reminders: Reminder[] = [];
+  const dropped = new Set<number>();
+  const timed = dates !== null && !dates.allDay;
+  for (const b of d.before) if (!dates || (!timed && b.unit === 'minute')) dropped.add(b.token ?? -1);
   if (dates) {
-    const timed = !dates.allDay;
-    const stored = timed ? { allDay: false as const, startAt: null, dueAt: (dates as { dueAt: string }).dueAt, timeZone: ctx.timeZone } : { allDay: true as const, startDate: null, dueDate: date as string };
+    const stored: TaskDates = dates.allDay
+      ? { allDay: true, startDate: dates.startDate ?? null, dueDate: dates.dueDate }
+      : { allDay: false, startAt: dates.startAt ?? null, dueAt: dates.dueAt, timeZone: ctx.timeZone };
     const wanted: Reminder[] = [
       ...(d.remindMe ? [timed ? { type: 'before' as const, minutes: 0 } : { type: 'day' as const, daysBefore: 0, time: null }] : []),
       ...d.before.flatMap((b): Reminder[] => {
@@ -504,6 +541,7 @@ function settle(d: Draft, env: Env): Omit<SmartParseResult, 'tokens' | 'title'> 
     priority: d.priority ?? null,
     tagNames: d.tagNames,
     listId: d.listId ?? null,
+    dropped,
   };
 }
 

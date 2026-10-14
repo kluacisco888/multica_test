@@ -240,9 +240,13 @@ describe('智能识别: 提醒', () => {
     expect(parseSmartInput('明天交电费 *提前1天', ctx()).reminders).toEqual([{ type: 'day', daysBefore: 1, time: null }]);
   });
 
-  it('drops a minutes reminder a 全天 task cannot have', () => {
+  it('does not recognise *提前N分钟 / 小时 on a 全天 task: it stays text', () => {
     const r = parseSmartInput('明天交电费 *提前30分钟', ctx());
     expect(r.reminders).toEqual([]);
+    expect(r.tokens.map((t) => t.text)).toEqual(['明天']);
+    expect(r.title).toBe('交电费 *提前30分钟');
+    const alone = parseSmartInput('交电费 *提前1小时', ctx());
+    expect(alone).toMatchObject({ tokens: [], dates: null, reminders: [], title: '交电费 *提前1小时' });
   });
 
   it('combines 提醒我 and *提前', () => {
@@ -263,6 +267,12 @@ describe('智能识别: #标签, ~清单, !优先级', () => {
       ['tag', '#购物'],
       ['tag', '#家里'],
     ]);
+  });
+
+  it('a #标签 longer than a 标签 name may be stays text', () => {
+    const long = 'a'.repeat(65);
+    expect(parseSmartInput(`买牛奶 #${long}`, ctx())).toMatchObject({ tokens: [], tagNames: [], title: `买牛奶 #${long}` });
+    expect(parseSmartInput(`买牛奶 #${'a'.repeat(64)}`, ctx()).tagNames).toEqual(['a'.repeat(64)]);
   });
 
   it('a lone # is not a 标签', () => {
@@ -399,5 +409,63 @@ describe('智能识别: the new task', () => {
   it('adds a 重复规则 with its first date', () => {
     const request = smartCreateRequest({}, parseSmartInput('每个工作日晚上跑步', ctx()), []);
     expect(request).toEqual({ title: '跑步', dates: timed('2026-10-14', '20:00'), repeat: { freq: 'workday' } });
+  });
+});
+
+describe('智能识别: the view’s own date as the anchor (日历 day / slot, 明天 …)', () => {
+  const day = allDay('2026-10-22');
+  const slot = timed('2026-10-22', '09:30');
+
+  it('a time alone goes on the anchor’s day', () => {
+    const r = parseSmartInput('下午3点开会', ctx({ defaultDates: day }));
+    expect(r.dates).toEqual(timed('2026-10-22', '15:00'));
+    // Even one already past today.
+    expect(parseSmartInput('7点开会', ctx({ defaultDates: day })).dates).toEqual(timed('2026-10-22', '07:00'));
+    // A time replaces the time of a slot.
+    expect(parseSmartInput('下午3点开会', ctx({ defaultDates: slot })).dates).toEqual(timed('2026-10-22', '15:00'));
+  });
+
+  it('提醒我 alone keeps the anchor’s day or slot', () => {
+    expect(parseSmartInput('提醒我交报告', ctx({ defaultDates: day }))).toMatchObject({
+      title: '交报告',
+      dates: day,
+      reminders: [{ type: 'day', daysBefore: 0, time: null }],
+    });
+    expect(parseSmartInput('提醒我交报告', ctx({ defaultDates: slot }))).toMatchObject({ dates: slot, reminders: [{ type: 'before', minutes: 0 }] });
+  });
+
+  it('*提前30分钟 fits an anchored slot, not an anchored day', () => {
+    expect(parseSmartInput('交材料 *提前30分钟', ctx({ defaultDates: slot }))).toMatchObject({
+      title: '交材料',
+      dates: slot,
+      reminders: [{ type: 'before', minutes: 30 }],
+    });
+    expect(parseSmartInput('交材料 *提前30分钟', ctx({ defaultDates: day }))).toMatchObject({
+      title: '交材料 *提前30分钟',
+      tokens: [],
+      dates: null,
+      reminders: [],
+    });
+  });
+
+  it('nothing date-like keeps no dates, so the view’s own stay', () => {
+    const r = parseSmartInput('交报告 #工作', ctx({ defaultDates: day }));
+    expect(r.dates).toBeNull();
+    expect(smartCreateRequest({ dates: day }, r, []).dates).toEqual(day);
+  });
+
+  it('a written date still wins over the anchor', () => {
+    expect(parseSmartInput('明天下午3点开会', ctx({ defaultDates: day })).dates).toEqual(timed('2026-10-15', '15:00'));
+  });
+
+  it('a 重复规则 without a date starts from the anchor’s day', () => {
+    expect(parseSmartInput('每周五跑步', ctx({ defaultDates: day })).dates).toEqual(allDay('2026-10-23'));
+    expect(parseSmartInput('每天跑步', ctx({ defaultDates: day })).dates).toEqual(allDay('2026-10-22'));
+  });
+
+  it('明天 清单: 提醒我续费 is tomorrow with a reminder', () => {
+    const tomorrow = allDay('2026-10-15');
+    const request = smartCreateRequest({ dates: tomorrow }, parseSmartInput('提醒我续费', ctx({ defaultDates: tomorrow })), []);
+    expect(request).toEqual({ title: '续费', dates: tomorrow, reminders: [{ type: 'day', daysBefore: 0, time: null }] });
   });
 });
