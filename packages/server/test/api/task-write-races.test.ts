@@ -59,6 +59,7 @@ describe('task writes racing 标签 / 清单 deletion', () => {
 
   it(`打标签 (PATCH) + 删标签, ${ROUNDS} rounds: no task keeps a deleted 标签 id`, async () => {
     const outcomes: Record<string, number> = {};
+    const tagsBefore = (await liveTagIds()).size;
     for (let i = 0; i < ROUNDS; i++) {
       const keep = await createTag(`keep-${i}`);
       const doomed = await createTag(`doomed-${i}`);
@@ -76,7 +77,7 @@ describe('task writes racing 标签 / 清单 deletion', () => {
     }
     console.info(`[EURO-35] 打标签 + 删标签 × ${ROUNDS}:`, outcomes);
     // Only the 标签 kept each round are left.
-    expect((await liveTagIds()).size).toBe(ROUNDS);
+    expect((await liveTagIds()).size).toBe(tagsBefore + ROUNDS);
   });
 
   it(`新建带标签的任务 (POST) + 删标签, ${ROUNDS} rounds: no task keeps a deleted 标签 id`, async () => {
