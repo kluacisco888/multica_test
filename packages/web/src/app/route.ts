@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from 'react';
  *   /trash                         → the 回收站
  *   /calendar                      → 日历 (last used view, today)
  *   /calendar/<mode>/<YYYY-MM-DD>  → 日历 in 月 / 周 / 日 / 多日 (`month` / `week` / `day` / `multiDay`) around a date
+ *   /matrix                        → 四象限
  * Each but /trash takes `/tasks/<taskId>` for an open 任务.
  */
 
@@ -35,13 +36,17 @@ export interface Route {
   trash?: boolean;
   /** Non-null: the 日历. */
   calendar?: CalendarRoute | null;
+  /** The 四象限. */
+  matrix?: boolean;
 }
 
-const EMPTY: Required<Route> = { listId: null, tagId: null, smartId: null, filterId: null, search: null, taskId: null, trash: false, calendar: null };
+const EMPTY: Required<Route> = { listId: null, tagId: null, smartId: null, filterId: null, search: null, taskId: null, trash: false, calendar: null, matrix: false };
 
 export function parseRoute(pathname: string): Route {
   if (/^\/trash\/?$/.test(pathname)) return { ...EMPTY, trash: true };
   if (/^\/search\/?$/.test(pathname)) return { ...EMPTY, search: '' };
+  const matrix = /^\/matrix(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
+  if (matrix) return { ...EMPTY, matrix: true, taskId: matrix[1] ? safeDecode(matrix[1]) : null };
   const calendar = /^\/calendar(?:\/([^/]+)\/([^/]+))?(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
   if (calendar) {
     const mode = calendarModeSchema.safeParse(calendar[1]);
@@ -84,10 +89,11 @@ function safeDecode(value: string): string | null {
   }
 }
 
-export function routePath({ listId, tagId, smartId, filterId, search, taskId, trash, calendar }: Route): string {
+export function routePath({ listId, tagId, smartId, filterId, search, taskId, trash, calendar, matrix }: Route): string {
   if (trash) return '/trash';
   let base: string;
-  if (calendar) base = calendar.mode && calendar.date ? `/calendar/${calendar.mode}/${calendar.date}` : '/calendar';
+  if (matrix) base = '/matrix';
+  else if (calendar) base = calendar.mode && calendar.date ? `/calendar/${calendar.mode}/${calendar.date}` : '/calendar';
   else if (search !== null && search !== undefined) base = search ? `/search/${encodeURIComponent(search)}` : '/search';
   else if (smartId) base = `/smart/${smartId}`;
   else if (filterId) base = `/filters/${encodeURIComponent(filterId)}`;

@@ -180,6 +180,8 @@ export const tasksQuerySchema = z.union([
   z.object({ tagId: z.uuid() }).strict(),
   z.object({ smart: smartListIdSchema }).strict(),
   z.object({ filterId: z.uuid() }).strict(),
+  /** 四象限: the tasks some quadrant takes, from every 清单 except archived ones (spec 用户故事 72). */
+  z.object({ view: z.literal('matrix') }).strict(),
   /** 日历视图: open and completed tasks on any day `from`–`to` in the user's time zone (spec 用户故事 69). */
   calendarRangeSchema,
 ]);

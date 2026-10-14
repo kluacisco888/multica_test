@@ -4,6 +4,7 @@ import {
   listInSmartLists,
   matchesFilter,
   matchesSmartList,
+  quadrantMatcher,
   SMART_LIST_NAMES,
   tagWithChildren,
   taskInRange,
@@ -12,6 +13,7 @@ import {
   type CalendarRange,
   type CreateTaskRequest,
   type Filter,
+  type Quadrant,
   type SmartListId,
   type ViewLayout,
   type Tag,
@@ -24,7 +26,7 @@ import {
 
 /*
  * The task views of the middle column: one 清单, one 标签, a 智能清单, a
- * 过滤器, the 搜索 results, or the days of the 日历 on screen. Everything the shell needs to know per view
+ * 过滤器, the 搜索 results, the days of the 日历 on screen, or the 四象限. Everything the shell needs to know per view
  * lives here, so adding a view kind touches one switch per question.
  */
 
@@ -34,11 +36,12 @@ export type ListPaneView =
   | { kind: 'smart'; id: SmartListId; inbox: TaskList | null }
   | { kind: 'filter'; filter: Filter; inbox: TaskList | null }
   | { kind: 'search'; query: string }
-  | { kind: 'calendar'; range: CalendarRange };
+  | { kind: 'calendar'; range: CalendarRange }
+  | { kind: 'matrix'; quadrants: readonly Quadrant[] };
 
 /** Layouts the 视图 switcher offers here (see `layoutsFor`); the 日历 has its own views. */
 export function viewLayouts(view: ListPaneView): ViewLayout[] {
-  return view.kind === 'calendar' ? [] : layoutsFor(view.kind);
+  return view.kind === 'calendar' || view.kind === 'matrix' ? [] : layoutsFor(view.kind);
 }
 
 /** Key of the view in 设置 → `viewOptions` and of the task set on screen. */
@@ -56,6 +59,8 @@ export function viewKey(view: ListPaneView): string {
       return 'search';
     case 'calendar':
       return 'calendar';
+    case 'matrix':
+      return 'matrix';
   }
 }
 
@@ -80,6 +85,8 @@ export function viewTitle(view: ListPaneView): string {
       return '搜索';
     case 'calendar':
       return '日历';
+    case 'matrix':
+      return '四象限';
   }
 }
 
@@ -98,6 +105,8 @@ export function tasksQuery(view: ListPaneView): TasksQuery | null {
       return null;
     case 'calendar':
       return view.range;
+    case 'matrix':
+      return { view: 'matrix' };
   }
 }
 
@@ -128,6 +137,7 @@ export function quickAddTarget(view: ListPaneView, clock: ViewClock): { name: st
       return view.inbox ? { name: view.inbox.name, request: {} } : null;
     case 'search':
     case 'calendar':
+    case 'matrix':
       return null;
   }
 }
@@ -162,6 +172,10 @@ export function belongsToView(
     case 'calendar': {
       const list = context.lists.find((l) => l.id === task.listId);
       return list !== undefined && list.archivedAt === null && task.status !== 'abandoned' && taskInRange(task.dates, view.range, context.timeZone);
+    }
+    case 'matrix': {
+      const list = context.lists.find((l) => l.id === task.listId);
+      return list !== undefined && list.archivedAt === null && quadrantMatcher(view.quadrants, context.tags, context).indexOf(task) >= 0;
     }
   }
 }

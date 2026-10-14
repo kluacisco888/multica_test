@@ -3,9 +3,11 @@ import {
   COUNTED_SMART_LISTS,
   filterRulesSchema,
   listInSmartLists,
+  liveQuadrants,
   liveRules,
   matchesFilter,
   matchesSmartList,
+  quadrantMatcher,
   tagWithChildren,
   taskInRange,
   type CalendarRange,
@@ -136,4 +138,29 @@ export async function calendarTasks(db: Executor, userId: string, range: Calenda
     .sort(compareTasks)
     .map(taskToApi)
     .filter((task) => taskInRange(task.dates, range, timeZone));
+}
+
+/**
+ * 四象限 (spec 用户故事 72): open and completed tasks that some quadrant's
+ * rules take, from every 清单 except archived ones. Each quadrant's tasks are
+ * then picked out with the same `quadrantMatcher` on the client.
+ */
+export async function matrixTasks(db: Executor, userId: string, now: Date): Promise<Task[]> {
+  const [rows, listRows, tagRows, settings, refs] = await Promise.all([
+    liveTaskRows(db, userId),
+    db
+      .select({ id: lists.id, archivedAt: lists.archivedAt })
+      .from(lists)
+      .where(and(eq(lists.userId, userId), isNull(lists.deletedAt))),
+    liveTags(db, userId),
+    readSettings(db, userId),
+    ruleRefs(db, userId),
+  ]);
+  const shown = new Set(listRows.filter((l) => l.archivedAt === null).map((l) => l.id));
+  const matcher = quadrantMatcher(liveQuadrants(settings.matrixQuadrants, refs.liveLists, refs.liveTags), tagRows, { now, timeZone: settings.timeZone });
+  return rows
+    .filter((row) => shown.has(row.listId))
+    .sort(compareTasks)
+    .map(taskToApi)
+    .filter((task) => matcher.indexOf(task) >= 0);
 }

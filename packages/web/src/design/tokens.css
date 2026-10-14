@@ -186,6 +186,16 @@
   --calendar-cell-head: 29px; /* CalendarPane CELL_HEAD */
   --calendar-row-min: 96px; /* a 月 week row never gets shorter than this */
 
+  /* ---- 四象限 (EURO-23) ----
+   * Measured from the reference 四象限 (1440×900): page #f8faff (the 日历's
+   * --color-calendar-bg), 2×2 white cards 667×404 from x 72, 12px apart, 22px
+   * from the edges, radius 8px; rows 40px with a #f2f2f3 line. */
+  --matrix-gap: 12px;
+  --matrix-padding: 22px;
+  --matrix-badge-size: 18px;
+  --matrix-detail-width: 400px;
+  --color-matrix-row-line: #f2f2f3;
+
   --kanban-column-width: 258px; /* reference 看板 column (314→572 at 1440) */
   --kanban-column-gap: 20px; /* column → next column / “+ 新分组” */
   --kanban-header-height: 28px;
@@ -365,6 +375,9 @@
   --color-timeline-today: rgb(255 107 107 / 0.35);
   --color-timeline-bar: var(--accent);
   --color-timeline-day-dim: #9a9ba0;
+
+  /* 四象限 (EURO-23) */
+  --color-matrix-row-line: #2c2c2f;
 
   /* 日历 (EURO-19); text keeps 4.5:1 on --color-calendar-bg and on the bars. The 休 / 班
    * marks keep their 浅色 fills: white text on them already reads in 深色. */

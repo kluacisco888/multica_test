@@ -225,6 +225,9 @@ describe('migration 0015_pinned_tasks', () => {
         ).rows[0]!.n === 1;
       await runMigrations(database.db);
       expect(await hasColumn()).toBe(true);
+      // Later migrations come off first (0016_matrix_quadrants, EURO-23).
+      expect(await rollbackLastMigration(database.pool)).toBe('0016_matrix_quadrants');
+      expect(await hasColumn()).toBe(true);
       expect(await rollbackLastMigration(database.pool)).toBe('0015_pinned_tasks');
       expect(await hasColumn()).toBe(false);
       await runMigrations(database.db);

@@ -1,0 +1,324 @@
+/*
+ * 四象限 (spec 用户故事 72、73): a 2×2 grid of quadrant cards laid out after
+ * the reference 四象限 (ADR-0008 screenshots, 1440×900 and 390×844).
+ * Tokens: design/tokens.css (四象限 block).
+ */
+
+.shell-matrix .detail {
+  flex: none;
+  width: var(--matrix-detail-width);
+  border-left: 1px solid var(--color-divider);
+}
+
+.matrix-pane {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  background: var(--color-calendar-bg);
+}
+
+.matrix-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--header-height);
+  padding: 0 var(--space-4) 0 calc(var(--matrix-padding) + 8px);
+}
+
+.matrix-title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.matrix-grid {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: var(--matrix-gap);
+  min-height: 0;
+  padding: 0 var(--matrix-padding) 16px;
+}
+
+.matrix-quadrant {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 0 0;
+  background: var(--color-bg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+}
+
+.matrix-quadrant-drop {
+  border-color: var(--color-brand);
+  background: var(--color-bg-selected);
+}
+
+.matrix-quadrant-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 var(--space-4) 0 12px;
+}
+
+.matrix-quadrant-badge {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: var(--matrix-badge-size);
+  height: var(--matrix-badge-size);
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  color: var(--color-on-brand);
+  border-radius: 50%;
+}
+
+.matrix-quadrant-1 .matrix-quadrant-badge {
+  background: var(--color-priority-high);
+}
+
+.matrix-quadrant-2 .matrix-quadrant-badge {
+  background: var(--color-priority-medium);
+}
+
+.matrix-quadrant-3 .matrix-quadrant-badge {
+  background: var(--color-priority-low);
+}
+
+.matrix-quadrant-4 .matrix-quadrant-badge {
+  background: var(--color-success);
+}
+
+.matrix-quadrant-name {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* + and ··· appear on hover / focus like the reference; always on touch screens. */
+.matrix-quadrant-action,
+.matrix-quadrant-action .ui-icon-button {
+  width: 24px;
+  height: 24px;
+  color: var(--color-text-secondary);
+}
+
+.matrix-quadrant-action {
+  opacity: 0;
+}
+
+.matrix-quadrant:hover .matrix-quadrant-action,
+.matrix-quadrant-action:focus-visible,
+.matrix-quadrant-action:focus-within,
+.matrix-quadrant-action:has([aria-expanded='true']) {
+  opacity: 1;
+}
+
+.matrix-quadrant-body {
+  flex: 1;
+  min-height: 0;
+  padding: 0 30px var(--space-2) 20px;
+  overflow-y: auto;
+}
+
+.matrix-status,
+.matrix-empty {
+  margin: var(--space-6) 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.matrix-add {
+  flex: none;
+  padding: var(--space-2) var(--space-4) 0 20px;
+}
+
+.matrix-add-input {
+  width: 100%;
+  height: var(--input-height);
+  padding: 0 var(--space-2);
+  font: inherit;
+  font-size: var(--font-size-md);
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-brand);
+  border-radius: var(--radius-md);
+  outline: none;
+}
+
+.matrix-add-input::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+.matrix-section-heading {
+  margin: 0;
+  font-size: var(--font-size-md);
+}
+
+.matrix-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0;
+  font: inherit;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.matrix-section-toggle svg {
+  color: var(--color-text-secondary);
+}
+
+.matrix-section-count {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+}
+
+.matrix-rows {
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.matrix-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--task-row-height);
+  padding-left: 10px;
+  border-radius: var(--radius-md);
+}
+
+.matrix-row[draggable='true'] {
+  cursor: grab;
+}
+
+.matrix-row:hover {
+  background: var(--color-bg-hover);
+}
+
+.matrix-row-selected,
+.matrix-row-selected:hover {
+  background: var(--color-bg-selected);
+}
+
+/* The line under a row starts at the title, like the reference. */
+.matrix-row-line {
+  display: flex;
+  flex: 1;
+  align-self: stretch;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  border-bottom: 1px solid var(--color-matrix-row-line);
+}
+
+.matrix-row-title {
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  font: inherit;
+  font-size: var(--font-size-md);
+  color: var(--color-text);
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.matrix-row-done .matrix-row-title {
+  color: var(--color-text-done);
+}
+
+.matrix-row-meta {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  max-width: 50%;
+  padding-right: 2px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.matrix-row-list {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.matrix-row-icon {
+  display: inline-grid;
+  place-items: center;
+}
+
+.matrix-row-date {
+  color: var(--color-date);
+  white-space: nowrap;
+}
+
+.matrix-row-date-done {
+  color: var(--color-text-secondary);
+}
+
+.matrix-row-date.date-overdue {
+  color: var(--color-danger);
+}
+
+/* Reference at 390px: the grid keeps two columns and scrolls sideways, each card almost the screen wide. */
+@media (max-width: 767px) {
+  .shell-matrix .detail {
+    flex: 1 1 auto;
+    width: auto;
+    border-left: 0;
+  }
+
+  .matrix-header {
+    padding: 0 var(--space-3);
+  }
+
+  .matrix-grid {
+    grid-template-columns: repeat(2, calc(100vw - 64px));
+    gap: var(--matrix-gap);
+    padding: 0 var(--matrix-padding) var(--space-4);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+  }
+
+  .matrix-quadrant {
+    scroll-snap-align: start;
+  }
+
+  .matrix-quadrant-action {
+    opacity: 1;
+  }
+
+  .matrix-quadrant-body {
+    padding: 0 var(--space-3) var(--space-2) var(--space-3);
+  }
+}
