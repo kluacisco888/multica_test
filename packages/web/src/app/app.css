@@ -495,26 +495,28 @@ body {
   outline: none;
 }
 
-.quick-add-field {
-  position: relative;
-  display: flex;
-  flex: 1;
-  min-width: 0;
+.quick-add .smart-field {
   height: 100%;
 }
 
-/* 智能识别 highlights: a layer over the input with the same text metrics; only the highlights show and take clicks. */
-.quick-add-highlights {
+/* 智能识别 (QuickAdd.tsx): the field wraps a new-task input; the highlight layer copies the input's text box. */
+.smart-field {
+  position: relative;
+  display: flex;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+}
+
+.smart-highlights {
   position: absolute;
-  inset: 0;
   display: flex;
   align-items: center;
   overflow: hidden;
   pointer-events: none;
 }
 
-.quick-add-highlights-text {
-  font-size: var(--font-size-md);
+.smart-highlights-text {
   white-space: pre;
   color: transparent;
 }

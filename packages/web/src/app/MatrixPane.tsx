@@ -11,11 +11,13 @@ import {
   type TaskList,
   type TaskSection,
   type UpdateTaskRequest,
+  type SmartParseResult,
 } from '@dida/shared';
 import { useState, type DragEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { ContextMenu, IconButton, MenuButton, TaskCheckbox, type ContextMenuSection } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { taskContextSections } from './taskMeta.js';
+import { SmartTitleInput, submitSmart, useSmartTitle, type SmartAddOptions } from './QuickAdd.js';
 
 interface MatrixPaneProps {
   quadrants: readonly Quadrant[];
@@ -36,7 +38,9 @@ interface MatrixPaneProps {
   /** A task dropped on (or moved from the menu to) quadrant `index`. */
   onMoveTask: (task: Task, index: number) => void;
   /** Quick add in quadrant `index`. */
-  onAddTask: (index: number, title: string) => Promise<boolean>;
+  onAddTask: (index: number, title: string, smart: SmartParseResult | null) => Promise<boolean>;
+  /** 智能识别 for the quadrant quick add; null when off. */
+  smart: SmartAddOptions | null;
   onEditQuadrant: (index: number) => void;
   onResetQuadrant: (index: number) => void;
 }
@@ -157,7 +161,7 @@ export function MatrixPane(props: MatrixPaneProps) {
                 />
               </header>
               {addingIn === index && (
-                <QuadrantAddForm name={quadrant.name} onAdd={(title) => props.onAddTask(index, title)} onClose={() => setAddingIn(null)} />
+                <QuadrantAddForm name={quadrant.name} onAdd={(title, parsed) => props.onAddTask(index, title, parsed)} smart={props.smart} onClose={() => setAddingIn(null)} />
               )}
               <div className="matrix-quadrant-body">
                 {tasks === null ? (
@@ -371,30 +375,38 @@ function MatrixRow({
   );
 }
 
-function QuadrantAddForm({ name, onAdd, onClose }: { name: string; onAdd: (title: string) => Promise<boolean>; onClose: () => void }) {
-  const [title, setTitle] = useState('');
+function QuadrantAddForm({
+  name,
+  onAdd,
+  onClose,
+  smart,
+}: {
+  name: string;
+  onAdd: (title: string, smart: SmartParseResult | null) => Promise<boolean>;
+  onClose: () => void;
+  smart: SmartAddOptions | null;
+}) {
+  const title = useSmartTitle(smart);
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const trimmed = title.trim();
-    if (!trimmed || busy) return;
+    if (!title.text.trim() || busy) return;
     setBusy(true);
-    if (await onAdd(trimmed)) setTitle('');
+    if (await submitSmart(title, onAdd)) title.reset();
     setBusy(false);
   }
 
   return (
     <form className="matrix-add" onSubmit={(e) => void submit(e)}>
-      <input
+      <SmartTitleInput
+        smart={title}
         className="matrix-add-input"
         aria-label={`添加任务到「${name}」`}
         placeholder="添加任务，回车即可保存"
-        value={title}
         maxLength={512}
         autoFocus
         enterKeyHint="done"
-        onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
             e.preventDefault();
@@ -402,7 +414,7 @@ function QuadrantAddForm({ name, onAdd, onClose }: { name: string; onAdd: (title
           }
         }}
         onBlur={() => {
-          if (!title.trim()) onClose();
+          if (!title.text.trim()) onClose();
         }}
       />
     </form>

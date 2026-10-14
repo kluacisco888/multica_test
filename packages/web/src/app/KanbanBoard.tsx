@@ -11,16 +11,18 @@ import {
   type Tag,
   type Task,
   type TaskSection,
+  type SmartParseResult,
 } from '@dida/shared';
 import { useEffect, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { IconButton, MenuButton, TaskCheckbox, type MenuItem } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { chipStyle, tagsOf } from './taskMeta.js';
+import { SmartTitleInput, submitSmart, useSmartTitle, type SmartAddOptions } from './QuickAdd.js';
 
 /** What a 清单 board can do; absent on 智能清单 / 过滤器 boards (their columns are automatic). */
 export interface ManualBoardActions {
   /** Add a task to a column (null: 未分组). */
-  onAddTask: (columnId: string | null, title: string) => Promise<boolean>;
+  onAddTask: (columnId: string | null, title: string, smart: SmartParseResult | null) => Promise<boolean>;
   /** Add a 分栏 with this sort key (null: at the right end). */
   onAddColumn: (name: string, sortOrder: string | null) => Promise<boolean>;
   onRenameColumn: (column: KanbanColumn, name: string) => Promise<boolean>;
@@ -42,6 +44,8 @@ interface KanbanBoardProps {
   onToggleTask: (task: Task) => void;
   onOpenMenu: (task: Task, x: number, y: number, opener: HTMLElement | null) => void;
   manual: ManualBoardActions | null;
+  /** 智能识别 for the column quick add; null when off. */
+  smart: SmartAddOptions | null;
 }
 
 type Editor = { kind: 'new-column'; sortOrder: string | null; afterKey: string | null } | { kind: 'rename'; columnId: string } | null;
@@ -193,7 +197,8 @@ export function KanbanBoard(props: KanbanBoardProps) {
               {manual && addingIn === column.key && (
                 <CardAddForm
                   columnTitle={column.title}
-                  onAdd={(title) => manual.onAddTask(column.column?.id ?? null, title)}
+                  onAdd={(title, parsed) => manual.onAddTask(column.column?.id ?? null, title, parsed)}
+                  smart={props.smart}
                   onClose={() => setAddingIn(null)}
                 />
               )}
@@ -470,31 +475,39 @@ function ColumnNameForm({
   );
 }
 
-/** Quick add at the top of a column; stays open for the next task, Esc closes it. */
-function CardAddForm({ columnTitle, onAdd, onClose }: { columnTitle: string; onAdd: (title: string) => Promise<boolean>; onClose: () => void }) {
-  const [title, setTitle] = useState('');
+/** Quick add at the top of a column, with 智能识别; stays open for the next task, Esc closes it. */
+function CardAddForm({
+  columnTitle,
+  onAdd,
+  onClose,
+  smart,
+}: {
+  columnTitle: string;
+  onAdd: (title: string, smart: SmartParseResult | null) => Promise<boolean>;
+  onClose: () => void;
+  smart: SmartAddOptions | null;
+}) {
+  const title = useSmartTitle(smart);
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const trimmed = title.trim();
-    if (!trimmed || busy) return;
+    if (!title.text.trim() || busy) return;
     setBusy(true);
-    if (await onAdd(trimmed)) setTitle('');
+    if (await submitSmart(title, onAdd)) title.reset();
     setBusy(false);
   }
 
   return (
     <form className="kanban-card-add" onSubmit={(e) => void submit(e)}>
-      <input
+      <SmartTitleInput
+        smart={title}
         className="kanban-card-add-input"
         aria-label={`添加任务到「${columnTitle}」`}
         placeholder="添加任务，回车即可保存"
-        value={title}
         maxLength={512}
         autoFocus
         enterKeyHint="done"
-        onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
             e.preventDefault();
@@ -502,7 +515,7 @@ function CardAddForm({ columnTitle, onAdd, onClose }: { columnTitle: string; onA
           }
         }}
         onBlur={() => {
-          if (!title.trim()) onClose();
+          if (!title.text.trim()) onClose();
         }}
       />
     </form>

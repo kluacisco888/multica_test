@@ -23,6 +23,7 @@ import {
   type TaskDatesInput,
   type TaskList,
   type TaskSpan,
+  type SmartParseResult,
 } from '@dida/shared';
 import {
   useEffect,
@@ -38,6 +39,7 @@ import {
 } from 'react';
 import { IconButton, MenuButton } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
+import { SmartTitleInput, submitSmart, useSmartTitle, type SmartAddOptions } from './QuickAdd.js';
 
 /*
  * 日历视图 (spec 用户故事 69–71): 月 / 周 / 日 / 多日. Tasks sit on the days
@@ -80,7 +82,10 @@ export interface CalendarPaneProps {
   onToggleSidebar: () => void;
   onNavigate: (mode: CalendarMode, anchor: string) => void;
   onSelectTask: (taskId: string) => void;
-  onCreateTask: (title: string, dates: TaskDatesInput) => Promise<boolean>;
+  /** `smart`: what 智能识别 found; a recognised date replaces the clicked day / slot. */
+  onCreateTask: (title: string, dates: TaskDatesInput, smart: SmartParseResult | null) => Promise<boolean>;
+  /** 智能识别 for the 新建任务 popover; null when off. */
+  smart: SmartAddOptions | null;
   onMoveTask: (task: Task, dates: TaskDatesInput) => void;
 }
 
@@ -322,11 +327,12 @@ export function CalendarPane(props: CalendarPaneProps) {
             quickAdd.opener?.focus();
             setQuickAdd(null);
           }}
-          onSubmit={async (taskTitle) => {
+          smart={props.smart}
+          onSubmit={async (taskTitle, parsed) => {
             const dates: TaskDatesInput = quickAdd.time
               ? { allDay: false, startAt: null, dueAt: zonedToInstant(quickAdd.date, quickAdd.time, timeZone) }
               : { allDay: true, startDate: null, dueDate: quickAdd.date };
-            const ok = await props.onCreateTask(taskTitle, dates);
+            const ok = await props.onCreateTask(taskTitle, dates, parsed);
             if (ok) setQuickAdd(null);
             return ok;
           }}
@@ -790,12 +796,14 @@ function QuickAddPopover({
   state,
   onClose,
   onSubmit,
+  smart,
 }: {
   state: QuickAddState;
   onClose: () => void;
-  onSubmit: (title: string) => Promise<boolean>;
+  onSubmit: (title: string, smart: SmartParseResult | null) => Promise<boolean>;
+  smart: SmartAddOptions | null;
 }) {
-  const [title, setTitle] = useState('');
+  const title = useSmartTitle(smart);
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLFormElement>(null);
   const when = `${dayLabel(state.date)}${state.time ? ` ${state.time}` : ''}`;
@@ -814,12 +822,11 @@ function QuickAddPopover({
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const trimmed = title.trim();
-    if (!trimmed || busy) return;
+    if (!title.text.trim() || busy) return;
     setBusy(true);
-    const ok = await onSubmit(trimmed);
+    const ok = await submitSmart(title, onSubmit);
     setBusy(false);
-    if (ok) setTitle('');
+    if (ok) title.reset();
   }
 
   function onKeyDown(e: KeyboardEvent) {
@@ -843,13 +850,12 @@ function QuickAddPopover({
       onKeyDown={onKeyDown}
     >
       <p className="calendar-quick-add-when">{when}</p>
-      <input
+      <SmartTitleInput
+        smart={title}
         className="calendar-quick-add-input"
         aria-label="新任务标题"
         placeholder="准备做什么？回车保存"
-        value={title}
         maxLength={TASK_TITLE_MAX_LENGTH}
-        onChange={(e) => setTitle(e.target.value)}
         disabled={busy}
       />
     </form>

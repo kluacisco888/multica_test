@@ -16,7 +16,6 @@ import {
   type Board,
   type KanbanColumn,
   type SearchMatchField,
-  type SmartInputSettings,
   type SmartParseResult,
   type Tag,
   type Task,
@@ -38,7 +37,7 @@ import { batchContextSections, BatchToolbar, type BatchContext } from './BatchPa
 import { ContextMenu, IconButton, MenuButton, TaskCheckbox, type ContextMenuSection } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { KanbanBoard, type ManualBoardActions } from './KanbanBoard.js';
-import { QuickAdd } from './QuickAdd.js';
+import { QuickAdd, type SmartAddOptions } from './QuickAdd.js';
 import { chipStyle, tagsOf, taskContextSections } from './taskMeta.js';
 import { scopeKey, viewLayouts, viewTitle, type ListPaneView } from './views.js';
 
@@ -66,8 +65,8 @@ interface TaskListPaneProps {
   onToggleSidebar: () => void;
   /** `smart`: what 智能识别 found (null: nothing, or switched off). */
   onAddTask: (title: string, smart: SmartParseResult | null) => Promise<boolean>;
-  /** 设置 → 智能识别; null while loading or switched off. */
-  smartInput: SmartInputSettings | null;
+  /** 智能识别 for 添加任务 and the 看板 column quick add; null while loading or switched off. */
+  smart: SmartAddOptions | null;
   onSelectTask: (taskId: string) => void;
   onToggleTask: (task: Task) => void;
   /**
@@ -381,13 +380,14 @@ export function TaskListPane(props: TaskListPaneProps) {
           key={scopeKey(view)}
           target={props.addTarget}
           onAdd={props.onAddTask}
-          smart={props.smartInput ? { settings: props.smartInput, lists: props.lists, now: props.now, timeZone: props.timeZone } : null}
+          smart={props.smart}
         />}
 
       {boardMode ? (
         board ? (
           <KanbanBoard
             board={board}
+            smart={props.smart}
             tags={props.tags}
             selectedTaskId={props.selectedTaskId}
             timeZone={props.timeZone}

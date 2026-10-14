@@ -1,5 +1,5 @@
 import { parseSmartInput, type SmartInputSettings, type SmartParseResult, type SmartToken } from '@dida/shared';
-import { useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type InputHTMLAttributes } from 'react';
 import { Icon } from '../ui/Icon.js';
 
 /** What 智能识别 needs; null when it is switched off in 设置. */
@@ -20,31 +20,21 @@ const KIND_LABELS: Record<SmartToken['kind'], string> = {
   priority: '优先级',
 };
 
-/**
- * 添加任务 with 智能识别 (spec 用户故事 51–58): the recognised parts are
- * highlighted in the field; clicking one (or Tab to it and Enter) cancels it
- * so it stays plain text. Enter saves with what is recognised.
- *
- * The highlights are a layer laid exactly over the input text: the text in it
- * is transparent, only the highlight backgrounds show, and only the
- * highlights take clicks (the rest falls through to the input).
- */
-export function QuickAdd({
-  target,
-  onAdd,
-  smart,
-}: {
-  target: string;
-  onAdd: (title: string, smart: SmartParseResult | null) => Promise<boolean>;
-  smart: SmartAddOptions | null;
-}) {
-  const id = useId();
-  const [text, setText] = useState('');
-  const [ignored, setIgnored] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [scroll, setScroll] = useState(0);
-  const input = useRef<HTMLInputElement>(null);
+export interface SmartTitle {
+  text: string;
+  setText: (text: string) => void;
+  tokens: SmartToken[];
+  /** 取消识别: the token's text stays plain text. */
+  ignore: (token: SmartToken) => void;
+  /** What to save: the parse result when something is recognised, else null (save `text` as typed). */
+  result: SmartParseResult | null;
+  reset: () => void;
+}
 
+/** The text of a new-task field and what 智能识别 finds in it (spec 用户故事 51–58). */
+export function useSmartTitle(smart: SmartAddOptions | null): SmartTitle {
+  const [text, setTextState] = useState('');
+  const [ignored, setIgnored] = useState<string[]>([]);
   const parsed = useMemo(() => {
     if (!smart || !text.trim()) return null;
     return parseSmartInput(text, {
@@ -57,57 +47,74 @@ export function QuickAdd({
     });
   }, [smart, text, ignored]);
   const tokens = parsed?.tokens ?? [];
-
-  // Keep the highlights over their text when the input scrolls sideways.
-  const syncScroll = () => setScroll(input.current?.scrollLeft ?? 0);
-  useLayoutEffect(syncScroll, [text]);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!text.trim() || busy) return;
-    const result = parsed && parsed.tokens.length > 0 ? parsed : null;
-    setBusy(true);
-    // Keep the text if saving failed so nothing typed is lost.
-    if (await onAdd(result ? result.title : text.trim(), result)) {
-      setText('');
+  return {
+    text,
+    setText(next) {
+      setTextState(next);
+      // A cancelled part no longer typed may be recognised again.
+      setIgnored((prev) => prev.filter((t) => next.includes(t)));
+    },
+    tokens,
+    ignore: (token) => setIgnored((prev) => [...prev, token.text]),
+    result: parsed && tokens.length > 0 ? parsed : null,
+    reset() {
+      setTextState('');
       setIgnored([]);
-    }
-    setBusy(false);
-  }
+    },
+  };
+}
 
-  function cancel(token: SmartToken) {
-    setIgnored((prev) => [...prev, token.text]);
-    input.current?.focus();
-  }
+type FieldInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'aria-describedby'>;
 
+/**
+ * A new-task input with 智能识别 highlights: a layer laid exactly over the
+ * input's text (same font and padding, read from the input itself), with
+ * transparent text so only the highlight backgrounds show. Only the
+ * highlights take clicks; clicking one (or Tab to it and Enter) cancels it.
+ */
+export function SmartTitleInput({ smart, ...inputProps }: FieldInputProps & { smart: SmartTitle }) {
+  const id = useId();
+  const own = useRef<HTMLInputElement>(null);
+  const [box, setBox] = useState<CSSProperties>({});
+  const [scroll, setScroll] = useState(0);
+  const { text, tokens } = smart;
+
+  // Match the input's text box, so the highlights sit over their characters.
+  useLayoutEffect(() => {
+    const input = own.current;
+    if (!input || tokens.length === 0) return;
+    const s = getComputedStyle(input);
+    const left = input.offsetLeft + parseFloat(s.borderLeftWidth) + parseFloat(s.paddingLeft);
+    setBox({
+      left,
+      top: input.offsetTop,
+      width: input.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight),
+      height: input.offsetHeight,
+      font: s.font,
+      letterSpacing: s.letterSpacing,
+    });
+    setScroll(input.scrollLeft);
+  }, [text, tokens.length]);
+
+  const syncScroll = () => setScroll(own.current?.scrollLeft ?? 0);
   const summaryId = `${id}-smart`;
+
   return (
-    <form className="quick-add" onSubmit={submit} aria-label="添加任务">
-      <span className="quick-add-icon" aria-hidden="true">
-        <Icon name="plus" size={16} />
-      </span>
-      <div className="quick-add-field">
-        <input
-          ref={input}
-          className="quick-add-input"
-          aria-label="添加任务"
-          aria-describedby={tokens.length > 0 ? summaryId : undefined}
-          placeholder={`添加任务至"${target}"，回车即可保存`}
-          value={text}
-          maxLength={512}
-          onChange={(e) => {
-            setText(e.target.value);
-            // A cancelled part no longer typed may be recognised again.
-            setIgnored((prev) => prev.filter((t) => e.target.value.includes(t)));
-          }}
-          onScroll={syncScroll}
-          onKeyUp={syncScroll}
-          onSelect={syncScroll}
-          enterKeyHint="done"
-        />
-        {tokens.length > 0 && (
-          <div className="quick-add-highlights" data-testid="smart-highlights">
-            <div className="quick-add-highlights-text" style={{ transform: `translateX(${-scroll}px)` }}>
+    <div className="smart-field">
+      <input
+        {...inputProps}
+        ref={own}
+        value={text}
+        aria-describedby={tokens.length > 0 ? summaryId : undefined}
+        onChange={(e) => smart.setText(e.target.value)}
+        onScroll={syncScroll}
+        onKeyUp={syncScroll}
+        onSelect={syncScroll}
+      />
+      {tokens.length > 0 && (
+        <>
+          <div className="smart-highlights" data-testid="smart-highlights" style={box}>
+            <div className="smart-highlights-text" style={{ transform: `translateX(${-scroll}px)` }}>
               {segments(text, tokens).map((s) =>
                 s.token ? (
                   <button
@@ -118,7 +125,11 @@ export function QuickAdd({
                     aria-label={`取消识别${KIND_LABELS[s.token.kind]}“${s.token.text}”`}
                     title="点击取消识别"
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => cancel(s.token as SmartToken)}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => {
+                      smart.ignore(s.token as SmartToken);
+                      own.current?.focus();
+                    }}
                   >
                     {s.text}
                   </button>
@@ -128,15 +139,58 @@ export function QuickAdd({
               )}
             </div>
           </div>
-        )}
-      </div>
-      {tokens.length > 0 && (
-        <span id={summaryId} className="visually-hidden" aria-live="polite">
-          已识别：{tokens.map((t) => `${KIND_LABELS[t.kind]}“${t.text}”`).join('，')}
-        </span>
+          <span id={summaryId} className="visually-hidden" aria-live="polite">
+            已识别：{tokens.map((t) => `${KIND_LABELS[t.kind]}“${t.text}”`).join('，')}
+          </span>
+        </>
       )}
+    </div>
+  );
+}
+
+/** 添加任务 at the top of a list (spec 用户故事 51–58). Enter saves with what is recognised. */
+export function QuickAdd({
+  target,
+  onAdd,
+  smart,
+}: {
+  target: string;
+  onAdd: (title: string, smart: SmartParseResult | null) => Promise<boolean>;
+  smart: SmartAddOptions | null;
+}) {
+  const title = useSmartTitle(smart);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!title.text.trim() || busy) return;
+    setBusy(true);
+    // Keep the text if saving failed so nothing typed is lost.
+    if (await submitSmart(title, onAdd)) title.reset();
+    setBusy(false);
+  }
+
+  return (
+    <form className="quick-add" onSubmit={submit} aria-label="添加任务">
+      <span className="quick-add-icon" aria-hidden="true">
+        <Icon name="plus" size={16} />
+      </span>
+      <SmartTitleInput
+        smart={title}
+        className="quick-add-input"
+        aria-label="添加任务"
+        placeholder={`添加任务至"${target}"，回车即可保存`}
+        maxLength={512}
+        enterKeyHint="done"
+      />
     </form>
   );
+}
+
+/** Call `onAdd` with the cleaned title and the parse result, or the typed text and null. */
+export function submitSmart(title: SmartTitle, onAdd: (title: string, smart: SmartParseResult | null) => Promise<boolean>): Promise<boolean> {
+  const result = title.result;
+  return onAdd(result ? result.title : title.text.trim(), result);
 }
 
 function segments(text: string, tokens: SmartToken[]): { start: number; text: string; token?: SmartToken }[] {
