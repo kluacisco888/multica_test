@@ -2,6 +2,8 @@
 
 本项目的目标是像素级复刻[滴答清单](https://dida365.com/)（TickTick）的网页版。
 
+产品名为「叮叮清单」，只在 `packages/shared/src/product.ts` 的 `PRODUCT_NAME` 定义一次，Web 和服务端都引用它；compose 项目名、镜像名、数据卷、数据库名等技术标识仍是 `dida-clone`。
+
 开发由 Multica 上的智能体小队「软件交付小队」完成，需求与任务记录在 Multica 项目「复刻滴答清单」中。智能体协作约定见 `AGENTS.md` 与 `docs/agents/`，术语见 `GLOSSARY.md`，决策见 `docs/adr/`。
 
 ## 部署

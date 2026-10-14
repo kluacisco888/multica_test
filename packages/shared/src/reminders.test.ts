@@ -111,7 +111,7 @@ describe('labels and message', () => {
   it('names the task and its time', () => {
     expect(reminderMessage({ title: '开会', dates: timed }, { now: new Date('2026-10-14T01:00:00.000Z'), timeZone: 'Asia/Shanghai' })).toEqual({
       title: '提醒：开会',
-      body: '时间：10:00\n来自勾勾清单',
+      body: '时间：10:00\n来自叮叮清单',
     });
   });
 });

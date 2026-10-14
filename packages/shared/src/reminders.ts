@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { addDays, describeTaskDates, taskDatesSchema, zonedToInstant, type TaskDates } from './task-dates.js';
+import { PRODUCT_NAME } from './product.js';
 
 /*
  * 提醒 (spec 用户故事 78–84, ADR-0005): trigger points on a 任务. A task with
@@ -142,7 +143,7 @@ export function reminderMessage(task: { title: string; dates: TaskDates | null }
   const when = task.dates ? describeTaskDates(task.dates, ctx).text : null;
   return {
     title: `提醒：${task.title}`,
-    body: when ? `时间：${when}\n来自勾勾清单` : '来自勾勾清单',
+    body: when ? `时间：${when}\n来自${PRODUCT_NAME}` : `来自${PRODUCT_NAME}`,
   };
 }
 

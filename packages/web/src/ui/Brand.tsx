@@ -1,8 +1,9 @@
+import { PRODUCT_NAME } from '@dida/shared';
+
 /**
- * Product name and logo — our own (ADR-0001: no official name, logo or
- * artwork). Change them here only.
+ * Logo — our own (ADR-0001: no official name, logo or artwork). The product
+ * name lives in `@dida/shared` (`PRODUCT_NAME`), shared with the server.
  */
-export const PRODUCT_NAME = '勾勾清单';
 
 export function Logo({ size = 28 }: { size?: number }) {
   return (
