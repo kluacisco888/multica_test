@@ -163,8 +163,7 @@ describe('导入导出（审查补充）', () => {
 });
 
 describe('导出大小估算（审查补充，第 2 轮）', () => {
-  // 审查发现的缺陷（EURO-30 review 第 2 轮）：修复后把 it.fails 改回 it。
-  it.fails('a deleted 附件 (file removed) no longer counts towards the export size', async () => {
+  it('a deleted 附件 (file removed) no longer counts towards the export size', async () => {
     const t = await createTestApp({ backupMaxBytes: 64 * 1024 });
     try {
       const u = await t.createUser('est1');

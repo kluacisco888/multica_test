@@ -12,7 +12,7 @@ import {
 } from '@dida/shared';
 import type { FastifyBaseLogger } from 'fastify';
 import type { Clock } from '../clock.js';
-import type { Db } from '../db/client.js';
+import type { Db, Executor, Tx } from '../db/client.js';
 import { isUniqueViolation } from '../db/errors.js';
 import { habitReminderDeliveries, habits } from '../db/schema/habits.js';
 import type { ChannelAttempt } from '../db/schema/reminders.js';
@@ -20,7 +20,7 @@ import type { Notifier } from '../notify/notifier.js';
 import { liveChannels } from '../notify/notifier.js';
 import { liveCheckins } from '../routes/habits.js';
 import { readSettings } from '../settings.js';
-import type { SyncWriter } from '../sync/sync.js';
+import type { SyncOps, SyncWriter } from '../sync/sync.js';
 
 /*
  * 习惯提醒 (spec 用户故事 95, ADR-0005). Each reminder time of a 坚持中 习惯
@@ -45,6 +45,12 @@ export interface HabitTickResult {
 
 export interface HabitReminderService {
   tick(): Promise<HabitTickResult>;
+  /**
+   * Record the reminder times of these habits that are already past (within
+   * the catch-up window) as done without sending them, so a 习惯 that just
+   * arrived (导入) does not fire for times it was never live at.
+   */
+  skipPast(ops: SyncOps, tx: Tx, userId: string, habitIds: string[]): Promise<number>;
 }
 
 type HabitRow = typeof habits.$inferSelect;
@@ -54,8 +60,8 @@ export function createHabitReminderService(deps: { db: Db; sync: SyncWriter; clo
   let running: Promise<unknown> = Promise.resolve();
 
   /** Fire instants due now for one habit. */
-  async function dueInstants(habit: HabitRow, timeZone: string, now: Date): Promise<Date[]> {
-    const checkins = (await liveCheckins(db, habit.userId, [habit.id])).map((c) => ({ date: c.date, count: c.count }));
+  async function dueInstants(habit: HabitRow, timeZone: string, now: Date, executor: Executor = db): Promise<Date[]> {
+    const checkins = (await liveCheckins(executor, habit.userId, [habit.id])).map((c) => ({ date: c.date, count: c.count }));
     const rule: HabitRule = { frequency: habit.frequency, goal: habit.goal, startDate: habit.startDate };
     const today = todayIn(now, timeZone);
     const out: Date[] = [];
@@ -174,6 +180,20 @@ export function createHabitReminderService(deps: { db: Db; sync: SyncWriter; clo
   }
 
   return {
+    async skipPast(ops, tx, userId, habitIds) {
+      if (habitIds.length === 0) return 0;
+      const now = clock.now();
+      const { timeZone } = await readSettings(tx, userId);
+      let skipped = 0;
+      for (const habit of await tx.select().from(habits).where(and(eq(habits.userId, userId), inArray(habits.id, habitIds)))) {
+        if (habit.deletedAt || habit.archivedAt || habit.reminders.length === 0) continue;
+        for (const fireAt of await dueInstants(habit, timeZone, now, tx)) {
+          await ops.insert(habitReminderDeliveries, { habitId: habit.id, fireAt, status: 'done', nextAttemptAt: null, channels: [] });
+          skipped += 1;
+        }
+      }
+      return skipped;
+    },
     tick() {
       const next = running.then(runTick, runTick);
       running = next.catch(() => undefined);

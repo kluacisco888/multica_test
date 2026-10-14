@@ -3,6 +3,7 @@ import { describeImportIssue, importIssueSchema, type BackupDocument, type Backu
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { fixedClock } from '../../src/clock.js';
+import { habitReminderDeliveries } from '../../src/db/schema/habits.js';
 import { reminderDeliveries } from '../../src/db/schema/reminders.js';
 import { createTestApp, type TestApp, type TestUser } from '../support/test-app.js';
 
@@ -244,6 +245,44 @@ describe('导入导出', () => {
       expect(countdowns.filter((r) => r.countdownId && r.status === 'scheduled')).toHaveLength(1);
     });
 
+    it('does not send 习惯提醒 times already past on the import day', async () => {
+      // 11:00 in Asia/Tokyo (the file's time zone): 喝水's 09:00 reminder is past, the goal (8 杯) not met.
+      const doc = structuredClone(exported);
+      for (const c of records(doc, 'notificationChannel')) c.credentials = { webhookUrl: 'http://127.0.0.1:9/hook', secret: null };
+      // Last edited yesterday, so in the source account today's 09:00 was live (and was sent there).
+      for (const h of records(doc, 'habit')) Object.assign(h, { createdAt: '2026-10-13T00:00:00.000Z', updatedAt: '2026-10-13T00:00:00.000Z' });
+      const target = await user('habit');
+      expect((await importInto(target, doc)).statusCode).toBe(200);
+      const rows = () => t.database.db.select().from(habitReminderDeliveries).where(eq(habitReminderDeliveries.userId, target.id));
+      expect((await rows()).map((r) => [r.status, r.fireAt.toISOString(), r.channels])).toEqual([['done', '2026-10-14T00:00:00.000Z', []]]);
+      await t.app.habitReminders.tick();
+      // Nothing was fired for the past time (a fired one would have a channel to send to).
+      expect((await rows()).every((r) => r.channels.length === 0)).toBe(true);
+    });
+
+    it('schedules 提醒 in batches of at most 1000 任务 (PostgreSQL bind-parameter limit)', async () => {
+      const doc = structuredClone(exported);
+      const tasks = records(doc, 'task');
+      const plain = tasks.find((r) => r.title === '背单词' && r.repeatPrevId === null) as BackupRecord;
+      for (let i = 0; i < 1500; i += 1) tasks.push({ ...plain, id: randomUUID(), status: 'open', completedAt: null, repeatIndex: 1, repeatPrevId: null, title: `批量 ${i}` });
+      const sizes: number[] = [];
+      const reconcile = t.app.reminders.reconcile;
+      t.app.reminders.reconcile = (ops, tx, userId, ids) => {
+        sizes.push(ids.length);
+        return reconcile(ops, tx, userId, ids);
+      };
+      try {
+        const target = await user('batch');
+        const res = await importInto(target, doc);
+        expect(res.statusCode, res.body.slice(0, 300)).toBe(200);
+      } finally {
+        t.app.reminders.reconcile = reconcile;
+      }
+      expect(sizes.reduce((a, b) => a + b, 0)).toBe(tasks.length);
+      expect(Math.max(...sizes)).toBe(1000);
+      expect(sizes.length).toBe(Math.ceil(tasks.length / 1000));
+    }, 60_000);
+
     it('imports into an account that already has data, next to it', async () => {
       const target = await user('busy');
       await ok(target, 'POST', '/api/tasks', { title: '原有任务' });
@@ -313,7 +352,7 @@ describe('导入导出', () => {
         return issues.filter((i) => i.entity === entity && i.index === index).map((i) => i.message);
       };
       expect(issues.find((i) => i.entity === 'settings')?.message).toMatch(/^timeZone /);
-      expect(byWhere('task', '写周报')[0]).toMatch(/^repeat /);
+      expect(byWhere('task', '写周报')).toEqual(['repeat 重复规则不合法']);
       expect(byWhere('task', '汇总数据')).toEqual(['reminders 和任务的日期对不上']);
       expect(byWhere('task', '出差清单')[0]).toBe('title 标题最多 512 个字符');
       expect(issues.find((i) => i.entity === 'filter')?.message).toBe('引用的清单不在备份文件里');

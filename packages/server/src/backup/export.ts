@@ -1,4 +1,4 @@
-import { and, asc, eq, ne, sum } from 'drizzle-orm';
+import { and, asc, eq, isNull, ne, sum } from 'drizzle-orm';
 import { BACKUP_FORMAT, BACKUP_VERSION, type BackupDocument, type BackupRecord } from '@dida/shared';
 import type { AttachmentStore } from '../attachments/store.js';
 import type { Clock } from '../clock.js';
@@ -6,6 +6,7 @@ import type { Db } from '../db/client.js';
 import { attachments } from '../db/schema/attachments.js';
 import type { CredentialCipher } from '../notify/credentials.js';
 import { credentialContext } from '../notify/notifier.js';
+import type { HabitReminderService } from '../reminders/habits.js';
 import type { ReminderService } from '../reminders/scheduler.js';
 import type { SyncWriter } from '../sync/sync.js';
 import { backupEntities } from './entities.js';
@@ -16,6 +17,8 @@ export interface BackupDeps {
   sync: SyncWriter;
   /** Imported 任务 and 倒数日 get their 提醒 scheduled afresh. */
   reminders: ReminderService;
+  /** Past 习惯提醒 times of imported 习惯 are recorded as done, not sent. */
+  habitReminders: HabitReminderService;
   files: AttachmentStore;
   /** null when APP_ENCRYPTION_KEY is not set (then there are no 通知渠道 either). */
   cipher: CredentialCipher | null;
@@ -74,11 +77,11 @@ export async function exportAccount(deps: BackupDeps, userId: string): Promise<B
           return record;
         });
       }
-      // 附件 that still have a file (彻底删除 empties the name and removes the file).
+      // Live 附件 only: deleting one (or 彻底删除 its task) removes the file.
       const [total] = await tx
         .select({ bytes: sum(attachments.size).mapWith(Number) })
         .from(attachments)
-        .where(and(eq(attachments.userId, userId), ne(attachments.fileName, '')));
+        .where(and(eq(attachments.userId, userId), isNull(attachments.deletedAt), ne(attachments.fileName, '')));
       return { entities: out, fileBytes: total?.bytes ?? 0 };
     },
     { isolationLevel: 'repeatable read', accessMode: 'read only' },
@@ -101,7 +104,7 @@ export async function exportAccount(deps: BackupDeps, userId: string): Promise<B
   if (estimatedBytes > deps.maxBytes) throw new BackupTooLarge(estimatedBytes, deps.maxBytes);
 
   for (const record of entities.attachment ?? []) {
-    record.content = record.fileName === '' ? null : await readFile(deps.files, userId, String(record.id));
+    record.content = record.deletedAt !== null || record.fileName === '' ? null : await readFile(deps.files, userId, String(record.id));
   }
   return doc;
 }

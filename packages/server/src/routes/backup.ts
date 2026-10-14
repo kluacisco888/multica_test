@@ -25,6 +25,7 @@ export function backupRoutes(app: FastifyInstance, { cipher, maxBytes }: { ciphe
     clock: app.clock,
     sync: app.sync,
     reminders: app.reminders,
+    habitReminders: app.habitReminders,
     files: app.attachmentStore,
     cipher,
     maxBytes,

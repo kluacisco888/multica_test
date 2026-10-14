@@ -301,8 +301,11 @@ export async function importAccount(deps: BackupDeps, userId: string, input: unk
 
       // 提醒 are scheduled afresh, as if each 任务 / 倒数日 had just been saved.
       const idsOfType = (type: BackupEntityType) => records.filter((e) => e.entity.type === type).map((e) => String(e.record.id));
-      await deps.reminders.reconcile(ops, tx, userId, idsOfType('task'));
-      await deps.reminders.reconcileCountdowns(ops, tx, userId, idsOfType('countdown'));
+      // In batches: one query per batch stays under PostgreSQL's 65535 bind parameters.
+      for (const batch of batches(idsOfType('task'))) await deps.reminders.reconcile(ops, tx, userId, batch);
+      for (const batch of batches(idsOfType('countdown'))) await deps.reminders.reconcileCountdowns(ops, tx, userId, batch);
+      // 习惯提醒 times already past today were never live here: not sent after the import.
+      for (const batch of batches(idsOfType('habit'))) await deps.habitReminders.skipPast(ops, tx, userId, batch);
 
       for (const e of records) {
         if (e.entity.type !== 'attachment' || typeof e.record.content !== 'string') continue;
@@ -317,6 +320,15 @@ export async function importAccount(deps: BackupDeps, userId: string, input: unk
     await Promise.all(written.map((id) => deps.files.remove(userId, id)));
     throw error;
   }
+}
+
+/** Ids per reconcile call. */
+export const RECONCILE_BATCH = 1000;
+
+export function batches<T>(items: T[], size = RECONCILE_BATCH): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
 }
 
 function issueOf(e: Entry, message: string): ImportIssue {

@@ -115,7 +115,42 @@ export const FIELD_RULES: Record<BackupEntityType, FieldRules> = {
 /** Fields 回收站 cleanup empties on a tombstone (彻底删除): `''` is fine there. */
 const PURGED_EMPTY = new Set(['title', 'description', 'content', 'fileName']);
 
-const message = (key: string, error: z.ZodError) => `${key} ${error.issues[0]?.message ?? '不合法'}`;
+/** Chinese names of fields whose schema may answer with zod's default (English) message. */
+const FIELD_LABELS: Record<string, string> = {
+  repeat: '重复规则',
+  repeatBasis: '重复任务的计算依据',
+  reminders: '提醒',
+  reminderChannelIds: '通知渠道',
+  tagIds: '标签',
+  rules: '过滤规则',
+  hiddenSmartLists: '隐藏的智能清单',
+  viewOptions: '视图设置',
+  allDayReminderTime: '全天提醒时间',
+  themeMode: '主题模式',
+  themeColor: '主题颜色',
+  matrixQuadrants: '四象限设置',
+  pomodoro: '番茄设置',
+  frequency: '习惯频率',
+  goal: '习惯目标',
+  settings: '通知渠道设置',
+  credentials: '通知渠道凭证',
+  icon: '图标',
+  color: '颜色',
+  mimeType: '文件类型',
+  size: '文件大小',
+  plannedMs: '计划时长',
+  accumulatedMs: '已专注时长',
+  repeatIndex: '重复序号',
+  count: '打卡数量',
+};
+
+const CJK = /[\u4e00-\u9fff]/;
+
+/** `repeat 重复规则不合法`: the schema's own Chinese message, else the field's Chinese name. */
+const message = (key: string, error: z.ZodError) => {
+  const own = error.issues.find((i) => CJK.test(i.message))?.message;
+  return `${key} ${own ?? `${FIELD_LABELS[key] ?? '取值'}不合法`}`;
+};
 
 /**
  * Check `record`'s fields against the API rules; returns the problems and the
