@@ -15,7 +15,8 @@ import { useCallback, useEffect, useState } from 'react';
  *   /calendar                      → 日历 (last used view, today)
  *   /calendar/<mode>/<YYYY-MM-DD>  → 日历 in 月 / 周 / 日 / 多日 (`month` / `week` / `day` / `multiDay`) around a date
  *   /matrix                        → 四象限
- * Each but /trash takes `/tasks/<taskId>` for an open 任务.
+ *   /focus                         → 番茄专注
+ * Each but /trash and /focus takes `/tasks/<taskId>` for an open 任务.
  */
 
 /** 日历 route: null mode / date mean "last used view" / "today". */
@@ -38,15 +39,18 @@ export interface Route {
   calendar?: CalendarRoute | null;
   /** The 四象限. */
   matrix?: boolean;
+  /** 番茄专注. */
+  focus?: boolean;
 }
 
-const EMPTY: Required<Route> = { listId: null, tagId: null, smartId: null, filterId: null, search: null, taskId: null, trash: false, calendar: null, matrix: false };
+const EMPTY: Required<Route> = { listId: null, tagId: null, smartId: null, filterId: null, search: null, taskId: null, trash: false, calendar: null, matrix: false, focus: false };
 
 export function parseRoute(pathname: string): Route {
   if (/^\/trash\/?$/.test(pathname)) return { ...EMPTY, trash: true };
   if (/^\/search\/?$/.test(pathname)) return { ...EMPTY, search: '' };
   const matrix = /^\/matrix(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
   if (matrix) return { ...EMPTY, matrix: true, taskId: matrix[1] ? safeDecode(matrix[1]) : null };
+  if (/^\/focus\/?$/.test(pathname)) return { ...EMPTY, focus: true };
   const calendar = /^\/calendar(?:\/([^/]+)\/([^/]+))?(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
   if (calendar) {
     const mode = calendarModeSchema.safeParse(calendar[1]);
@@ -89,8 +93,9 @@ function safeDecode(value: string): string | null {
   }
 }
 
-export function routePath({ listId, tagId, smartId, filterId, search, taskId, trash, calendar, matrix }: Route): string {
+export function routePath({ listId, tagId, smartId, filterId, search, taskId, trash, calendar, matrix, focus }: Route): string {
   if (trash) return '/trash';
+  if (focus) return '/focus';
   let base: string;
   if (matrix) base = '/matrix';
   else if (calendar) base = calendar.mode && calendar.date ? `/calendar/${calendar.mode}/${calendar.date}` : '/calendar';

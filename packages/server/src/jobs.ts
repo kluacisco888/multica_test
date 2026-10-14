@@ -1,6 +1,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { PgBoss } from 'pg-boss';
 import type { HolidayService } from './holidays/service.js';
+import type { FocusService } from './focus/service.js';
 import type { ReminderService } from './reminders/scheduler.js';
 import type { TrashService } from './trash.js';
 
@@ -30,6 +31,14 @@ export const TRASH_PURGE_CRON = '30 3 * * *';
 export const REMINDER_TICK_QUEUE = 'reminders.tick';
 export const REMINDER_TICK_CRON = '* * * * *';
 
+/**
+ * 专注结束 (spec 用户故事 91): settles 番茄 whose page was closed and sends the
+ * 通知. Like the reminder tick: at startup, every minute, and at each
+ * countdown end (plus the grace period) through the focus service's waker.
+ */
+export const FOCUS_TICK_QUEUE = 'focus.tick';
+export const FOCUS_TICK_CRON = '* * * * *';
+
 export interface BackgroundJobs {
   boss: PgBoss;
   stop(): Promise<void>;
@@ -40,12 +49,13 @@ export interface BackgroundJobsDeps {
   holidays: HolidayService;
   trash: TrashService;
   reminders: ReminderService;
+  focus: FocusService;
   /** Time zone the daily schedules run in. */
   timezone: string;
   log: FastifyBaseLogger;
 }
 
-export async function startBackgroundJobs({ databaseUrl, holidays, trash, reminders, timezone, log }: BackgroundJobsDeps): Promise<BackgroundJobs> {
+export async function startBackgroundJobs({ databaseUrl, holidays, trash, reminders, focus, timezone, log }: BackgroundJobsDeps): Promise<BackgroundJobs> {
   const boss = new PgBoss({ connectionString: databaseUrl, max: 4 });
   boss.on('error', (err) => log.error({ err }, 'pg-boss error'));
   await boss.start();
@@ -70,30 +80,47 @@ export async function startBackgroundJobs({ databaseUrl, holidays, trash, remind
 
   await boss.createQueue(REMINDER_TICK_QUEUE);
   await boss.schedule(REMINDER_TICK_QUEUE, REMINDER_TICK_CRON, null, { tz: timezone });
-  // One tick job per distinct instant; older entries are dropped once past.
-  const queued = new Set<number>();
-  const wake = (at: Date) => {
-    const now = Date.now();
-    for (const t of queued) if (t < now) queued.delete(t);
-    if (queued.has(at.getTime())) return;
-    queued.add(at.getTime());
-    boss.send(REMINDER_TICK_QUEUE, null, { startAfter: at }).catch((err: unknown) => log.error({ err }, 'could not queue a reminder tick'));
-  };
+  const wakeReminders = waker(boss, REMINDER_TICK_QUEUE, log);
   await boss.work(REMINDER_TICK_QUEUE, { pollingIntervalSeconds: 1 }, async () => {
     const result = await reminders.tick();
     if (result.fired + result.retrying + result.failed + result.missed > 0) log.info(result, '提醒: tick');
     const next = await reminders.nextDueAt();
-    if (next) wake(next);
+    if (next) wakeReminders(next);
   });
-  reminders.setWaker(wake);
+  reminders.setWaker(wakeReminders);
   // Also at startup: reminders that came due while the server was down (at most 24 hours ago).
   await boss.send(REMINDER_TICK_QUEUE, null);
+
+  await boss.createQueue(FOCUS_TICK_QUEUE);
+  await boss.schedule(FOCUS_TICK_QUEUE, FOCUS_TICK_CRON, null, { tz: timezone });
+  const wakeFocus = waker(boss, FOCUS_TICK_QUEUE, log);
+  await boss.work(FOCUS_TICK_QUEUE, { pollingIntervalSeconds: 1 }, async () => {
+    const result = await focus.tick();
+    if (result.finished > 0) log.info(result, '专注: tick');
+    const next = await focus.nextDueAt();
+    if (next) wakeFocus(next);
+  });
+  focus.setWaker(wakeFocus);
+  await boss.send(FOCUS_TICK_QUEUE, null);
 
   return {
     boss,
     stop: async () => {
       reminders.setWaker(null);
+      focus.setWaker(null);
       await boss.stop({ graceful: true, timeout: 10_000 });
     },
+  };
+}
+
+/** Queue one tick job per distinct instant (older entries are dropped once past). */
+function waker(boss: PgBoss, queue: string, log: FastifyBaseLogger) {
+  const queued = new Set<number>();
+  return (at: Date) => {
+    const now = Date.now();
+    for (const t of queued) if (t < now) queued.delete(t);
+    if (queued.has(at.getTime())) return;
+    queued.add(at.getTime());
+    boss.send(queue, null, { startAfter: at }).catch((err: unknown) => log.error({ err, queue }, 'could not queue a tick'));
   };
 }

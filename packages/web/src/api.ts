@@ -4,6 +4,14 @@ import {
   type BatchAction,
   type BatchRequest,
   type MoveTaskRequest,
+  currentFocusResponseSchema,
+  focusRecordsResponseSchema,
+  focusStatsSchema,
+  type CurrentFocusResponse,
+  type FocusRecord,
+  type FocusStats,
+  type FocusStatUnit,
+  type StartFocusRequest,
   adminUserSchema,
   calendarDaysResponseSchema,
   type CalendarDay,
@@ -427,4 +435,33 @@ export async function updateKanbanColumn(id: string, patch: UpdateKanbanColumnRe
 export async function deleteKanbanColumn(id: string, query: DeleteKanbanColumnQuery): Promise<void> {
   const params = new URLSearchParams({ tasks: query.tasks ?? 'delete', ...(query.moveTo ? { moveTo: query.moveTo } : {}) });
   await call('DELETE', `/api/kanban-columns/${encodeURIComponent(id)}?${params.toString()}`);
+}
+
+/* ---- 番茄专注 (spec 用户故事 86–92) ---- */
+
+/** The running or paused session (settled at the server's now), with that now. */
+export async function fetchCurrentFocus(): Promise<CurrentFocusResponse> {
+  return currentFocusResponseSchema.parse(await (await call('GET', '/api/focus/current')).json());
+}
+
+export async function startFocus(request: StartFocusRequest): Promise<CurrentFocusResponse> {
+  return currentFocusResponseSchema.parse(await (await call('POST', '/api/focus/start', request)).json());
+}
+
+/** 暂停 / 继续 / 放弃 / 结束 the current session. */
+export async function focusAction(action: 'pause' | 'resume' | 'abandon' | 'finish'): Promise<CurrentFocusResponse> {
+  return currentFocusResponseSchema.parse(await (await call('POST', `/api/focus/current/${action}`)).json());
+}
+
+/** Link the current session to a 任务, or unlink it. */
+export async function linkFocusTask(taskId: string | null): Promise<CurrentFocusResponse> {
+  return currentFocusResponseSchema.parse(await (await call('PATCH', '/api/focus/current', { taskId })).json());
+}
+
+export async function fetchFocusRecords(): Promise<FocusRecord[]> {
+  return focusRecordsResponseSchema.parse(await (await call('GET', '/api/focus/records')).json()).records;
+}
+
+export async function fetchFocusStats(unit: FocusStatUnit, date: string): Promise<FocusStats> {
+  return focusStatsSchema.parse(await (await call('GET', `/api/focus/stats?${new URLSearchParams({ unit, date }).toString()}`)).json());
 }

@@ -255,6 +255,25 @@ const result = await app.notifier.send(userId, channelId, { title: '提醒：交
 
 界面在 `/calendar`（上次用的视图、今天）和 `/calendar/<month|week|day|multiDay>/<日期>`：月视图每周一行（和参照一样从周日开始），日期区间画成跨天的长条；视图在标题右边的下拉框里切换；周 / 日 / 多日（3 天）上面是日期和全天任务，下面是 24 小时时间格。拖动改日期的规则都在 `packages/shared/src/calendar.ts`：月视图里拖到别的日子是整体平移（`moveTaskByDays`，带时间的任务保持当前时区下的钟点，跨夏令时也一样）；拖到时间格是从那个时间开始、时长不变（`placeTaskAt`，全天任务变成一个时间点）；拖到全天栏变成全天任务、天数不变（`placeTaskOnDay`）。点空白的日子或时间格新建任务（进收件箱）。拖拽只支持鼠标；键盘和触屏打开任务后在详情里改日期。
 
+### 番茄专注
+
+计时状态在服务端（`focus_sessions`，同步类型 `focusSession`），每个用户同时最多一个进行中或暂停的专注（唯一索引）。状态机在 `packages/server/src/focus/service.ts`：每次读取或操作前先按注入时钟的“现在”结算——倒计时到点的番茄在到点那一刻记为完成，并从那一刻自动开始短休息或长休息（距上次长休息完成的第 `longBreakEvery` 个番茄后是长休息），休息到点后回到未开始。所以刷新、换设备、隔几小时再打开，看到的都是正确状态。纯规则（剩余时间、休息类型、统计、文案）在 `packages/shared/src/focus.ts`。
+
+- 页面开着时（任何页面，不只专注页），倒计时到 0 就读一次当前专注，由此结算并播放提示音（Web Audio，第一次点按钮时解锁）。
+- pg-boss 队列 `focus.tick`：启动时、每分钟、以及每个倒计时结束点后 15 秒（`FOCUS_NOTIFY_GRACE_MS`）跑一次，结算到点 15 秒后还没被页面结算的番茄（视为页面已关），并通过默认通知渠道（EURO-11 的 `app.notifier`）发「专注结束」，每个番茄最多一次；超过 24 小时才结算的只记录不发。休息结束不发通知。
+- 番茄设置在 `PATCH /api/settings` 的 `pomodoro`（`focusMinutes` 1–180、`shortBreakMinutes` / `longBreakMinutes` 1–60、`longBreakEvery` 1–10，默认 25 / 5 / 15 / 4，按字段合并）。
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /api/focus/current` | 当前专注（已结算）和服务端 `now` |
+| `POST /api/focus/start` | `{ mode: 'pomodoro' \| 'stopwatch', taskId?, id? }`；已有进行中的专注返回 409 `focus_active`，休息中开始会先结束休息；别人的或不存在的任务 404 |
+| `POST /api/focus/current/pause` · `resume` · `abandon` · `finish` | 暂停 / 继续 / 放弃（不留记录）/ 结束（正计时和休息；番茄不能提前结束，返回 409）。没有专注时 404 |
+| `PATCH /api/focus/current` | `{ taskId }` 关联或取消关联任务 |
+| `GET /api/focus/records` | 专注记录：完成的番茄和正计时，最近 100 条 |
+| `GET /api/focus/stats?unit=day\|week\|month&date=` | 专注统计：周期内番茄数、专注时长、每天明细（周从周一开始）、每个任务用时，概览（今日 / 总计）和每个任务累计用时。按开始时间所在的日期（用户时区）归属 |
+
+界面在 `/focus`（桌面从左侧导航条进入，手机从侧栏抽屉顶部的按钮进入）。
+
 ### 节假日数据与农历（ADR-0006）
 
 - 后端每天 04:15（`DEFAULT_TIMEZONE`）和每次启动时，从 `HOLIDAY_DATA_URL`（默认 jsDelivr 上的 NateScarlet/holiday-cn）拉取当年和下一年的 `<year>.json`，存进 `holiday_years` 表。定时任务用 pg-boss（表在数据库的 `pgboss` schema 里，启动时自动安装）。

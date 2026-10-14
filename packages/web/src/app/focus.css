@@ -1,0 +1,520 @@
+/*
+ * 番茄专注 (EURO-24). Sizes and colours from the reference 专注 page
+ * (1440×900): timer column 834px wide, 概览 / 专注记录 column 555px, a 360px
+ * ring with a 7px track, a 170×48 开始 button. Text the reference draws in
+ * #a6aec0 uses --color-text-secondary to keep 4.5:1.
+ */
+
+.focus-pane {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--color-focus-bg);
+}
+
+.focus-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--color-focus-line);
+}
+
+.focus-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--header-height);
+  padding: 0 var(--space-6);
+  flex: none;
+}
+
+.focus-title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
+}
+
+/* Centred in the column like the reference, whatever the title width. */
+.focus-modes {
+  position: absolute;
+  left: 50%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 176px;
+  height: 36px;
+  padding: 3px;
+  background: var(--color-focus-segment);
+  border-radius: 18px;
+  transform: translateX(-50%);
+}
+
+.focus-mode {
+  font: inherit;
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 15px;
+  cursor: pointer;
+}
+
+.focus-mode[aria-checked='true'] {
+  color: var(--color-text);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-card);
+}
+
+.focus-mode:disabled {
+  cursor: not-allowed;
+}
+
+.focus-header-actions {
+  margin-left: auto;
+}
+
+.focus-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  padding: 100px var(--space-6) var(--space-8);
+}
+
+.focus-task {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  font: inherit;
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.focus-task:hover {
+  background: var(--color-icon-hover);
+}
+
+.focus-task-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.focus-ring {
+  position: relative;
+  width: var(--focus-ring-size);
+  height: var(--focus-ring-size);
+  margin-top: 48px;
+}
+
+.focus-ring svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.focus-ring-track,
+.focus-ring-progress {
+  fill: none;
+}
+
+.focus-ring-track {
+  stroke: var(--color-focus-ring);
+}
+
+.focus-ring-progress {
+  stroke: var(--color-brand);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.25s linear;
+}
+
+.focus-ring-break {
+  stroke: var(--color-focus-ring-break);
+}
+
+.focus-ring-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+}
+
+.focus-time {
+  font-size: var(--focus-time-size);
+  font-weight: var(--font-weight-regular);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--color-text);
+}
+
+.focus-state {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.focus-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: 72px;
+}
+
+.focus-button {
+  width: var(--focus-button-width);
+  height: var(--focus-button-height);
+  font-size: var(--font-size-lg);
+  border-radius: calc(var(--focus-button-height) / 2);
+}
+
+.focus-button-secondary {
+  color: var(--color-brand-text);
+  background: transparent;
+  border-color: var(--color-brand);
+}
+
+/* ---- 概览 / 专注统计 / 专注记录 ---- */
+
+.focus-side {
+  flex: 0 0 var(--focus-side-width);
+  min-width: 0;
+  padding: 0 var(--space-5) var(--space-8) 22px;
+  overflow-y: auto;
+}
+
+.focus-side-title {
+  display: flex;
+  align-items: center;
+  height: var(--header-height);
+  margin: 0;
+  font-size: 17px;
+  font-weight: var(--font-weight-medium);
+}
+
+.focus-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.focus-side-subtitle {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.focus-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 0;
+}
+
+.focus-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  height: 73px;
+  padding: 0 var(--space-3);
+  background: var(--color-focus-card);
+  border-radius: var(--radius-card);
+}
+
+.focus-card dt {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.focus-card dd {
+  margin: 0;
+  font-size: 24px;
+  font-weight: var(--font-weight-bold);
+  line-height: 1.2;
+}
+
+.focus-card small {
+  margin-left: 2px;
+  font-size: var(--font-size-md);
+}
+
+.focus-units {
+  display: grid;
+  grid-template-columns: repeat(3, 40px);
+  padding: 2px;
+  background: var(--color-focus-segment);
+  border-radius: var(--radius-md);
+}
+
+.focus-unit {
+  height: 26px;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.focus-unit[aria-checked='true'] {
+  color: var(--color-text);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-card);
+}
+
+.focus-period {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.focus-period-label {
+  min-width: 120px;
+  font-size: var(--font-size-md);
+  text-align: center;
+}
+
+.focus-period-today {
+  margin-left: auto;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-brand-text);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.focus-period-total {
+  display: flex;
+  gap: var(--space-6);
+  margin: var(--space-3) 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.focus-period-total strong {
+  margin-left: var(--space-1);
+  font-size: var(--font-size-lg);
+  color: var(--color-text);
+}
+
+.focus-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 80px;
+  margin: 0;
+  padding: 0 0 var(--space-1);
+  list-style: none;
+  border-bottom: 1px solid var(--color-focus-line);
+}
+
+.focus-bars li {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  height: 100%;
+}
+
+.focus-bar {
+  width: 100%;
+  min-height: 2px;
+  background: var(--color-brand);
+  border-radius: 2px 2px 0 0;
+}
+
+.focus-task-totals {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.focus-task-totals li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 6px 0;
+  font-size: var(--font-size-sm);
+}
+
+.focus-task-totals-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.focus-task-totals-time,
+.focus-record-duration {
+  flex: none;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.focus-empty {
+  margin: var(--space-2) 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.focus-records {
+  margin-top: var(--space-4);
+}
+
+.focus-record-day ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.focus-record-date {
+  margin: var(--space-3) 0 var(--space-2);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+}
+
+.focus-record {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
+  column-gap: var(--space-4);
+  row-gap: var(--space-1);
+  padding: 6px 0;
+}
+
+.focus-record-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--color-brand);
+  background: var(--color-brand-soft);
+  border-radius: 50%;
+}
+
+.focus-record-time {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.focus-record-task {
+  grid-column: 2 / 4;
+  font-size: var(--font-size-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- 选择任务 ---- */
+
+.focus-picker-hint {
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.focus-picker-list {
+  max-height: 320px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.focus-picker-item {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  font: inherit;
+  font-size: var(--font-size-md);
+  text-align: left;
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.focus-picker-item:hover,
+.focus-picker-item[aria-pressed='true'] {
+  background: var(--color-bg-selected);
+}
+
+@media (max-width: 767px) {
+  .focus-pane {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .focus-main {
+    flex: none;
+    overflow: visible;
+    border-right: 0;
+  }
+
+  .focus-header {
+    padding: 0 var(--space-4) 0 var(--space-5);
+  }
+
+  .focus-title {
+    font-size: var(--font-size-xl);
+  }
+
+  /* Like the reference: the switch sits beside the title on a narrow screen. */
+  .focus-modes {
+    position: static;
+    transform: none;
+    flex: none;
+    width: 160px;
+  }
+
+  .focus-header-actions {
+    margin-left: auto;
+  }
+
+  .focus-body {
+    padding: 100px var(--space-4) var(--space-6);
+  }
+
+  .focus-ring {
+    width: var(--focus-ring-size-mobile);
+    height: var(--focus-ring-size-mobile);
+    margin-top: 64px;
+  }
+
+  .focus-time {
+    font-size: var(--focus-time-size-mobile);
+  }
+
+  .focus-actions {
+    margin-top: 96px;
+  }
+
+  .focus-button {
+    width: 140px;
+  }
+
+  .focus-side {
+    flex: none;
+    padding: 0 var(--space-5) var(--space-8);
+    overflow: visible;
+    border-top: 1px solid var(--color-focus-line);
+  }
+}

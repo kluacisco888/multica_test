@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
-import type { ViewOptions } from '@dida/shared';
+import type { PomodoroSettings, ViewOptions } from '@dida/shared';
 import { syncColumns, syncIndex } from '../../sync/columns.js';
 
 /**
@@ -29,6 +29,8 @@ export const userSettings = pgTable(
     themeColor: text().notNull().default('blue'),
     /** 四象限 names and rules (spec 用户故事 72); null until changed: the default quadrants. */
     matrixQuadrants: jsonb().$type<unknown>(),
+    /** 番茄设置 (spec 用户故事 86); missing lengths read as their defaults. */
+    pomodoro: jsonb().$type<Partial<PomodoroSettings>>().notNull().default({}),
   },
   (t) => [
     syncIndex('user_settings', t),
