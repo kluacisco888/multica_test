@@ -12,6 +12,11 @@ import {
   type FocusStats,
   type FocusStatUnit,
   type StartFocusRequest,
+  habitSchema,
+  habitsResponseSchema,
+  type CreateHabitRequest,
+  type Habit,
+  type UpdateHabitRequest,
   adminUserSchema,
   calendarDaysResponseSchema,
   type CalendarDay,
@@ -489,4 +494,32 @@ export async function updateCountdown(id: string, patch: UpdateCountdownRequest)
 
 export async function deleteCountdown(id: string): Promise<void> {
   await call('DELETE', `/api/countdowns/${encodeURIComponent(id)}`);
+}
+
+/* ---- 习惯打卡 (spec 用户故事 93–98) ---- */
+
+export async function fetchHabits(archived = false): Promise<Habit[]> {
+  return habitsResponseSchema.parse(await (await call('GET', `/api/habits${archived ? '?archived=true' : ''}`)).json()).habits;
+}
+
+export async function createHabit(request: CreateHabitRequest): Promise<Habit> {
+  return habitSchema.parse(await (await call('POST', '/api/habits', request)).json());
+}
+
+export async function updateHabit(id: string, request: UpdateHabitRequest): Promise<Habit> {
+  return habitSchema.parse(await (await call('PATCH', `/api/habits/${encodeURIComponent(id)}`, request)).json());
+}
+
+export async function deleteHabit(id: string): Promise<void> {
+  await call('DELETE', `/api/habits/${encodeURIComponent(id)}`);
+}
+
+/** 打卡 / 补打卡 with the day's amount. */
+export async function checkInHabit(id: string, date: string, count: number): Promise<Habit> {
+  return habitSchema.parse(await (await call('PUT', `/api/habits/${encodeURIComponent(id)}/checkins/${date}`, { count })).json());
+}
+
+/** 撤销打卡 of a day. */
+export async function undoCheckIn(id: string, date: string): Promise<Habit> {
+  return habitSchema.parse(await (await call('DELETE', `/api/habits/${encodeURIComponent(id)}/checkins/${date}`)).json());
 }

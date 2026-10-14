@@ -36,6 +36,8 @@ import { createReminderService, type ReminderService } from './reminders/schedul
 import { createFocusService, type FocusService } from './focus/service.js';
 import { focusRoutes } from './routes/focus.js';
 import { reminderRoutes } from './routes/reminders.js';
+import { habitRoutes } from './routes/habits.js';
+import { createHabitReminderService, type HabitReminderService } from './reminders/habits.js';
 import { createSessionStore, type SessionStore } from './sessions.js';
 import type { SyncEntity } from './sync/columns.js';
 import { syncEntities as registeredSyncEntities } from './sync/registry.js';
@@ -70,6 +72,8 @@ declare module 'fastify' {
     reminders: ReminderService;
     /** 番茄专注 timer state and its 专注结束 notification (see focus/service.ts). */
     focus: FocusService;
+    /** 习惯提醒 (see reminders/habits.ts); runs in the 提醒 job. */
+    habitReminders: HabitReminderService;
   }
 }
 
@@ -122,6 +126,7 @@ export async function buildApp(deps: AppDeps) {
   app.decorate('notifier', createNotifier({ db, cipher, clock }));
   app.decorate('reminders', createReminderService({ db, sync, clock, notifier: app.notifier, log: app.log }));
   app.decorate('focus', createFocusService({ db, sync, clock, notifier: app.notifier, log: app.log }));
+  app.decorate('habitReminders', createHabitReminderService({ db, sync, clock, notifier: app.notifier, log: app.log }));
   await app.register(fastifyCookie);
   registerAuthentication(app, { sessions, config });
 
@@ -156,6 +161,7 @@ export async function buildApp(deps: AppDeps) {
   reminderRoutes(app);
   focusRoutes(app);
   countdownRoutes(app);
+  habitRoutes(app);
   deps.routes?.(app);
 
   if (config.webDistDir) {

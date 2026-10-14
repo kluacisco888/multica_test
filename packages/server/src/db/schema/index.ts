@@ -9,3 +9,4 @@ export * from './filters.js';
 export * from './reminders.js';
 export * from './focus.js';
 export * from './countdowns.js';
+export * from './habits.js';

@@ -33,3 +33,4 @@ export * from './list-drag.js';
 export * from './matrix.js';
 export * from './focus.js';
 export * from './countdowns.js';
+export * from './habits.js';

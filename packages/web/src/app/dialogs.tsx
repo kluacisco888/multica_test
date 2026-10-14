@@ -27,7 +27,7 @@ export interface ListDraft {
   excludeFromSmartLists: boolean;
 }
 
-const COLOR_NAMES: Record<(typeof LIST_COLORS)[number], string> = {
+export const COLOR_NAMES: Record<(typeof LIST_COLORS)[number], string> = {
   '#ff6161': '红色',
   '#ffac38': '橙色',
   '#ffd324': '黄色',
@@ -313,7 +313,7 @@ function Choice({ label, checked, onChange }: { label: string; checked: boolean;
 }
 
 /** A radio button drawn as a swatch; the label is its accessible name. */
-function SwatchOption({
+export function SwatchOption({
   group,
   label,
   checked,

@@ -1,0 +1,496 @@
+/*
+ * 习惯打卡 (spec 用户故事 93–98), after the reference 习惯 page (ADR-0007
+ * screenshots, 1440 and 390 px): list pane on the 日历 background with the
+ * 7-day strip, the selected habit's statistics and 月度日历 beside it.
+ */
+
+.habits {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+}
+
+.habits-pane {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  padding: 0 24px 0 27px;
+  overflow-y: auto;
+  background: var(--color-calendar-bg);
+}
+
+.habits-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  height: 64px;
+}
+
+.habits-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: var(--font-weight-bold);
+}
+
+/* The ⌄ beside 习惯: small and grey like the reference. */
+.habits-title-menu {
+  margin-left: -8px;
+}
+
+.habits-title-menu .ui-icon-button {
+  width: 20px;
+  color: var(--color-text-secondary);
+}
+
+.habits-header-actions {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.habits-header-actions .ui-icon-button:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+/* ---- 7-day strip ---- */
+
+.habits-week {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.habits-week-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding: 6px 0;
+  font: inherit;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.habits-week-day:hover {
+  background: var(--color-calendar-cell-hover);
+}
+
+.habits-week-name {
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.habits-week-date {
+  font-size: 12px;
+  font-weight: var(--font-weight-bold);
+  line-height: 18px;
+}
+
+.habits-week-today .habits-week-name,
+.habits-week-today .habits-week-date {
+  color: var(--color-brand-text);
+}
+
+.habits-week-ring {
+  width: 24px;
+  height: 24px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side, var(--color-calendar-bg) 72%, transparent 73%),
+    conic-gradient(var(--color-brand) var(--ratio, 0deg), var(--color-habit-ring-track) 0);
+}
+
+/* No habit due that day: hatched, like the reference. */
+.habits-week-ring-empty {
+  background: repeating-linear-gradient(135deg, var(--color-habit-ring-track) 0 2px, var(--color-habit-hatch) 2px 5px);
+}
+
+.habits-week-day-selected .habits-week-ring {
+  box-shadow: 0 0 0 2px var(--color-calendar-bg), 0 0 0 3px var(--color-brand);
+}
+
+/* ---- Empty state ---- */
+
+.habits-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  /* Reference: the drawing starts ~135px below the 7-day strip at both widths. */
+  padding-top: 128px;
+  text-align: center;
+}
+
+.habits-empty-art {
+  margin-bottom: 26px;
+}
+
+.habits-empty-title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.habits-empty-desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+/* ---- Habit rows ---- */
+
+.habits-list {
+  margin: 16px 0 24px;
+  padding: 0;
+  list-style: none;
+}
+
+.habits-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 0 12px;
+  border-radius: var(--radius-lg);
+}
+
+.habits-row:hover,
+.habits-row-selected {
+  background: var(--color-calendar-cell-hover);
+}
+
+.habits-row-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  font-size: 15px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-on-brand);
+  background: var(--color-brand);
+  border-radius: 50%;
+}
+
+.habits-row-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 10px 0;
+  font: inherit;
+  color: var(--color-text);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.habits-row-name {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.habits-row-meta {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.habits-check {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--color-on-brand);
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  background:
+    radial-gradient(closest-side, var(--color-calendar-bg) 80%, transparent 81%),
+    conic-gradient(var(--color-brand) var(--ratio, 0deg), var(--color-habit-ring-track) 0);
+}
+
+.habits-check-done {
+  background: var(--color-brand);
+}
+
+.habits-check-rest {
+  background: repeating-linear-gradient(135deg, var(--color-habit-ring-track) 0 2px, var(--color-habit-hatch) 2px 5px);
+}
+
+/* ---- Detail ---- */
+
+.habits-detail {
+  flex: none;
+  width: var(--habits-detail-width);
+  height: 100%;
+  overflow-y: auto;
+  background: var(--color-bg);
+  border-left: 1px solid var(--color-divider);
+}
+
+.habits-detail-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.habit-detail {
+  padding: 0 24px 24px;
+}
+
+.habit-detail-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 64px;
+}
+
+.habit-detail-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 18px;
+  font-weight: var(--font-weight-bold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.habit-detail-sub {
+  margin: -8px 0 16px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.habit-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin: 0 0 20px;
+}
+
+.habit-stats > div {
+  padding: 12px 14px;
+  background: var(--color-calendar-bg);
+  border-radius: var(--radius-lg);
+}
+
+.habit-stats dt {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.habit-stats dd {
+  margin: 4px 0 0;
+  font-size: 18px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.habit-month {
+  padding: 12px 14px 14px;
+  background: var(--color-calendar-bg);
+  border-radius: var(--radius-lg);
+}
+
+.habit-month-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.habit-month-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: var(--font-weight-bold);
+}
+
+.habit-month-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.habit-month-weekday {
+  padding: 8px 0 4px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.habit-month-cell {
+  display: grid;
+  place-items: center;
+  height: 40px;
+}
+
+.habit-day {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.habit-day:hover:not(:disabled) {
+  background: var(--color-calendar-cell-hover);
+}
+
+.habit-day:disabled {
+  color: var(--color-text-secondary);
+  cursor: default;
+}
+
+.habit-day-today {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-text);
+}
+
+.habit-day-partial {
+  box-shadow: inset 0 0 0 2px var(--color-brand);
+}
+
+.habit-day-done,
+.habit-day-done:hover:not(:disabled) {
+  color: var(--color-on-brand);
+  background: var(--color-brand);
+}
+
+.habit-month-summary {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+/* ---- Dialog ---- */
+
+.habit-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.habit-choice label,
+.habit-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+}
+
+.habit-inline {
+  margin-top: 8px;
+}
+
+.habit-inline input[type='number'] {
+  width: 80px;
+}
+
+.habit-unit {
+  width: 64px;
+}
+
+.habit-weekdays {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.habit-weekday {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  font-size: 13px;
+  border: 1px solid var(--color-divider-strong);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.habit-weekday:focus-within {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 1px;
+}
+
+.habit-weekday-on {
+  color: var(--color-on-brand);
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+}
+
+.habit-reminders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.habit-reminders li {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px 0 10px;
+  font-size: 13px;
+  background: var(--color-calendar-bg);
+  border-radius: 14px;
+}
+
+/* Reference at 390px: drawer toggle, 习惯 ⌄, the strip scrolls; the detail takes the screen. */
+@media (max-width: 767px) {
+  .habits-pane {
+    padding: 0 16px 0 16px;
+  }
+
+  .habits-header {
+    height: 64px;
+  }
+
+  .habits-drawer-toggle {
+    margin-left: -6px;
+  }
+
+  .habits-week {
+    grid-template-columns: repeat(7, 72px);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .habits-detail {
+    flex: 1 1 auto;
+    width: auto;
+    border-left: 0;
+  }
+
+  .habit-detail {
+    padding: 0 16px 24px;
+  }
+}
