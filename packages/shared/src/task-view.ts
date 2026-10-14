@@ -65,6 +65,8 @@ export interface TaskSection {
   /** Overdue group: the reference shows it in its own colour. */
   overdue?: boolean;
   completed?: boolean;
+  /** 已置顶: open pinned tasks (with their 子任务 in the custom order), shown first. */
+  pinned?: boolean;
   tasks: Task[];
 }
 
@@ -192,12 +194,44 @@ export function arrangeTasks(tasks: readonly Task[], options: ViewOptions, ctx: 
     if (options.groupBy === 'date') return group(done, options, ctx).map((s) => ({ ...s, tasks: s.tasks.sort(newestCompletedFirst) }));
     return group(done, options, ctx);
   }
+  const openTasks = tasks.filter((t) => t.status === 'open');
+  // 已置顶 (spec 用户故事 33): open pinned tasks above every group, newest pin first.
+  const pinned = pinnedTasks(openTasks, options.sortBy === 'custom');
   const open = group(
-    tasks.filter((t) => t.status === 'open'),
+    openTasks.filter((t) => !pinned.has(t)),
     options,
     ctx,
   );
+  const pinnedSection: TaskSection[] =
+    pinned.size > 0 ? [{ key: 'pinned', title: '已置顶', pinned: true, tasks: [...pinned].sort(byPin) }] : [];
   // 放弃 tasks keep their record under 已完成, next to the completed ones (spec 用户故事 28).
   const done = tasks.filter((t) => t.status !== 'open').sort(newestCompletedFirst);
-  return [...open, ...(done.length > 0 ? [{ key: 'completed', title: '已完成', completed: true, tasks: done }] : [])];
+  return [...pinnedSection, ...open, ...(done.length > 0 ? [{ key: 'completed', title: '已完成', completed: true, tasks: done }] : [])];
+}
+
+/** Pinned roots by pin key, then their 子任务 (which follow their parent there) by sort key. */
+function byPin(a: Task, b: Task): number {
+  if (a.pinOrder !== null && b.pinOrder !== null) return compareSortKeys(a.pinOrder, b.pinOrder) || custom(a, b);
+  if (a.pinOrder !== null) return -1;
+  if (b.pinOrder !== null) return 1;
+  return custom(a, b);
+}
+
+/** Open pinned top-level tasks, with their open 子任务 when `withSubtrees` (the nested custom order). */
+function pinnedTasks(open: readonly Task[], withSubtrees: boolean): Set<Task> {
+  const out = new Set(open.filter((t) => t.pinOrder !== null && t.parentId === null));
+  if (!withSubtrees || out.size === 0) return out;
+  const ids = new Set([...out].map((t) => t.id));
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const t of open) {
+      if (t.parentId !== null && ids.has(t.parentId) && !ids.has(t.id)) {
+        ids.add(t.id);
+        out.add(t);
+        grew = true;
+      }
+    }
+  }
+  return out;
 }

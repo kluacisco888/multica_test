@@ -1,5 +1,5 @@
 import type { FastifyReply } from 'fastify';
-import { DEPTH_EXCEEDED_MESSAGE } from '@dida/shared';
+import { DEPTH_EXCEEDED_MESSAGE, TASK_MAX_TAGS } from '@dida/shared';
 import { isUniqueViolation } from '../db/errors.js';
 import { sendError } from '../http-errors.js';
 
@@ -25,6 +25,10 @@ export const repeatNeedsDate = (reply: FastifyReply) => sendError(reply, 400, 'r
 export const invalidReminders = (reply: FastifyReply) =>
   sendError(reply, 400, 'invalid_reminders', '提醒需要日期：带时间的任务用「提前 N 分钟」，全天任务用「提前 N 天」');
 export const invalidChannels = (reply: FastifyReply) => sendError(reply, 400, 'invalid_channels', '通知渠道不存在');
+export const invalidPin = (reply: FastifyReply) => sendError(reply, 400, 'invalid_pin', '只有顶层任务可以置顶');
+export const invalidPosition = (reply: FastifyReply) =>
+  sendError(reply, 400, 'invalid_position', '目标位置的任务不存在，或不和这个任务排在一起');
+export const tooManyTags = (reply: FastifyReply) => sendError(reply, 400, 'too_many_tags', `每个任务最多 ${TASK_MAX_TAGS} 个标签`);
 export const checklistMode = (reply: FastifyReply) =>
   sendError(reply, 400, 'checklist_mode', '检查清单模式的任务没有描述，请先切换为描述模式');
 

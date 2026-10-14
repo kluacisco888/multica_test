@@ -52,3 +52,46 @@ export function sortKeysBetween(before: string | null, after: string | null, n: 
   }
   return keys;
 }
+
+/**
+ * Longest key `placeAt` hands out. Dropping again and again at the same spot
+ * grows a key by about one digit every 6 drops; past this length the whole
+ * group is given fresh, evenly spread keys instead.
+ */
+export const SORT_KEY_REBALANCE_LENGTH = 16;
+
+/** `n` increasing keys spread evenly over the key space, each as short as `n` allows (plus one digit of headroom). */
+export function spreadSortKeys(n: number): string[] {
+  if (n <= 0) return [];
+  let length = 1;
+  while (DIGITS.length ** length < n + 1) length++;
+  length++; // room for a few drops between neighbours before keys grow
+  const space = BigInt(DIGITS.length) ** BigInt(length);
+  const base = BigInt(DIGITS.length);
+  const keys: string[] = [];
+  for (let i = 1; i <= n; i++) {
+    let value = (space * BigInt(i)) / BigInt(n + 1);
+    let key = '';
+    for (let d = 0; d < length; d++) {
+      key = (DIGITS[Number(value % base)] as string) + key;
+      value /= base;
+    }
+    // Trailing zeros carry no value; keys never end in "0".
+    keys.push(key.replace(/0+$/, ''));
+  }
+  return keys;
+}
+
+/**
+ * Where a dragged item lands at `index` of `keys` (the ordered keys of the
+ * other items in its group): normally one new key, so only the moved row is
+ * written; when that key would be longer than `SORT_KEY_REBALANCE_LENGTH`,
+ * fresh keys for the whole group in its new order (`keys.length + 1` keys,
+ * the moved item's at `index`).
+ */
+export function placeAt(keys: readonly string[], index: number): { key: string } | { rebalance: string[] } {
+  if (!Number.isInteger(index) || index < 0 || index > keys.length) throw new Error(`index ${index} outside 0–${keys.length}`);
+  const key = keyBetween(keys[index - 1] ?? null, keys[index] ?? null);
+  if (key.length <= SORT_KEY_REBALANCE_LENGTH) return { key };
+  return { rebalance: spreadSortKeys(keys.length + 1) };
+}

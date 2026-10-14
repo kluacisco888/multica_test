@@ -2,6 +2,7 @@
 // 只读截图工具：加载参照浏览器配置目录（维护者在 noVNC 里登录的那份），打开 url 并截图。
 // 可选 --script：按导航脚本做导航类的点击、悬停、滚动后截图（ADR-0008），不打字、不拖动，
 // 点击前拒绝输入控件和会改数据的控件。所有非 GET/HEAD/OPTIONS 请求和全部 WebSocket 连接都被拦截，防止改动参照账号的数据。
+/* global window, Element, HTMLAnchorElement, HTMLFormElement, document -- used only in code that runs inside the page (addInitScript, evaluate) */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -68,17 +69,274 @@ async function main() {
     return ws.close();
   });
 
+  // ---- Browser-level guard (CDP on the browser target, below Playwright; EURO-22 复审) ----
+  // Every request of every target is paused here before it leaves the browser (Fetch on the browser target),
+  // including keepalive requests (sendBeacon) that outlive their page, which the per-page route can miss.
+  //   - Requests of a frame that is not part of the page we opened — a new tab or window, however it was
+  //     opened — fail, GET included: such a page never gets its document, scripts or beacons out.
+  //   - Every other request: only GET/HEAD/OPTIONS go through.
+  // New page targets are also closed as soon as they appear, and fail the run.
+  // (Holding new pages with waitForDebuggerOnStart and closing them was tried: a window.open popup shares its
+  //  opener's renderer, so holding it froze the opener and the click never returned.)
+  const page = context.pages()[0] ?? (await context.newPage());
+  const pageSession = await context.newCDPSession(page);
+  const pageTargetId = (await pageSession.send('Target.getTargetInfo')).targetInfo.targetId;
+  const ownFrames = new Set([pageTargetId]);
+  const collectFrames = (tree) => {
+    ownFrames.add(tree.frame.id);
+    for (const child of tree.childFrames ?? []) collectFrames(child);
+  };
+  pageSession.on('Page.frameAttached', ({ frameId }) => ownFrames.add(frameId));
+  await pageSession.send('Page.enable');
+  collectFrames((await pageSession.send('Page.getFrameTree')).frameTree);
+  const isOwnFrame = async (frameId) => {
+    if (ownFrames.has(frameId)) return true;
+    try {
+      collectFrames((await pageSession.send('Page.getFrameTree')).frameTree);
+    } catch {
+      // the page is gone: nothing is ours any more
+    }
+    return ownFrames.has(frameId);
+  };
+
+  // ---- Workers (EURO-22 第 3 次审查) ----
+  // A WebSocket opened inside a Worker / SharedWorker passes routeWebSocket (pages only), Fetch (no WebSockets)
+  // and Network.setBlockedURLs (no WebSockets either). Holding new workers with waitForDebuggerOnStart does not
+  // help: Playwright attaches to every worker too and resumes it at once, and a proxy cannot tell wss from https
+  // (both are CONNECT tunnels). So workers are not allowed to start at all: every document gets
+  // `Content-Security-Policy: worker-src 'none'` added to its response here. The
+  // browser enforces it (not page JS), for Worker, SharedWorker and ServiceWorker, blob: and data: scripts, and
+  // for the about:blank / srcdoc / blob / data frames that inherit the document's policy. A blocked worker is
+  // recorded in blockedRequests as `WORKER <url>`. Backstop: any worker target that still appears fails the run.
+  const WORKER_CSP = "worker-src 'none'";
+  const heldPages = [];
+  const startedWorkers = [];
+  const workerTargets = new Set();
+  const browserSession = await context.browser().newBrowserCDPSession();
+  browserSession.on('Fetch.requestPaused', async ({ requestId, request, frameId, responseStatusCode, responseStatusText, responseHeaders }) => {
+    if (responseStatusCode !== undefined) {
+      // Response stage (documents only): add the worker ban. (Fetch.continueResponse ignores new headers, so
+      // the response is fulfilled with its own body.) Redirects create no document: they go on as they are.
+      if (responseStatusCode >= 300 && responseStatusCode < 400) {
+        return browserSession.send('Fetch.continueRequest', { requestId }).catch(() => {});
+      }
+      try {
+        const { body, base64Encoded } = await browserSession.send('Fetch.getResponseBody', { requestId });
+        await browserSession.send('Fetch.fulfillRequest', {
+          requestId,
+          responseCode: responseStatusCode,
+          ...(responseStatusText ? { responsePhrase: responseStatusText } : {}),
+          responseHeaders: [...(responseHeaders ?? []), { name: 'Content-Security-Policy', value: WORKER_CSP }],
+          body: base64Encoded ? body : Buffer.from(body).toString('base64'),
+        });
+      } catch {
+        // A document that cannot carry the ban does not get through.
+        blocked.push(`无法加上 worker 禁令 ${request.method} ${request.url}`);
+        await browserSession.send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' }).catch(() => {});
+      }
+      return;
+    }
+    const fail = (why) => {
+      blocked.push(`${why}${request.method} ${request.url}`);
+      return browserSession.send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' }).catch(() => {});
+    };
+    if (frameId && workerTargets.has(frameId)) return fail('worker ');
+    if (frameId && !(await isOwnFrame(frameId))) {
+      if (workerTargets.has(frameId)) return fail('worker ');
+      heldPages.push(request.url);
+      return fail('新页面 ');
+    }
+    if (!isReadOnlyMethod(request.method)) return fail('');
+    return browserSession.send('Fetch.continueRequest', { requestId }).catch(() => {});
+  });
+  await browserSession.send('Fetch.enable', {
+    patterns: [
+      { urlPattern: '*', requestStage: 'Request' },
+      { urlPattern: '*', resourceType: 'Document', requestStage: 'Response' },
+    ],
+  });
+  browserSession.on('Target.attachedToTarget', ({ targetInfo }) => {
+    if (targetInfo.type === 'shared_worker' || targetInfo.type === 'worker') {
+      workerTargets.add(targetInfo.targetId);
+      startedWorkers.push(`${targetInfo.type} ${targetInfo.url}`);
+      browserSession.send('Target.closeTarget', { targetId: targetInfo.targetId }).catch(() => {});
+      return;
+    }
+    if (targetInfo.type !== 'page' || targetInfo.targetId === pageTargetId) return;
+    heldPages.push(targetInfo.url || 'about:blank');
+    browserSession.send('Target.closeTarget', { targetId: targetInfo.targetId }).catch(() => {});
+  });
+  await browserSession.send('Target.setAutoAttach', {
+    autoAttach: true,
+    waitForDebuggerOnStart: false,
+    flatten: true,
+    // Not service_worker: those are off (serviceWorkers: 'block'), and attaching to the profile's registered
+    // ones made dida's page load hang.
+    filter: [{ type: 'page' }, { type: 'shared_worker' }],
+  });
+  // Dedicated workers are children of the page: Playwright reports them.
+  page.on('worker', (worker) => startedWorkers.push(`worker ${worker.url()}`));
+  // The worker ban, as the page sees it: record what it stopped.
+  // (from the page's own violation events, and from DevTools issues, which also cover frames the init script
+  //  never ran in, e.g. a fresh about:blank iframe)
+  const recordedWorkers = new Set();
+  const recordWorker = (url) => {
+    const entry = `WORKER ${url || 'blob'}`;
+    if (recordedWorkers.has(entry)) return;
+    recordedWorkers.add(entry);
+    blocked.push(entry);
+  };
+  await context.exposeBinding('__didaRefWorkerBlocked', (_source, url) => recordWorker(String(url)));
+  pageSession.on('Audits.issueAdded', ({ issue }) => {
+    const csp = issue.details?.contentSecurityPolicyIssueDetails;
+    if (csp?.violatedDirective === 'worker-src') recordWorker(csp.blockedURL);
+  });
+  await pageSession.send('Audits.enable');
+
+  // New tabs and windows are where the write guard leaks (EURO-22 审查: a popup's sendBeacon reached the server even
+  // though the popup was closed at once), so pages may not open them at all: window.open, links and forms aimed at
+  // another tab, and middle / modifier clicks on links are stopped in the page and reported here.
+  const blockedPopups = [];
+  await context.exposeBinding('__didaRefPopupBlocked', (_source, what) => {
+    blockedPopups.push(String(what));
+  });
+  await context.addInitScript(() => {
+    document.addEventListener(
+      'securitypolicyviolation',
+      (event) => {
+        if (event.effectiveDirective !== 'worker-src') return;
+        try {
+          window.__didaRefWorkerBlocked(event.blockedURI || 'blob');
+        } catch {
+          // binding not ready: the worker is still blocked
+        }
+      },
+      true,
+    );
+    const report = (what) => {
+      try {
+        window.__didaRefPopupBlocked(what);
+      } catch {
+        // binding not ready: the page still gets no popup
+      }
+    };
+    const lock = (target, name, value) => Object.defineProperty(target, name, { value, writable: false, configurable: false });
+    // window.open, however it is called (open(), self.open, Reflect.apply, an iframe's contentWindow.open).
+    const open = function () {
+      report('window.open');
+      return null;
+    };
+    lock(window, 'open', open);
+    // A target names another tab unless it is this browsing context or a frame that already exists in the page.
+    const otherTab = (target) => {
+      const t = (target ?? '').trim();
+      if (t === '' || t === '_self' || t === '_parent' || t === '_top') return false;
+      if (t.startsWith('_')) return true; // _blank, _new, …
+      try {
+        const w = window.top;
+        const seen = [];
+        const walk = (win) => {
+          seen.push(win);
+          for (let i = 0; i < win.frames.length; i++) walk(win.frames[i]);
+        };
+        walk(w);
+        return !seen.some((win) => {
+          try {
+            return win.name === t;
+          } catch {
+            return false;
+          }
+        });
+      } catch {
+        return true;
+      }
+    };
+    // <base target> applies when a link or form has no target of its own.
+    const effectiveTarget = (el, attr) => {
+      if (el.hasAttribute(attr)) return el.getAttribute(attr);
+      return el.ownerDocument?.querySelector('base[target]')?.getAttribute('target') ?? '';
+    };
+    const formTarget = (form, submitter) =>
+      submitter && submitter.hasAttribute?.('formtarget') ? submitter.getAttribute('formtarget') : effectiveTarget(form, 'target');
+    const linkOpensTab = (link, event) => {
+      const modified = event && (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button === 1);
+      return modified || otherTab(effectiveTarget(link, 'target'));
+    };
+    const guardClick = (event) => {
+      const link = event.target instanceof Element ? event.target.closest('a[href], area[href]') : null;
+      if (!link || !linkOpensTab(link, event)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      report(`link ${link.href}`);
+    };
+    window.addEventListener('click', guardClick, true);
+    window.addEventListener('auxclick', guardClick, true);
+    // Links that are not in the document (their click events never reach window): a.click() / dispatchEvent.
+    const anchorClick = HTMLAnchorElement.prototype.click;
+    lock(HTMLAnchorElement.prototype, 'click', function () {
+      if (this.hasAttribute('href') && linkOpensTab(this)) return report(`link ${this.href}`);
+      return anchorClick.call(this);
+    });
+    const dispatch = EventTarget.prototype.dispatchEvent;
+    lock(EventTarget.prototype, 'dispatchEvent', function (event) {
+      const link = this instanceof Element ? this.closest('a[href], area[href]') : null;
+      if (link && (event.type === 'click' || event.type === 'auxclick') && linkOpensTab(link, event)) {
+        report(`link ${link.href}`);
+        return false;
+      }
+      return dispatch.call(this, event);
+    });
+    // Forms: user submits and requestSubmit() fire the submit event; form.submit() does not.
+    window.addEventListener(
+      'submit',
+      (event) => {
+        const form = event.target;
+        if (form instanceof HTMLFormElement && otherTab(formTarget(form, event.submitter))) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          report(`form ${form.action}`);
+        }
+      },
+      true,
+    );
+    const submit = HTMLFormElement.prototype.submit;
+    lock(HTMLFormElement.prototype, 'submit', function () {
+      if (otherTab(formTarget(this, null))) return report(`form ${this.action}`);
+      return submit.call(this);
+    });
+    const requestSubmit = HTMLFormElement.prototype.requestSubmit;
+    lock(HTMLFormElement.prototype, 'requestSubmit', function (submitter) {
+      if (otherTab(formTarget(this, submitter ?? null))) return report(`form ${this.action}`);
+      return requestSubmit.call(this, submitter);
+    });
+  });
+
+  // Backstop: any other page Playwright still sees is closed too and fails the run.
+  const extraPages = [];
+  context.on('page', (p) => {
+    if (p === page) return;
+    extraPages.push(p.url() || 'about:blank');
+    p.close().catch(() => {});
+  });
+  const checkPages = (where) => {
+    if (startedWorkers.length > 0) throw new Error(`${where}后台 worker 启动了（${startedWorkers.join(', ')}），已关闭；为保护参照账号，本次运行失败`);
+    if (heldPages.length > 0) throw new Error(`${where}打开了新页面（${heldPages.join(', ')}），它的请求全部拦下，页面已关闭；为保护参照账号，本次运行失败`);
+    if (extraPages.length > 0) throw new Error(`${where}打开了新页面（${extraPages.join(', ')}），已关闭；为保护参照账号，本次运行失败`);
+    if (blockedPopups.length > 0) throw new Error(`${where}页面想打开新页面（${blockedPopups.join(', ')}），已阻止；为保护参照账号，本次运行失败`);
+  };
+
   try {
-    const page = context.pages()[0] ?? (await context.newPage());
     await page.goto(args.url, { waitUntil: 'load', timeout: 60_000 });
     await page.waitForTimeout(args.waitMs);
     const screenshots = [];
     const log = [];
     for (const [i, step] of steps.entries()) {
       await runStep(page, step, stepOutputs[i]);
+      checkPages(`步骤 ${i + 1} `);
       if (stepOutputs[i]) screenshots.push(stepOutputs[i]);
       log.push({ ...step, blockedSoFar: blocked.length });
     }
+    checkPages('');
     await page.screenshot({ path: output, fullPage: args.fullPage });
     screenshots.push(output);
     console.log(
@@ -112,16 +370,22 @@ async function runStep(page, step, shotPath) {
       if (step.action === 'click') {
         const info = await target.evaluate((el) => {
           const control = el.closest('button, a, [role="button"], [role="menuitem"], [role="tab"], [role="option"]') ?? el;
+          // The click lands at the centre: check the element there too (it may be a link inside `el`).
+          const rect = el.getBoundingClientRect();
+          const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          const LINK = 'a[href], area[href], [role="link"]';
           return {
             text: [control.getAttribute('aria-label'), control.getAttribute('title'), control.innerText].filter(Boolean).join(' '),
             tag: el.tagName.toLowerCase(),
             type: el.getAttribute('type'),
             editable: el.isContentEditable,
+            link: el.closest(LINK) !== null || (hit !== null && hit.closest(LINK) !== null),
           };
         });
+        info.modified = (step.modifiers ?? []).length > 0;
         const reason = forbiddenControl(info);
         if (reason) throw new Error(`拒绝点击 ${step.selector}：${reason}（ADR-0008）`);
-        await target.click({ timeout: STEP_TIMEOUT_MS });
+        await target.click({ timeout: STEP_TIMEOUT_MS, modifiers: step.modifiers, button: step.button });
       } else {
         await target.hover({ timeout: STEP_TIMEOUT_MS });
       }

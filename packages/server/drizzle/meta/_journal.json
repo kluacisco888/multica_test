@@ -106,6 +106,13 @@
       "when": 1791901651070,
       "tag": "0014_kanban_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1791903586583,
+      "tag": "0015_pinned_tasks",
+      "breakpoints": true
     }
   ]
 }

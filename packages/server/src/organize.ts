@@ -14,8 +14,8 @@ import {
 } from '@dida/shared';
 import type { Executor } from './db/client.js';
 import { tags } from './db/schema/tags.js';
-import type { checklistItems, kanbanColumns } from './db/schema/tasks.js';
-import { folders, lists, tasks } from './db/schema/tasks.js';
+import type { checklistItems, kanbanColumns, tasks } from './db/schema/tasks.js';
+import { folders, lists } from './db/schema/tasks.js';
 import type { SyncWriter } from './sync/sync.js';
 
 /*
@@ -61,10 +61,6 @@ function maxKey(keys: string[]): string | null {
   return keys.reduce<string | null>((max, k) => (max === null || compareSortKeys(k, max) > 0 ? k : max), null);
 }
 
-function minKey(keys: string[]): string | null {
-  return keys.reduce<string | null>((min, k) => (min === null || compareSortKeys(k, min) < 0 ? k : min), null);
-}
-
 /** Sort keys of the top-level sidebar: 文件夹 plus 清单 outside folders (not the 收件箱). */
 export async function topLevelKeys(db: Executor, userId: string): Promise<string[]> {
   const folderKeys = await db
@@ -86,15 +82,6 @@ export async function endOfSidebarLevel(db: Executor, userId: string, folderId: 
     .from(lists)
     .where(and(eq(lists.userId, userId), eq(lists.folderId, folderId), isNull(lists.deletedAt)));
   return keyBetween(maxKey(rows.map((r) => r.key)), null);
-}
-
-/** Key above every task of a 清单 (new and moved tasks land on top). */
-export async function topOfList(db: Executor, userId: string, listId: string): Promise<string> {
-  const rows = await db
-    .select({ key: tasks.sortOrder })
-    .from(tasks)
-    .where(and(eq(tasks.userId, userId), eq(tasks.listId, listId), isNull(tasks.deletedAt)));
-  return keyBetween(null, minKey(rows.map((r) => r.key)));
 }
 
 const iso = (d: Date) => d.toISOString();
@@ -147,6 +134,7 @@ export function taskToApi(row: TaskRow): Task {
     reminders: row.reminders,
     reminderChannelIds: row.reminderChannelIds,
     columnId: row.columnId,
+    pinOrder: row.pinOrder,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
     revision: row.revision,

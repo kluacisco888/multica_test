@@ -6,7 +6,7 @@
 
 - 只截图。不在参照账号里新建、修改或删除任何东西，包括任务、清单、标签、设置。需要看某个状态时，请维护者在小号里准备好，不要自己动手。
 - 截图工具只导航和截图，不输入、不拖动，并且拦截所有非 GET/HEAD/OPTIONS 请求，以及全部 WebSocket 连接（WS 握手虽然是 GET，但连上后可以写数据）。输出里的 `blockedRequests` 会列出被拦截的请求，WebSocket 记为 `WS <地址>`。不要绕开这个工具去驱动已登录的浏览器。
-- 光打开网址截不出来的界面（例如日历的周、日、多日视图），可以用 `--script` 交给工具一个导航脚本，只做导航类的点击、悬停、滚动（ADR-0008），见下面「导航脚本」。PR 里附上用过的脚本和输出的 `blockedRequests`。
+- 光打开网址截不出来的界面（例如日历的周、日、多日视图），可以用 `--script` 交给工具一个导航脚本，只做导航类的点击、悬停、滚动（ADR-0008），见下面「导航脚本」。多选（Shift / Ctrl / Cmd + 点击）和右键菜单只改页面上的选中状态、打开菜单，也可以在脚本里做。PR 里附上用过的脚本和输出的 `blockedRequests`。
 - 如果页面一定要发出被拦截的写请求才能显示，就停下来，请维护者在 noVNC 里截图，不要放开拦截。
 - 不要在 noVNC 里的浏览器设置中开启「启动时继续浏览上次打开的网页」。截图工具在浏览器启动后才开始拦截，恢复出来的页面在这之前发出的请求拦不到。
 - 截图里有个人数据，登录态在配置目录里，这两样都不提交进仓库。截图工具拒绝把文件写进仓库；配置目录默认在 `~/.dida-reference`（权限 700）。
@@ -74,13 +74,23 @@ node screenshot.mjs 'https://dida365.com/webapp/#q/all/tasks' -o ~/reference-sho
 
 | 步骤 | 作用 |
 | --- | --- |
-| `{ "click": "<选择器>" }` | 点击第一个匹配的可见元素 |
+| `{ "click": "<选择器>" }` | 点击第一个匹配的可见元素；可加 `"modifiers": ["Shift" \| "Control" \| "Meta"]`（多选）和 `"button": "right"`（右键菜单）。带修饰键时不能点链接（`a[href]`、`[role=link]`，包括点击位置落在链接上），因为会开新标签页 |
 | `{ "hover": "<选择器>" }` | 悬停（打开子菜单） |
 | `{ "scroll": "<选择器>", "by": 400 }` | 让元素竖向滚动若干像素 |
 | `{ "press": "Escape" }` | 只允许导航键：Escape、Tab、Shift+Tab、方向键、PageUp/PageDown、Home、End（不含 Enter 和空格） |
 | `{ "wait": 1000 }` | 等若干毫秒（最多 120000） |
 | `{ "waitFor": "<选择器>" }` | 等元素出现（15 秒超时） |
 | `{ "screenshot": "month.png", "fullPage": false }` | 中途截一张，相对路径相对于 `-o` 所在目录，同样不能在仓库内 |
+
+新标签页和新窗口一律不许打开，分两层（EURO-22 审查）：
+
+- 浏览器层（CDP，挂在浏览器 target 上，在 Playwright 之下）：所有 target 的所有请求出浏览器之前都先在这里暂停。不属于我们打开的那个页面的 frame（也就是任何新标签页、新窗口，不管怎么开的）发出的请求一律失败，GET 也不放，所以新页面连自己的文档都拿不到；其余请求只放行 GET/HEAD/OPTIONS，sendBeacon 这类页面关掉后还会发的 keepalive 请求也拦得住。新出现的页面 target 立刻关掉，这次运行失败。
+- 页面层（`addInitScript`）：`window.open`（各种写法）、`a.click()` 和 `dispatchEvent` 点击不在文档里的链接、指向别的标签页的链接和表单（含 `<base target>`、`formtarget`、不存在的具名窗口）、`form.submit()` / `requestSubmit()`、中键或带修饰键点链接，都在页面里直接阻止，报错更清楚。页面里已有的具名 iframe 仍可作为 target。
+
+两种情况都让这次运行失败、不截图。
+
+后台 worker（Worker、SharedWorker）一律不许启动（EURO-22 第 3 次审查：worker 里开的 WebSocket 不经过 `routeWebSocket`，CDP 的 `Fetch` 和 `Network.setBlockedURLs` 也都管不到 WebSocket）。做法是浏览器层给每个文档的响应加上 `Content-Security-Policy: worker-src 'none'`，由浏览器执行，about:blank / srcdoc / blob 这类继承文档策略的 iframe 也一样。被挡下的 worker 记进 `blockedRequests`，写作 `WORKER <地址>`；万一还有 worker 启动了，立刻关掉，这次运行失败。试过的其他办法：先挂起 worker 再下发设置（Playwright 自己也挂在 worker 上，会马上让它继续跑，抢不过）；只放行 HTTP 的代理（wss 和 https 都走 CONNECT 隧道，分不出来）。截至 EURO-22，滴答网页版的三个参照脚本里没有出现过创建 worker 的情况。
+（试过用 `waitForDebuggerOnStart` 先挂起新页面再关：`window.open` 开的弹窗和打开它的页面共用渲染进程，挂起弹窗会把原页面一起冻住，点击一直不返回，所以改用按 frame 拦请求。）
 
 没有输入和拖动类的步骤；其他字段一律拒绝，整份脚本在启动浏览器之前就校验完。点击前工具会检查目标控件（离它最近的按钮 / 链接 / 菜单项）：输入框、下拉框、可编辑区域，以及文字里带「删除、新建、添加、完成、保存、确定、移动、归档、放弃、清空、退出、订阅、升级、编辑、上传」等字样的控件都拒绝点击，脚本报错退出、不截图。写请求的拦截不受脚本影响。
 

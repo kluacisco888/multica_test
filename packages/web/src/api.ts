@@ -1,4 +1,9 @@
 import {
+  batchResponseSchema,
+  moveTaskResponseSchema,
+  type BatchAction,
+  type BatchRequest,
+  type MoveTaskRequest,
   adminUserSchema,
   calendarDaysResponseSchema,
   type CalendarDay,
@@ -173,6 +178,18 @@ export async function createTask(request: CreateTaskRequest): Promise<Task> {
 
 export async function updateTask(id: string, patch: UpdateTaskRequest): Promise<Task> {
   return taskSchema.parse(await (await call('PATCH', `/api/tasks/${encodeURIComponent(id)}`, patch)).json());
+}
+
+/** 拖拽排序: right after `afterId` (null: first) in the task's group; returns every task whose key changed. */
+export async function moveTask(id: string, afterId: string | null): Promise<Task[]> {
+  const res = await call('POST', `/api/tasks/${encodeURIComponent(id)}/move`, { afterId } satisfies MoveTaskRequest);
+  return moveTaskResponseSchema.parse(await res.json()).tasks;
+}
+
+/** 批量操作 on the selected tasks; returns them as they are now (deleted ones left out). */
+export async function batchTasks(ids: string[], action: BatchAction): Promise<Task[]> {
+  const res = await call('POST', '/api/tasks/batch', { ids, action } satisfies BatchRequest);
+  return batchResponseSchema.parse(await res.json()).tasks;
 }
 
 /** 删除: the task (with its 子任务) moves to the 回收站. */

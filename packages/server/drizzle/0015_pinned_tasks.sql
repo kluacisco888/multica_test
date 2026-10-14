@@ -1,0 +1,1 @@
+ALTER TABLE "tasks" ADD COLUMN "pin_order" text;

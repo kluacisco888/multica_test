@@ -7,6 +7,13 @@ import type { SVGProps } from 'react';
  */
 
 const paths = {
+  /** 置顶: an arrow up to a bar (our own shape). */
+  pin: (
+    <>
+      <path d="M6 4.5h12" />
+      <path d="M12 8.5 6.5 14H10v5.5h4V14h3.5Z" />
+    </>
+  ),
   inbox: (
     <>
       <path d="M4 13.5 6.2 6.3A1.8 1.8 0 0 1 7.9 5h8.2a1.8 1.8 0 0 1 1.7 1.3L20 13.5" />

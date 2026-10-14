@@ -27,3 +27,5 @@ export * from './calendar.js';
 export * from './reminders.js';
 export * from './theme.js';
 export * from './kanban.js';
+export * from './task-selection.js';
+export * from './list-drag.js';

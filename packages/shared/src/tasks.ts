@@ -75,6 +75,13 @@ export const taskSchema = z.object({
   reminderChannelIds: z.array(z.uuid()).nullable(),
   /** 看板分栏 of its 清单 (see kanban.ts); null: 未分组. */
   columnId: z.uuid().nullable(),
+  /**
+   * 置顶 (spec 用户故事 33): null when not pinned. Pinned tasks show in an
+   * 已置顶 section above the others, ordered by this key (the most recently
+   * pinned first, then as dragged); `sortOrder` is kept, so 取消置顶 puts the
+   * task back where it was.
+   */
+  pinOrder: z.string().nullable(),
 });
 export type Task = z.infer<typeof taskSchema>;
 
@@ -157,6 +164,8 @@ export const updateTaskRequestSchema = z
      * another 清单 without it puts the task into 未分组 there.
      */
     columnId: z.uuid().nullable(),
+    /** 置顶 / 取消置顶. Pinning puts the task first in 已置顶; only top-level tasks can be pinned (400 `invalid_pin`). */
+    pinned: z.boolean(),
   })
   .partial()
   .strict();
@@ -179,6 +188,57 @@ export type TasksQuery = z.infer<typeof tasksQuerySchema>;
 /** `GET /api/tasks?listId=`: open tasks in list order, then completed ones, newest completion first. */
 export const tasksResponseSchema = z.object({ tasks: z.array(taskSchema) });
 export type TasksResponse = z.infer<typeof tasksResponseSchema>;
+
+/**
+ * `POST /api/tasks/:id/move` (拖拽排序, spec 用户故事 32): put the task right
+ * after `afterId` among the tasks it is ordered with — its siblings (same
+ * 清单 and parent) or, for a pinned task, the user's other pinned tasks.
+ * `afterId: null` puts it first. Only the moved task gets a new key, unless
+ * the keys around it have grown too long; then the whole group is re-keyed
+ * and every re-keyed task is in the response.
+ */
+export const moveTaskRequestSchema = z.object({ afterId: z.uuid().nullable() }).strict();
+export type MoveTaskRequest = z.infer<typeof moveTaskRequestSchema>;
+export const moveTaskResponseSchema = z.object({ tasks: z.array(taskSchema) });
+export type MoveTaskResponse = z.infer<typeof moveTaskResponseSchema>;
+
+/** Most tasks one 批量操作 can change. */
+export const BATCH_MAX_TASKS = 500;
+
+/**
+ * `POST /api/tasks/batch` (批量操作, spec 用户故事 34): one action on several
+ * tasks in one transaction. Every id must be a live task of the user, or
+ * nothing changes (404). 删除 moves the tasks (with their 子任务) into the
+ * 回收站 (soft delete, ADR-0004); `tags` adds and removes 标签 on each task,
+ * keeping its other 标签.
+ */
+export const batchActionSchema = z.discriminatedUnion('op', [
+  z.object({ op: z.literal('complete') }).strict(),
+  z.object({ op: z.literal('abandon') }).strict(),
+  z.object({ op: z.literal('delete') }).strict(),
+  z.object({ op: z.literal('move'), listId: z.uuid() }).strict(),
+  z.object({ op: z.literal('dates'), dates: taskDatesInputSchema.nullable() }).strict(),
+  z.object({ op: z.literal('priority'), priority: prioritySchema }).strict(),
+  z.object({ op: z.literal('tags'), add: tagIdsSchema.default([]), remove: tagIdsSchema.default([]) }).strict(),
+  z.object({ op: z.literal('pin'), pinned: z.boolean() }).strict(),
+]);
+export type BatchAction = z.input<typeof batchActionSchema>;
+
+export const batchRequestSchema = z
+  .object({
+    ids: z
+      .array(z.uuid())
+      .min(1, '至少选择一个任务')
+      .max(BATCH_MAX_TASKS, `一次最多 ${BATCH_MAX_TASKS} 个任务`)
+      .transform((ids) => [...new Set(ids.map((id) => id.toLowerCase()))]),
+    action: batchActionSchema,
+  })
+  .strict();
+export type BatchRequest = z.input<typeof batchRequestSchema>;
+
+/** The changed tasks as they are now (deleted ones are left out). */
+export const batchResponseSchema = z.object({ tasks: z.array(taskSchema) });
+export type BatchResponse = z.infer<typeof batchResponseSchema>;
 
 /** 回收站 (spec 用户故事 29、30): deleted tasks stay restorable this many days, then their content is purged. */
 export const TRASH_RETENTION_DAYS = 30;

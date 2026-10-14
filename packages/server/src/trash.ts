@@ -6,7 +6,8 @@ import type { Clock } from './clock.js';
 import type { Db, Executor, Tx } from './db/client.js';
 import { attachments, comments } from './db/schema/attachments.js';
 import { checklistItems, kanbanColumns, lists, tasks } from './db/schema/tasks.js';
-import { ensureInbox, taskToApi, topOfList, type TaskRow } from './organize.js';
+import { ensureInbox, taskToApi, type TaskRow } from './organize.js';
+import { topOfList } from './task-order.js';
 import type { SyncOps, SyncWriter } from './sync/sync.js';
 import { descendantsOf, exceedsDepth, liveTasksOfList, lockTaskTrees } from './task-tree.js';
 
@@ -242,7 +243,7 @@ export function createTrashService({ db, sync, clock, files, log }: TrashService
           listId,
           columnId: column?.id ?? null,
           parentId: keepParent ? root.parentId : null,
-          ...(moved ? { sortOrder: await topOfList(tx, userId, listId) } : {}),
+          ...(moved ? { sortOrder: await topOfList(ops, tx, userId, listId) } : {}),
         });
         for (const row of batch) {
           if (row.id !== root.id) await ops.restore(tasks, row.id, { trashRootId: null, listId });

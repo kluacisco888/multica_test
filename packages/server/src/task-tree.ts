@@ -1,5 +1,5 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { checklistToDescription, compareSortKeys, descriptionToChecklist, keyBetween, MAX_TASK_DEPTH, sortKeysBetween, subtreeHeight, taskDepth } from '@dida/shared';
+import { checklistToDescription, compareSortKeys, descriptionToChecklist, MAX_TASK_DEPTH, sortKeysBetween, subtreeHeight, taskDepth } from '@dida/shared';
 import type { Executor, Tx } from './db/client.js';
 import { checklistItems, tasks } from './db/schema/tasks.js';
 import type { TaskRow } from './organize.js';
@@ -65,13 +65,6 @@ const asTree = (rows: readonly TaskRow[]) => rows.map((r) => ({ id: r.id, parent
 export function exceedsDepth(parentRows: readonly TaskRow[], parentId: string, subtreeRows: readonly TaskRow[] | null, taskId: string | null): boolean {
   const height = taskId && subtreeRows ? subtreeHeight(asTree(subtreeRows), taskId) : 1;
   return taskDepth(asTree(parentRows), parentId) + height > MAX_TASK_DEPTH;
-}
-
-/** Key after the last current child of `parentId`. */
-export function endOfChildren(rows: readonly TaskRow[], parentId: string, excludeId?: string): string {
-  const keys = rows.filter((r) => r.parentId === parentId && r.id !== excludeId).map((r) => r.sortOrder);
-  const last = keys.reduce<string | null>((max, k) => (max === null || compareSortKeys(k, max) > 0 ? k : max), null);
-  return keyBetween(last, null);
 }
 
 /** Live 检查项 of a task, in sort-key order (code-unit order, not the database collation). */

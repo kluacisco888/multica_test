@@ -114,6 +114,8 @@ export const tasks = pgTable(
     reminderChannelIds: uuid().array(),
     /** 看板分栏 of its 清单; null (or a deleted 分栏): 未分组. Only meaningful for top-level tasks. */
     columnId: uuid().references(() => kanbanColumns.id),
+    /** 置顶: fractional key among the user's pinned tasks (smallest first); null when not pinned. Top-level tasks only. */
+    pinOrder: text(),
   },
   (t) => [
     syncIndex('tasks', t),

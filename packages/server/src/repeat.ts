@@ -70,6 +70,8 @@ export async function generateNextInstance(
     reminders: task.reminders,
     reminderChannelIds: task.reminderChannelIds,
     columnId: task.columnId,
+    // A pinned 重复任务 stays pinned, in the same place.
+    pinOrder: task.pinOrder,
   });
   // A 检查清单 starts over: same 检查项, none checked.
   if (task.kind === 'checklist') {

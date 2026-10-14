@@ -41,6 +41,7 @@ function task(title: string, extra: Partial<Task> = {}): Task {
     reminders: [],
     reminderChannelIds: null,
     columnId: null,
+    pinOrder: null,
     ...extra,
   };
 }
@@ -134,5 +135,41 @@ describe('视图 layouts', () => {
     }
     expect(viewOptionsSchema.parse({ sortBy: 'custom', groupBy: 'none' }).layout).toBeUndefined();
     expect(viewOptionsSchema.safeParse({ sortBy: 'custom', groupBy: 'none', mode: 'kanban' }).success).toBe(false);
+  });
+});
+
+describe('已置顶 (pinned tasks)', () => {
+  const plain = task('普通', { sortOrder: 'a1' });
+  const pinnedOld = task('早置顶', { pinOrder: 'V', sortOrder: 'a0', dates: due('2026-10-01') });
+  const pinnedNew = task('新置顶', { pinOrder: 'G', sortOrder: 'a2' });
+  const child = task('子任务', { parentId: pinnedNew.id, sortOrder: 'b' });
+  const donePinned = task('完成的置顶', { pinOrder: 'A', status: 'completed', completedAt: '2026-10-13T01:00:00.000Z' });
+
+  it('shows open pinned tasks first, by pin key, before the other groups', () => {
+    const sections = arrangeTasks([plain, pinnedOld, pinnedNew, donePinned], { sortBy: 'date', groupBy: 'date' }, ctx);
+    expect(titles(sections)).toEqual([
+      ['已置顶', ['新置顶', '早置顶']],
+      ['无日期', ['普通']],
+      ['已完成', ['完成的置顶']],
+    ]);
+    expect(sections[0]?.pinned).toBe(true);
+  });
+
+  it('in the custom order, a pinned task brings its 子任务 along', () => {
+    const sections = arrangeTasks([plain, pinnedNew, child], { sortBy: 'custom', groupBy: 'none' }, ctx);
+    expect(titles(sections)).toEqual([
+      ['已置顶', ['新置顶', '子任务']],
+      ['', ['普通']],
+    ]);
+  });
+
+  it('a pinned 子任务 shown flat stays in its own group (only roots are pinned)', () => {
+    const sections = arrangeTasks([plain, child], { sortBy: 'custom', groupBy: 'none' }, ctx);
+    expect(titles(sections)).toEqual([['', ['普通', '子任务']]]);
+  });
+
+  it('the 已完成 smart list has no 已置顶 section', () => {
+    const sections = arrangeTasks([donePinned], defaultViewOptions('smart:completed'), { ...ctx, completedView: true });
+    expect(sections.map((s) => s.title)).not.toContain('已置顶');
   });
 });
