@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { describeImportIssue, importIssueSchema, type BackupDocument, type BackupRecord, type ImportIssue } from '@dida/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { fixedClock } from '../../src/clock.js';
+import { reminderDeliveries } from '../../src/db/schema/reminders.js';
 import { createTestApp, type TestApp, type TestUser } from '../support/test-app.js';
 
 /*
@@ -107,7 +109,15 @@ describe('导入导出', () => {
     expect((await api(u, 'DELETE', `/api/tasks/${trashed.id}`)).statusCode).toBe(204);
 
     await ok(u, 'POST', '/api/filters', { name: '高优先级', rules: { listIds: [list.id], tagIds: [parentTag.id], priorities: ['high'] } });
-    await ok(u, 'PATCH', '/api/settings', { themeMode: 'dark', timeZone: 'Asia/Tokyo', hiddenSmartLists: ['tomorrow'] });
+    await ok(u, 'PATCH', '/api/settings', {
+      themeMode: 'dark',
+      timeZone: 'Asia/Tokyo',
+      hiddenSmartLists: ['tomorrow'],
+      viewOptions: { [`list:${list.id}`]: { sortBy: 'title', groupBy: 'none' } },
+    });
+    // Text that happens to be an id stays text.
+    await ok(u, 'POST', '/api/tasks', { title: list.id, description: `见 ${task.id}` });
+    await ok(u, 'POST', `/api/tasks/${task.id}/comments`, { content: list.id });
     await ok(u, 'POST', '/api/countdowns', { name: '生日', date: '2026-12-01', calendar: 'lunar', repeat: 'yearly', reminders: [{ type: 'day', daysBefore: 1, time: null }] });
     const habit = await ok(u, 'POST', '/api/habits', { name: '喝水', goal: { type: 'count', target: 8, unit: '杯' }, reminders: ['09:00'] });
     await ok(u, 'PUT', `/api/habits/${habit.id}/checkins/2026-10-14`, { count: 3 });
@@ -117,6 +127,8 @@ describe('导入导出', () => {
     clock.set('2026-10-14T02:00:00.000Z');
     return u;
   }
+
+  const TEXT_FIELDS = new Set(['title', 'description', 'content', 'name']);
 
   /** Ids replaced by `<type>#<position>`, revisions dropped: what must survive a round trip. */
   function canonical(doc: BackupDocument) {
@@ -128,7 +140,12 @@ describe('导入导出', () => {
       if (typeof value === 'string') return labels.get(value) ?? value;
       if (Array.isArray(value)) return value.map(walk);
       if (value && typeof value === 'object') {
-        return Object.fromEntries(Object.entries(value).filter(([k]) => k !== 'revision').map(([k, v]) => [k, walk(v)]));
+        return Object.fromEntries(
+          Object.entries(value)
+            .filter(([k]) => k !== 'revision')
+            // Text is compared as written: only id fields are relabelled.
+            .map(([k, v]) => [k.replace(/[0-9a-f-]{36}/g, (id) => labels.get(id) ?? id), TEXT_FIELDS.has(k) ? v : walk(v)]),
+        );
       }
       return value;
     };
@@ -158,12 +175,14 @@ describe('导入导出', () => {
     it('holds every kind of record, tombstones included, without user ids or secrets in the clear on the server', () => {
       expect(exported.format).toBe('dida-clone-backup');
       expect(exported.version).toBe(1);
-      for (const type of ['folder', 'list', 'kanbanColumn', 'tag', 'notificationChannel', 'task', 'checklistItem', 'attachment', 'comment', 'filter', 'settings', 'countdown', 'reminderDelivery', 'focusSession', 'habit', 'habitCheckin'] as const) {
+      for (const type of ['folder', 'list', 'kanbanColumn', 'tag', 'notificationChannel', 'task', 'checklistItem', 'attachment', 'comment', 'filter', 'settings', 'countdown', 'focusSession', 'habit', 'habitCheckin'] as const) {
         expect(records(exported, type).length, type).toBeGreaterThan(0);
       }
       expect(records(exported, 'task').some((r) => r.deletedAt !== null && r.title === '删掉的任务')).toBe(true);
       expect(records(exported, 'task').some((r) => r.title === '背单词' && r.repeatIndex === 2 && r.repeatPrevId !== null)).toBe(true);
       expect(JSON.stringify(exported)).not.toContain(source.id);
+      // 提醒投递记录 are the server's own: rescheduled on import, not carried.
+      expect(Object.keys(exported.entities)).not.toContain('reminderDelivery');
       const [attachment] = records(exported, 'attachment');
       expect(Buffer.from(String(attachment?.content), 'base64').toString()).toBe('a,b\n1,2\n');
       const [channel] = records(exported, 'notificationChannel');
@@ -179,6 +198,15 @@ describe('导入导出', () => {
 
       const again = await exportOf(target);
       expect(canonical(again)).toEqual(canonical(exported));
+      // Ids in text are not ids: titles, descriptions and 评论 come back as written.
+      const sourceList = records(exported, 'list').find((r) => r.name === '项目');
+      const sourceReport = records(exported, 'task').find((r) => r.title === '写周报');
+      expect(records(again, 'task').map((r) => r.title)).toContain(sourceList?.id);
+      expect(records(again, 'task').map((r) => r.description)).toContain(`见 ${String(sourceReport?.id)}`);
+      expect(records(again, 'comment').map((r) => r.content)).toContain(sourceList?.id);
+      // The view options of the 清单 follow it to its new id.
+      const newList = records(again, 'list').find((r) => r.name === '项目');
+      expect(Object.keys((records(again, 'settings')[0]?.viewOptions ?? {}) as object)).toEqual([`list:${String(newList?.id)}`]);
       // New ids: nothing of the source account is shared.
       const sourceIds = new Set(Object.values(exported.entities).flatMap((rs) => rs.map((r) => r.id)));
       for (const rs of Object.values(again.entities)) for (const r of rs) expect(sourceIds.has(r.id)).toBe(false);
@@ -204,6 +232,16 @@ describe('导入导出', () => {
 
       const channels = (await api(target, 'GET', '/api/notification-channels')).json() as { channels: { name: string; config: Record<string, unknown> }[] };
       expect(channels.channels[0]?.config.webhookUrl).toBe('https://open.feishu.cn/****oken');
+    });
+
+    it('schedules the imported 任务 提醒 afresh', async () => {
+      const target = await user('remind');
+      expect((await importInto(target, exported)).statusCode).toBe(200);
+      const rows = (await t.database.db.select().from(reminderDeliveries).where(eq(reminderDeliveries.userId, target.id))).filter((r) => r.taskId);
+      // 写周报 is due 2026-10-15 15:00 (+08:00) with 提前30分钟.
+      expect(rows.map((r) => [r.status, r.fireAt.toISOString()])).toEqual([['scheduled', '2026-10-15T06:30:00.000Z']]);
+      const countdowns = await t.database.db.select().from(reminderDeliveries).where(eq(reminderDeliveries.userId, target.id));
+      expect(countdowns.filter((r) => r.countdownId && r.status === 'scheduled')).toHaveLength(1);
     });
 
     it('imports into an account that already has data, next to it', async () => {
@@ -252,6 +290,34 @@ describe('导入导出', () => {
       expect(where).toEqual(expect.arrayContaining(['task#2', 'task#3', 'tag#1']));
       expect(issues.find((i) => i.entity === 'task' && i.index === 2)?.id).toBe(records(exported, 'task')[1]?.id);
       expect(describeImportIssue(issues.find((i) => i.entity === 'task' && i.index === 2) as ImportIssue)).toMatch(/^任务 第 2 条（id .+）：priority/);
+      await expectNothingImported(target);
+    });
+
+    it('checks fields with the API rules and names the record: 时区, 重复规则, 提醒, 标题长度, 过滤器, 通知渠道', async () => {
+      const target = await user('rules');
+      const doc = edited((d) => {
+        (records(d, 'settings')[0] as BackupRecord).timeZone = 'Not/A_Zone';
+        const tasks = records(d, 'task');
+        const report = tasks.findIndex((r) => r.title === '写周报');
+        Object.assign(tasks[report] as BackupRecord, { repeat: { freq: 'bogus' } });
+        const sub = tasks.findIndex((r) => r.title === '汇总数据');
+        Object.assign(tasks[sub] as BackupRecord, { reminders: [{ type: 'before', minutes: 5 }] }); // 全天 task: needs `day` reminders
+        const plain = tasks.findIndex((r) => r.title === '出差清单');
+        (tasks[plain] as BackupRecord).title = 'x'.repeat(2_000);
+        (records(d, 'filter')[0] as BackupRecord).rules = { listIds: [randomUUID()] };
+        (records(d, 'notificationChannel')[0] as BackupRecord).credentials = { webhookUrl: 'not a url', secret: null };
+      });
+      const issues = issuesOf(await importInto(target, doc));
+      const byWhere = (entity: string, title: string) => {
+        const index = records(exported, entity as 'task').findIndex((r) => r.title === title) + 1;
+        return issues.filter((i) => i.entity === entity && i.index === index).map((i) => i.message);
+      };
+      expect(issues.find((i) => i.entity === 'settings')?.message).toMatch(/^timeZone /);
+      expect(byWhere('task', '写周报')[0]).toMatch(/^repeat /);
+      expect(byWhere('task', '汇总数据')).toEqual(['reminders 和任务的日期对不上']);
+      expect(byWhere('task', '出差清单')[0]).toBe('title 标题最多 512 个字符');
+      expect(issues.find((i) => i.entity === 'filter')?.message).toBe('引用的清单不在备份文件里');
+      expect(issues.find((i) => i.entity === 'notificationChannel')?.message).toMatch(/^credentials /);
       await expectNothingImported(target);
     });
 
@@ -349,5 +415,87 @@ describe('导入导出', () => {
       expect((await t.app.inject({ method: 'POST', url: '/api/backup/import', payload: {} })).statusCode).toBe(401);
       void a;
     });
+  });
+
+});
+
+describe('导出大小和并发', () => {
+  const clock = fixedClock('2026-10-14T02:00:00.000Z');
+  const LIMIT = 64 * 1024;
+  let t: TestApp;
+  let n = 0;
+
+  beforeAll(async () => {
+    t = await createTestApp({ clock, backupMaxBytes: LIMIT });
+  });
+  afterAll(() => t.close());
+
+  async function withFiles(bytes: number[]): Promise<TestUser> {
+    const u = await t.createUser(`size${++n}`);
+    const task = (await t.app.inject({ method: 'POST', url: '/api/tasks', headers: u.headers, payload: { title: '有附件' } })).json() as { id: string };
+    for (const [i, size] of bytes.entries()) {
+      const res = await t.app.inject({
+        method: 'POST',
+        url: `/api/tasks/${task.id}/attachments?name=f${i}.bin`,
+        headers: { ...u.headers, 'content-type': 'application/octet-stream' },
+        payload: Buffer.alloc(size, 7),
+      });
+      expect(res.statusCode, res.body).toBe(201);
+    }
+    return u;
+  }
+
+  const exportOf = (u: TestUser) => t.app.inject({ method: 'GET', url: '/api/backup/export', headers: u.headers });
+
+  it('refuses, before reading any file, a backup larger than the import accepts', async () => {
+    // 2 × 30KB of files is 80KB as base64: over the 64KB limit.
+    const u = await withFiles([30 * 1024, 30 * 1024]);
+    const opened: string[] = [];
+    const open = t.app.attachmentStore.open;
+    t.app.attachmentStore.open = (userId, id) => {
+      opened.push(id);
+      return open(userId, id);
+    };
+    try {
+      const res = await exportOf(u);
+      expect(res.statusCode).toBe(413);
+      expect(res.json().error.code).toBe('backup_too_large');
+      expect(res.json().error.message).toMatch(/^备份文件预计约 0\.1 MB，超过了导入上限 0\.1 MB/);
+      expect(opened).toEqual([]);
+    } finally {
+      t.app.attachmentStore.open = open;
+    }
+  });
+
+  it('exports right under the limit, and that file imports back (same limit both ways)', async () => {
+    const u = await withFiles([20 * 1024, 20 * 1024]);
+    const res = await exportOf(u);
+    expect(res.statusCode, res.body.slice(0, 200)).toBe(200);
+    expect(res.rawPayload.length).toBeLessThanOrEqual(LIMIT);
+    const target = await t.createUser(`size${++n}`);
+    const imported = await t.app.inject({ method: 'POST', url: '/api/backup/import', headers: target.headers, payload: res.json() });
+    expect(imported.statusCode, imported.body).toBe(200);
+    // One byte over the limit is refused by the import.
+    const big = await t.app.inject({
+      method: 'POST',
+      url: '/api/backup/import',
+      headers: { ...target.headers, 'content-type': 'application/json' },
+      payload: JSON.stringify({ pad: 'x'.repeat(LIMIT) }),
+    });
+    expect(big.statusCode).toBe(413);
+  });
+
+  it('builds one export per user at a time', async () => {
+    const u = await withFiles([10 * 1024]);
+    const other = await withFiles([10 * 1024]);
+    const [a, b, c] = await Promise.all([exportOf(u), exportOf(u), exportOf(other)]);
+    expect([a.statusCode, b.statusCode].sort()).toEqual([200, 409]);
+    expect([a, b].find((r) => r.statusCode === 409)?.json().error.code).toBe('export_running');
+    expect(c.statusCode).toBe(200);
+    // Released afterwards, also after a refused export.
+    expect((await exportOf(u)).statusCode).toBe(200);
+    const tooBig = await withFiles([40 * 1024, 40 * 1024]);
+    expect((await exportOf(tooBig)).statusCode).toBe(413);
+    expect((await exportOf(tooBig)).statusCode).toBe(413);
   });
 });

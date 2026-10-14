@@ -530,9 +530,20 @@ export async function undoCheckIn(id: string, date: string): Promise<Habit> {
 
 /* ---- 导入导出 (spec 用户故事 110–112) ---- */
 
-/** Same-origin download URLs; the session cookie authorises them. */
-export const BACKUP_EXPORT_URL = '/api/backup/export';
+/** Same-origin download URL; the session cookie authorises it. */
 export const TASKS_CSV_URL = '/api/backup/tasks.csv';
+
+/**
+ * 生成备份: the account as a JSON file. Fetched (not a plain link) so a
+ * refusal — too large to import back (413), another export still running
+ * (409) — shows as a message instead of a downloaded error page.
+ */
+export async function downloadBackup(): Promise<{ blob: Blob; fileName: string }> {
+  const res = await call('GET', '/api/backup/export');
+  const disposition = res.headers.get('content-disposition') ?? '';
+  const fileName = /filename="([^"]+)"/.exec(disposition)?.[1] ?? 'dida-clone-backup.json';
+  return { blob: await res.blob(), fileName };
+}
 
 /** Import a JSON backup; a refused file throws ApiCallError whose `issues` name the records. */
 export async function importBackup(doc: unknown): Promise<ImportResponse> {

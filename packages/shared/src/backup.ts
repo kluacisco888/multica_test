@@ -9,8 +9,16 @@ import { z } from 'zod';
 
 export const BACKUP_FORMAT = 'dida-clone-backup';
 export const BACKUP_VERSION = 1;
-/** Largest backup file the import accepts (附件 travel inside it as base64). */
+/**
+ * Largest backup file: the import accepts no more, and the export refuses to
+ * build a larger one (附件 travel inside it as base64).
+ */
 export const BACKUP_IMPORT_MAX_BYTES = 256 * 1024 * 1024;
+
+/** `12.3 MB` */
+export function formatBackupSize(bytes: number): string {
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
 
 /**
  * Entity types of a backup, in import order (a record only refers to types
@@ -29,13 +37,18 @@ export const BACKUP_ENTITY_TYPES = [
   'filter',
   'settings',
   'countdown',
-  'reminderDelivery',
   'focusSession',
   'habit',
   'habitCheckin',
-  'habitReminderDelivery',
 ] as const;
 export type BackupEntityType = (typeof BACKUP_ENTITY_TYPES)[number];
+
+/**
+ * Synced types that are not in a backup: the server's own delivery records of
+ * 提醒 and 习惯提醒. Importing reschedules the reminders instead. A file that
+ * still has them imports fine; they are skipped.
+ */
+export const BACKUP_SKIPPED_TYPES = ['reminderDelivery', 'habitReminderDelivery'] as const;
 
 /** Chinese names used in import error messages. */
 export const BACKUP_ENTITY_NAMES: Record<BackupEntityType, string> = {
@@ -51,11 +64,9 @@ export const BACKUP_ENTITY_NAMES: Record<BackupEntityType, string> = {
   filter: '过滤器',
   settings: '设置',
   countdown: '倒数日',
-  reminderDelivery: '提醒投递记录',
   focusSession: '专注记录',
   habit: '习惯',
   habitCheckin: '打卡',
-  habitReminderDelivery: '习惯提醒投递记录',
 };
 
 /** A record in a backup: the stored columns (no user id, no revision), dates as ISO strings. */

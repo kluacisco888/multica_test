@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { BACKUP_IMPORT_MAX_BYTES, todayIn, type ImportResponse } from '@dida/shared';
+import { formatBackupSize, todayIn, type ImportResponse } from '@dida/shared';
 import { sessionUser } from '../auth.js';
 import { exportTasksCsv } from '../backup/csv.js';
-import { exportAccount, type BackupDeps } from '../backup/export.js';
+import { BackupTooLarge, exportAccount, type BackupDeps } from '../backup/export.js';
 import { importAccount, ImportFailed } from '../backup/import.js';
 import { sendError } from '../http-errors.js';
 import type { CredentialCipher } from '../notify/credentials.js';
@@ -15,19 +15,46 @@ async function fileDate(app: FastifyInstance, userId: string): Promise<string> {
 
 /**
  * 导入导出 (spec 用户故事 110–112): download the account as JSON, 任务 as
- * CSV, and import a JSON backup into the session user's account.
+ * CSV, and import a JSON backup into the session user's account. A backup is
+ * at most `maxBytes` both ways, and each user builds one export at a time
+ * (the whole file is held in memory while it is sent).
  */
-export function backupRoutes(app: FastifyInstance, { cipher }: { cipher: CredentialCipher | null }) {
-  const deps = (): BackupDeps => ({ db: app.db, clock: app.clock, files: app.attachmentStore, cipher });
+export function backupRoutes(app: FastifyInstance, { cipher, maxBytes }: { cipher: CredentialCipher | null; maxBytes: number }) {
+  const deps = (): BackupDeps => ({
+    db: app.db,
+    clock: app.clock,
+    sync: app.sync,
+    reminders: app.reminders,
+    files: app.attachmentStore,
+    cipher,
+    maxBytes,
+  });
+  const exporting = new Set<string>();
 
   app.get('/api/backup/export', async (request, reply) => {
     const userId = sessionUser(request).id;
-    const doc = await exportAccount(deps(), userId);
-    return reply
-      .type('application/json; charset=utf-8')
-      .header('content-disposition', `attachment; filename="dida-clone-backup-${await fileDate(app, userId)}.json"`)
-      .header('cache-control', 'no-store')
-      .send(JSON.stringify(doc));
+    if (exporting.has(userId)) return sendError(reply, 409, 'export_running', '上一个备份还在生成，请稍后再试');
+    exporting.add(userId);
+    try {
+      const doc = await exportAccount(deps(), userId);
+      return await reply
+        .type('application/json; charset=utf-8')
+        .header('content-disposition', `attachment; filename="dida-clone-backup-${await fileDate(app, userId)}.json"`)
+        .header('cache-control', 'no-store')
+        .send(JSON.stringify(doc));
+    } catch (error) {
+      if (error instanceof BackupTooLarge) {
+        return sendError(
+          reply,
+          413,
+          'backup_too_large',
+          `备份文件预计约 ${formatBackupSize(error.estimatedBytes)}，超过了导入上限 ${formatBackupSize(error.maxBytes)}，生成了也导不回来。请先删除一些不需要的附件，再生成备份。`,
+        );
+      }
+      throw error;
+    } finally {
+      exporting.delete(userId);
+    }
   });
 
   app.get('/api/backup/tasks.csv', async (request, reply) => {
@@ -43,7 +70,7 @@ export function backupRoutes(app: FastifyInstance, { cipher }: { cipher: Credent
 
   // Large body limit, so check the session before the body is read (the
   // usual check runs as a preHandler, after parsing).
-  app.post('/api/backup/import', { bodyLimit: BACKUP_IMPORT_MAX_BYTES, onRequest: app.authenticate }, async (request, reply) => {
+  app.post('/api/backup/import', { bodyLimit: maxBytes, onRequest: app.authenticate }, async (request, reply) => {
     const userId = sessionUser(request).id;
     try {
       const imported = await importAccount(deps(), userId, request.body);

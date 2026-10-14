@@ -2,6 +2,7 @@ import {
   BACKUP_ENTITY_NAMES,
   BACKUP_IMPORT_MAX_BYTES,
   describeImportIssue,
+  formatBackupSize,
   importIssueSchema,
   type BackupEntityType,
   type ImportIssue,
@@ -30,9 +31,31 @@ export function BackupSettings() {
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportMessage, setExportMessage] = useState<Message | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
   const [issues, setIssues] = useState<ImportIssue[]>([]);
   const [imported, setImported] = useState(false);
+
+  async function exportBackup() {
+    if (exporting) return;
+    setExporting(true);
+    setExportMessage({ kind: 'ok', text: '正在生成备份…' });
+    try {
+      const { blob, fileName } = await api.downloadBackup();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setExportMessage({ kind: 'ok', text: '备份已生成' });
+    } catch (e) {
+      setExportMessage({ kind: 'error', text: api.errorMessage(e) });
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function onFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -41,7 +64,7 @@ export function BackupSettings() {
     setIssues([]);
     setImported(false);
     if (file.size > BACKUP_IMPORT_MAX_BYTES) {
-      setMessage({ kind: 'error', text: `文件太大，最大 ${BACKUP_IMPORT_MAX_BYTES / 1024 / 1024}MB` });
+      setMessage({ kind: 'error', text: `文件太大，最大 ${formatBackupSize(BACKUP_IMPORT_MAX_BYTES)}` });
       return;
     }
     let doc: unknown;
@@ -81,12 +104,17 @@ export function BackupSettings() {
       <div className="settings-row">
         <span className="settings-row-stacked">
           <span className="settings-row-label">生成备份</span>
-          <span className="settings-row-hint">JSON 文件，含通知渠道的 Webhook 地址和授权码，请妥善保管</span>
+          <span className="settings-row-hint">
+            JSON 文件，含通知渠道的 Webhook 地址和授权码，请妥善保管；附件也在里面，文件最大 {formatBackupSize(BACKUP_IMPORT_MAX_BYTES)}
+          </span>
         </span>
-        <a className="settings-link" href={api.BACKUP_EXPORT_URL} download>
+        <button type="button" className="settings-link" aria-disabled={exporting} onClick={() => void exportBackup()}>
           生成备份
-        </a>
+        </button>
       </div>
+      <p role="status" aria-label="生成备份状态" className={`settings-status ${exportMessage?.kind === 'error' ? 'settings-status-error' : ''}`}>
+        {exportMessage?.text}
+      </p>
       <div className="settings-row">
         <span className="settings-row-stacked">
           <span className="settings-row-label">导出任务</span>
@@ -119,7 +147,7 @@ export function BackupSettings() {
         />
       </div>
       <div className="backup-status">
-        <p role="status" className={`settings-status ${message?.kind === 'error' ? 'settings-status-error' : ''}`}>
+        <p role="status" aria-label="导入状态" className={`settings-status ${message?.kind === 'error' ? 'settings-status-error' : ''}`}>
           {message?.text}
         </p>
         {imported && (

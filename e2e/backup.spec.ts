@@ -28,7 +28,7 @@ test('生成备份, 导出 CSV and 导入本地备份 into another account', asy
   expect(created.status()).toBe(201);
   const card = await openBackup(page);
 
-  const [jsonDownload] = await Promise.all([page.waitForEvent('download'), card.getByRole('link', { name: '生成备份' }).click()]);
+  const [jsonDownload] = await Promise.all([page.waitForEvent('download'), card.getByRole('button', { name: '生成备份' }).click()]);
   expect(jsonDownload.suggestedFilename()).toMatch(/^dida-clone-backup-\d{8}\.json$/);
   const backupPath = testInfo.outputPath('backup.json');
   await jsonDownload.saveAs(backupPath);
@@ -49,7 +49,7 @@ test('生成备份, 导出 CSV and 导入本地备份 into another account', asy
   await logIn(other, target.username, target.password);
   const otherCard = await openBackup(other);
   await otherCard.getByLabel('选择备份文件').setInputFiles(backupPath);
-  await expect(otherCard.getByRole('status')).toContainText('导入完成：');
+  await expect(otherCard.getByRole('status', { name: '导入状态' })).toContainText('导入完成：');
   await otherCard.getByRole('button', { name: '刷新页面' }).click();
   await expect(other.getByRole('heading', { level: 1, name: '收件箱' })).toBeVisible();
   await expect(other.getByText('备份里的任务')).toBeVisible();
@@ -59,7 +59,7 @@ test('生成备份, 导出 CSV and 导入本地备份 into another account', asy
   (broken.entities.task[0] as Record<string, unknown>).priority = 'urgent';
   const brokenCard = await openBackup(other);
   await brokenCard.getByLabel('选择备份文件').setInputFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(broken)) });
-  await expect(brokenCard.getByRole('status')).toHaveText('备份文件里有不能导入的数据，没有导入任何内容');
+  await expect(brokenCard.getByRole('status', { name: '导入状态' })).toHaveText('备份文件里有不能导入的数据，没有导入任何内容');
   await expect(brokenCard.getByRole('list', { name: '出错的数据' })).toContainText(/任务 第 1 条（id .+）：priority 的取值不合法/);
   await other.screenshot({ path: testInfo.outputPath(`backup-import-error-${testInfo.project.name}.png`) });
   await context.close();
@@ -73,5 +73,18 @@ test('导入本地备份 is keyboard operable and says when the file is not JSON
   await button.focus();
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Enter')]);
   await chooser.setFiles({ name: 'notes.json', mimeType: 'application/json', buffer: Buffer.from('not json') });
-  await expect(card.getByRole('status')).toHaveText('这不是有效的 JSON 文件，请选择本应用导出的备份文件');
+  await expect(card.getByRole('status', { name: '导入状态' })).toHaveText('这不是有效的 JSON 文件，请选择本应用导出的备份文件');
+});
+
+test('生成备份 says why when the server refuses (too large to import back)', async ({ page }) => {
+  const user = createUser('backup-big');
+  await logIn(page, user.username, user.password);
+  const message = '备份文件预计约 300.0 MB，超过了导入上限 256.0 MB，生成了也导不回来。请先删除一些不需要的附件，再生成备份。';
+  // The real limit needs 256MB of 附件; the API test covers the server side with a small limit.
+  await page.route('**/api/backup/export', (route) =>
+    route.fulfill({ status: 413, contentType: 'application/json', body: JSON.stringify({ error: { code: 'backup_too_large', message } }) }),
+  );
+  const card = await openBackup(page);
+  await card.getByRole('button', { name: '生成备份' }).click();
+  await expect(card.getByRole('status', { name: '生成备份状态' })).toHaveText(message);
 });

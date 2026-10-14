@@ -81,22 +81,30 @@ describe('导入导出（审查补充）', () => {
     expect({ a: a.statusCode, b: b.statusCode, inboxes: lists.lists.filter((l) => l.isInbox).length }).toMatchObject({ inboxes: 1 });
   });
 
-  // 审查发现的缺陷（EURO-30 review）：修复后把 it.fails 改回 it。
-  it.fails('server-owned rows with a malformed JSON column (提醒投递记录 channels) are refused or do not stall the reminder job', async () => {
+  it('server-owned rows with a malformed JSON column (提醒投递记录 channels) are refused or do not stall the reminder job', async () => {
     const victim = await user('bystander');
     await api(victim, 'POST', '/api/notification-channels', { type: 'feishu', name: 'v', isDefault: true, config: { webhookUrl: 'http://127.0.0.1:9/hook' } });
     const due = await api(victim, 'POST', '/api/tasks', { title: '别人的提醒', dates: { allDay: false, dueAt: '2026-10-14T02:05:00.000Z', startAt: null }, reminders: [{ type: 'before', minutes: 0 }] });
     expect(due.statusCode, due.body).toBe(201);
     const { doc } = await small();
-    const [delivery] = recs(doc, 'reminderDelivery');
-    expect(delivery).toBeDefined();
+    // Exports no longer carry 提醒投递记录; a file that does (hand-made here) must not poison the job.
+    const task = recs(doc, 'task')[0] as BackupRecord;
     const now = clock.now();
-    doc.entities.reminderDelivery = Array.from({ length: 120 }, () => ({
-      ...(delivery as BackupRecord),
+    (doc.entities as Record<string, unknown[]>).reminderDelivery = Array.from({ length: 120 }, () => ({
       id: randomUUID(),
+      taskId: task.id,
+      countdownId: null,
+      source: 'rule',
+      reminderKey: 'before:30',
+      fireAt: new Date(now.getTime() - 60_000).toISOString(),
       status: 'delivering',
+      firedAt: null,
       nextAttemptAt: new Date(now.getTime() - 60_000).toISOString(), // also '1970-01-01T00:00:00Z' works: it always sorts first
       channels: { not: 'an array' },
+      alertDismissedAt: null,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      deletedAt: null,
     }));
     const target = await user('poison');
     const res = await importInto(target, doc);
@@ -110,8 +118,7 @@ describe('导入导出（审查补充）', () => {
     expect(outcome).toBe('finished');
   }, 20_000);
 
-  // 审查发现的缺陷（EURO-30 review）：修复后把 it.fails 改回 it。
-  it.fails('a 设置 time zone that is not a time zone is refused or leaves the account usable', async () => {
+  it('a 设置 time zone that is not a time zone is refused or leaves the account usable', async () => {
     const { doc } = await small();
     (recs(doc, 'settings')[0] as BackupRecord).timeZone = 'Not/A_Zone';
     const target = await user('tz');
@@ -126,8 +133,7 @@ describe('导入导出（审查补充）', () => {
     expect(statuses).toEqual({ export: 200, csv: 200, tasks: 200, settings: 200 });
   });
 
-  // 审查发现的缺陷（EURO-30 review）：修复后把 it.fails 改回 it。
-  it.fails('a 任务 repeat rule the API would refuse is refused or leaves the account usable', async () => {
+  it('a 任务 repeat rule the API would refuse is refused or leaves the account usable', async () => {
     const { doc } = await small();
     Object.assign(recs(doc, 'task')[0] as BackupRecord, { repeat: { freq: 'bogus' }, reminders: [{ type: 'nonsense' }] });
     const target = await user('rule');
@@ -141,8 +147,7 @@ describe('导入导出（审查补充）', () => {
     expect(statuses).toEqual({ csv: 200, lists: 200, tasks: 200 });
   });
 
-  // 审查发现的缺陷（EURO-30 review）：修复后把 it.fails 改回 it。
-  it.fails('empty and huge edge inputs', async () => {
+  it('empty and huge edge inputs', async () => {
     const target = await user('edge');
     expect((await importInto(target, {})).statusCode).toBe(400);
     expect((await t.app.inject({ method: 'POST', url: '/api/backup/import', headers: { ...target.headers, 'content-type': 'application/json' }, payload: 'not json' })).statusCode).toBe(400);
