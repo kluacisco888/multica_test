@@ -148,6 +148,7 @@ CI 定义在 `.github/workflows/ci.yml`，在 GitHub Actions 上对每个 PR 和
 - 新建同步实体的表时，展开 `syncColumns()`（UUID 主键、`user_id`、`created_at`、`updated_at`、`revision`、`deleted_at`）并加 `syncIndex()`，然后在 `packages/server/src/sync/registry.ts` 注册。
 - 写这些表一律通过 `app.sync.transaction(userId, ops => ...)`：`ops.insert / update / softDelete` 会分配该用户新的修订号、按注入的时钟写 `updated_at`，删除只写 `deleted_at` 留下墓碑，并且只能改自己的数据。
   唯一的例外：只改墓碑（已软删除行）里不对外下发的字段时可以直接写、不分配修订号，例如删除标签时清理回收站任务上的标签 id（`routes/tags.ts`）。
+- `app.sync.transaction` 一开始就拿该用户修订号那一行的行锁（`lockRevision`，不加修订号），一直持有到提交。所以同一用户的写事务一个接一个执行，锁顺序也固定（先修订号行，再 advisory 锁和其他行锁）。事务里检查「标签 / 清单还在不在」再写任务，并发的删除标签、删除清单不会插进检查和写入之间（EURO-35）。
 - `GET /api/changes?since=<revision>` 按实体类型返回 `upserts` 和 `tombstones`，以及当前 `revision`，下一次把它作为 `since` 传回。
 - `/api` 下的接口默认都要登录（`src/auth.ts` 在 `onRoute` 里统一加 `app.authenticate`），未登录返回 401；只有声明了 `config: { public: true }` 的才公开（目前只有 health、login、logout，`test/api/access-control.test.ts` 会核对这份清单并逐个检查其余接口返回 401）。处理函数里用 `sessionUser(request)` 拿当前用户。
 - 按 id 读资源用 `findOwned(app.db, table, userId, id)`，写用 `app.sync.transaction`：别人的、已删除的、不存在的、非法 id 一律返回 null，接口统一回 404。

@@ -3,6 +3,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import pg from 'pg';
 import { databaseUrl, E2E_DATABASE, ensureTestPostgres } from '../scripts/test-postgres.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -19,6 +20,21 @@ export function dida(args: string[], stdin = ''): string {
     encoding: 'utf8',
     env: { ...process.env, DATABASE_URL: e2eDatabaseUrl, LOG_LEVEL: 'silent' },
   });
+}
+
+/**
+ * Run one parameterized SQL statement on the e2e server's database, for
+ * states the app itself no longer produces (e.g. data left by a fixed bug).
+ */
+export async function e2eSql(text: string, values: unknown[] = []): Promise<pg.QueryResult> {
+  e2eDatabaseUrl ??= databaseUrl(ensureTestPostgres(), E2E_DATABASE);
+  const client = new pg.Client({ connectionString: e2eDatabaseUrl });
+  await client.connect();
+  try {
+    return await client.query(text, values);
+  } finally {
+    await client.end();
+  }
 }
 
 /** A fresh user per test so parallel desktop/mobile runs never share state. */

@@ -194,12 +194,15 @@ export function taskRoutes(app: FastifyInstance) {
     }
 
     // No 清单 given: the 收件箱.
-    const list = listId ? await findOwned(app.db, lists, userId, listId) : await ensureInbox(app.db, app.sync, userId);
-    if (!list) return invalidList(reply);
+    const target = listId ? await findOwned(app.db, lists, userId, listId) : await ensureInbox(app.db, app.sync, userId);
+    if (!target) return invalidList(reply);
     return respond(
       reply,
       () =>
         app.sync.transaction(userId, async (ops, tx) => {
+          // Re-read under the revision lock: the 清单 may have been deleted since.
+          const list = await findOwned(tx, lists, userId, target.id);
+          if (!list) throw new Rejection(invalidList);
           await checkTags(tx, userId, tagIds);
           await checkChannels(tx, userId, reminderChannelIds);
           await checkColumn(tx, userId, list.id, columnId);
@@ -296,6 +299,8 @@ export function taskRoutes(app: FastifyInstance) {
           // Another user's, deleted or unknown ids: nothing changes, like a single 404.
           if (rows.length !== ids.length) throw new Rejection(notFound);
           const changed = new Map<string, TaskRow>();
+          // 批量打标签 keeps a task's other 标签: skip ids of deleted ones (left by older versions) so they heal.
+          const liveTagIds = action.op === 'tags' ? new Set((await liveTags(tx, userId)).map((tag) => tag.id)) : new Set<string>();
           // 删除: read each 清单 once. Rows deleted earlier in this batch stay in the cache, which is safe:
           // their ids are skipped below, and a later root only takes its own subtree from the cache.
           const listCache = new Map<string, TaskRow[]>();
@@ -313,7 +318,7 @@ export function taskRoutes(app: FastifyInstance) {
               await moveToTrash(ops, tx, userId, task, await listRowsOf(task.listId));
               continue;
             }
-            const patch = batchPatch(action, task);
+            const patch = batchPatch(action, task, liveTagIds);
             if (patch.tagIds && patch.tagIds.length > TASK_MAX_TAGS) throw new Rejection(tooManyTags);
             changed.set(id, await applyTaskPatch(app, ops, tx, userId, task.id, patch));
           }
@@ -352,8 +357,12 @@ export function taskRoutes(app: FastifyInstance) {
 
 type UpdateTaskBody = z.output<typeof updateTaskRequestSchema>;
 
-/** The single-task change a 批量操作 (other than 删除) makes to `task`. */
-function batchPatch(action: Exclude<z.output<typeof batchRequestSchema>['action'], { op: 'delete' }>, task: TaskRow): UpdateTaskBody {
+/** The single-task change a 批量操作 (other than 删除) makes to `task`; `liveTagIds`: the user's live 标签 (for `tags`). */
+function batchPatch(
+  action: Exclude<z.output<typeof batchRequestSchema>['action'], { op: 'delete' }>,
+  task: TaskRow,
+  liveTagIds: ReadonlySet<string>,
+): UpdateTaskBody {
   switch (action.op) {
     case 'complete':
       return { status: 'completed' };
@@ -369,7 +378,12 @@ function batchPatch(action: Exclude<z.output<typeof batchRequestSchema>['action'
       return { pinned: action.pinned };
     case 'tags':
       // Keep the task's other 标签 in their order; new ones go last.
-      return { tagIds: [...task.tagIds.filter((t) => !action.remove.includes(t)), ...action.add.filter((t) => !task.tagIds.includes(t))] };
+      return {
+        tagIds: [
+          ...task.tagIds.filter((t) => liveTagIds.has(t) && !action.remove.includes(t)),
+          ...action.add.filter((t) => !task.tagIds.includes(t)),
+        ],
+      };
   }
 }
 
