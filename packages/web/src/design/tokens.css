@@ -183,6 +183,23 @@
   --calendar-gutter: 68px; /* hour labels of the time grid */
   --calendar-hour-height: 60px; /* CalendarPane HOUR_HEIGHT */
   --calendar-lane-height: 20px; /* CalendarPane LANE_HEIGHT */
+
+  /* ---- 倒数日 (EURO-26) ----
+   * Measured from the reference 倒数纪念日 page (1440×900 and 390×844). The
+   * page background is the 日历's; the figures use a serif face like the
+   * reference and the brand blue (large text, so 3:1 is enough). */
+  --color-countdown-bg: var(--color-calendar-bg);
+  --color-countdown-card: #ffffff;
+  --color-countdown-figure: var(--color-brand);
+  --font-family-figures: Georgia, 'Times New Roman', 'Noto Serif CJK SC', serif;
+  --font-size-countdown-figure: 60px;
+  --font-size-countdown-figure-mobile: 50px;
+  --font-size-countdown-name: 18px;
+  --countdown-card-width: 310px;
+  --countdown-card-height: 194px;
+  --countdown-card-height-mobile: 171px;
+  --countdown-gap: 20px;
+  --radius-countdown-card: 12px;
   --calendar-cell-head: 29px; /* CalendarPane CELL_HEAD */
   --calendar-row-min: 96px; /* a 月 week row never gets shorter than this */
 
@@ -398,6 +415,8 @@
   /* 日历 (EURO-19); text keeps 4.5:1 on --color-calendar-bg and on the bars. The 休 / 班
    * marks keep their 浅色 fills: white text on them already reads in 深色. */
   --color-calendar-bg: color-mix(in srgb, var(--accent) 3%, #1c1c1e);
+  --color-countdown-card: #252528;
+  --color-countdown-figure: var(--accent-on-dark);
   --color-calendar-outside: #18181a;
   --color-calendar-line: #2c2c2f;
   --color-calendar-cell-hover: color-mix(in srgb, var(--accent) 10%, #1c1c1e);

@@ -131,6 +131,14 @@ const paths = {
       <rect x="13" y="13" width="7" height="7" rx="3.5" />
     </>
   ),
+  /** 倒数日 in the rail: a calendar page with a star, like the reference. */
+  countdown: (
+    <>
+      <rect x="4" y="5.5" width="16" height="14" rx="2" />
+      <path d="M8.5 3.5v4M15.5 3.5v4" />
+      <path d="m12 9.6 1.15 2.33 2.57.37-1.86 1.81.44 2.56L12 15.46l-2.3 1.21.44-2.56-1.86-1.81 2.57-.37Z" />
+    </>
+  ),
   settings: (
     <>
       <circle cx="12" cy="12" r="2.75" />

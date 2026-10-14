@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { check, index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { syncColumns, syncIndex } from '../../sync/columns.js';
+import { countdowns } from './countdowns.js';
 import { tasks } from './tasks.js';
 
 /** One 通知渠道 of a 提醒投递记录 and how sending to it went. */
@@ -22,7 +23,7 @@ export const DELIVERY_STATUSES = ['scheduled', 'delivering', 'done', 'cancelled'
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
 /**
- * 提醒投递记录 (spec 用户故事 78–84): one firing of a 提醒 of a 任务.
+ * 提醒投递记录 (spec 用户故事 78–84, 101): one firing of a 提醒 of a 任务 or of a 倒数日.
  *
  * - `scheduled`: waiting for `fire_at`. Kept in step with the task (see
  *   reminders/scheduler.ts): editing, completing or deleting the task
@@ -42,9 +43,10 @@ export const reminderDeliveries = pgTable(
   'reminder_deliveries',
   {
     ...syncColumns(),
-    taskId: uuid()
-      .notNull()
-      .references(() => tasks.id),
+    /** The 任务 reminded of; null for a 倒数日 reminder. */
+    taskId: uuid().references(() => tasks.id),
+    /** The 倒数日 reminded of (exactly one of `task_id` / `countdown_id` is set). */
+    countdownId: uuid().references(() => countdowns.id),
     source: text({ enum: ['rule', 'snooze'] }).notNull(),
     reminderKey: text(),
     fireAt: timestamp({ withTimezone: true }).notNull(),
@@ -57,10 +59,12 @@ export const reminderDeliveries = pgTable(
   (t) => [
     syncIndex('reminder_deliveries', t),
     index('reminder_deliveries_task_idx').on(t.taskId),
+    index('reminder_deliveries_countdown_idx').on(t.countdownId),
     index('reminder_deliveries_due_idx')
       .on(t.nextAttemptAt)
       .where(sql`${t.status} IN ('scheduled', 'delivering') AND ${t.deletedAt} IS NULL`),
     check('reminder_deliveries_status_check', sql`${t.status} IN ('scheduled', 'delivering', 'done', 'cancelled', 'missed')`),
     check('reminder_deliveries_source_check', sql`${t.source} IN ('rule', 'snooze')`),
+    check('reminder_deliveries_subject_check', sql`(${t.taskId} IS NULL) <> (${t.countdownId} IS NULL)`),
   ],
 );

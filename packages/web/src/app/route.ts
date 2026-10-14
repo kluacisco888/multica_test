@@ -16,7 +16,8 @@ import { useCallback, useEffect, useState } from 'react';
  *   /calendar/<mode>/<YYYY-MM-DD>  → 日历 in 月 / 周 / 日 / 多日 (`month` / `week` / `day` / `multiDay`) around a date
  *   /matrix                        → 四象限
  *   /focus                         → 番茄专注
- * Each but /trash and /focus takes `/tasks/<taskId>` for an open 任务.
+ *   /countdowns                    → 倒数日 (记录中); /countdowns/archived → 已归档
+ * Each but /trash, /focus and /countdowns takes `/tasks/<taskId>` for an open 任务.
  */
 
 /** 日历 route: null mode / date mean "last used view" / "today". */
@@ -41,9 +42,11 @@ export interface Route {
   matrix?: boolean;
   /** 番茄专注. */
   focus?: boolean;
+  /** Non-null: the 倒数日 page, showing 记录中 or 已归档 ones. */
+  countdowns?: 'active' | 'archived' | null;
 }
 
-const EMPTY: Required<Route> = { listId: null, tagId: null, smartId: null, filterId: null, search: null, taskId: null, trash: false, calendar: null, matrix: false, focus: false };
+const EMPTY: Required<Route> = { listId: null, tagId: null, smartId: null, filterId: null, search: null, taskId: null, trash: false, calendar: null, matrix: false, focus: false, countdowns: null };
 
 export function parseRoute(pathname: string): Route {
   if (/^\/trash\/?$/.test(pathname)) return { ...EMPTY, trash: true };
@@ -51,6 +54,8 @@ export function parseRoute(pathname: string): Route {
   const matrix = /^\/matrix(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
   if (matrix) return { ...EMPTY, matrix: true, taskId: matrix[1] ? safeDecode(matrix[1]) : null };
   if (/^\/focus\/?$/.test(pathname)) return { ...EMPTY, focus: true };
+  const countdowns = /^\/countdowns(\/archived)?\/?$/.exec(pathname);
+  if (countdowns) return { ...EMPTY, countdowns: countdowns[1] ? 'archived' : 'active' };
   const calendar = /^\/calendar(?:\/([^/]+)\/([^/]+))?(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
   if (calendar) {
     const mode = calendarModeSchema.safeParse(calendar[1]);
@@ -93,9 +98,10 @@ function safeDecode(value: string): string | null {
   }
 }
 
-export function routePath({ listId, tagId, smartId, filterId, search, taskId, trash, calendar, matrix, focus }: Route): string {
+export function routePath({ listId, tagId, smartId, filterId, search, taskId, trash, calendar, matrix, focus, countdowns }: Route): string {
   if (trash) return '/trash';
   if (focus) return '/focus';
+  if (countdowns) return countdowns === 'archived' ? '/countdowns/archived' : '/countdowns';
   let base: string;
   if (matrix) base = '/matrix';
   else if (calendar) base = calendar.mode && calendar.date ? `/calendar/${calendar.mode}/${calendar.date}` : '/calendar';

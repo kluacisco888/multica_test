@@ -23,6 +23,11 @@ import {
   attachmentsResponseSchema,
   commentSchema,
   commentsResponseSchema,
+  countdownSchema,
+  countdownsResponseSchema,
+  type Countdown,
+  type CreateCountdownRequest,
+  type UpdateCountdownRequest,
   type Attachment,
   type Comment,
   filterSchema,
@@ -464,4 +469,24 @@ export async function fetchFocusRecords(): Promise<FocusRecord[]> {
 
 export async function fetchFocusStats(unit: FocusStatUnit, date: string): Promise<FocusStats> {
   return focusStatsSchema.parse(await (await call('GET', `/api/focus/stats?${new URLSearchParams({ unit, date }).toString()}`)).json());
+}
+
+/* ---- 倒数日 (spec 用户故事 99–101) ---- */
+
+/** 记录中 (default) or 已归档 倒数日, 置顶 first. */
+export async function fetchCountdowns(archived = false): Promise<Countdown[]> {
+  const res = await call('GET', `/api/countdowns${archived ? '?archived=true' : ''}`);
+  return countdownsResponseSchema.parse(await res.json()).countdowns;
+}
+
+export async function createCountdown(request: CreateCountdownRequest): Promise<Countdown> {
+  return countdownSchema.parse(await (await call('POST', '/api/countdowns', request)).json());
+}
+
+export async function updateCountdown(id: string, patch: UpdateCountdownRequest): Promise<Countdown> {
+  return countdownSchema.parse(await (await call('PATCH', `/api/countdowns/${encodeURIComponent(id)}`, patch)).json());
+}
+
+export async function deleteCountdown(id: string): Promise<void> {
+  await call('DELETE', `/api/countdowns/${encodeURIComponent(id)}`);
 }

@@ -274,6 +274,15 @@ const result = await app.notifier.send(userId, channelId, { title: '提醒：交
 
 界面在 `/focus`（桌面从左侧导航条进入，手机从侧栏抽屉顶部的按钮进入）。
 
+### 倒数日
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /api/countdowns[?archived=true]` | 记录中（默认）或已归档的倒数日，置顶的在前。每项带按用户当前时区算好的 `next`：`date`（要显示的那一次的公历日期）、`days`、`status`（`upcoming` 还有 / `today` / `passed` 已经，即纪念日），农历倒数日另带 `lunar`（`monthName`、`dayName`） |
+| `POST/PATCH/DELETE /api/countdowns[/:id]` | `name`、`icon`、`date`（录入的公历日期）、`calendar`（`solar` / `lunar`）、`repeat`（`none` / `yearly`）、`reminders`（只能是 `{ type: 'day', daysBefore, time }`，最多 5 个）、`reminderChannelIds`、`pinned`、PATCH 的 `archived: true/false`。删除是软删除，同步类型 `countdown` |
+
+规则在 `packages/shared/src/countdown-dates.ts`（`@dida/shared/countdown`，复用 `@dida/shared/lunar`，不进前端包）：公历每年重复落在同月同日，2月29日在平年落在2月28日；农历每年重复按农历月日，小月没有三十就落在廿九；闰月的日期在有同一个闰月的年份落在闰月，其他年份落在同名的普通月。提醒是“下一次的前 N 天的某个时间”（`time: null` 用全天提醒时间），和任务提醒共用 `reminder_deliveries`（`countdown_id`）、重试、补发和失败记录；每次触发后自动排下一年的。倒数日提醒不进应用内提醒弹窗。界面在 `/countdowns`（`/countdowns/archived` 是已归档）。
+
 ### 节假日数据与农历（ADR-0006）
 
 - 后端每天 04:15（`DEFAULT_TIMEZONE`）和每次启动时，从 `HOLIDAY_DATA_URL`（默认 jsDelivr 上的 NateScarlet/holiday-cn）拉取当年和下一年的 `<year>.json`，存进 `holiday_years` 表。定时任务用 pg-boss（表在数据库的 `pgboss` schema 里，启动时自动安装）。
