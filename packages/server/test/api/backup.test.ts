@@ -209,8 +209,11 @@ describe('导入导出', () => {
     it('imports into an account that already has data, next to it', async () => {
       const target = await user('busy');
       await ok(target, 'POST', '/api/tasks', { title: '原有任务' });
+      await ok(target, 'PATCH', '/api/settings', { themeMode: 'light' });
       expect((await importInto(target, exported)).statusCode).toBe(200);
       const again = await exportOf(target);
+      // The file's 设置 replace the user's own (one live 设置 row).
+      expect(records(again, 'settings').filter((r) => r.deletedAt === null)).toMatchObject([{ themeMode: 'dark', timeZone: 'Asia/Tokyo' }]);
       expect(records(again, 'task').length).toBe(records(exported, 'task').length + 1);
       expect(records(again, 'list').filter((l) => l.isInbox && l.deletedAt === null)).toHaveLength(1);
     });
