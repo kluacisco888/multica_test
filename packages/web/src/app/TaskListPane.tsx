@@ -16,6 +16,8 @@ import {
   type Board,
   type KanbanColumn,
   type SearchMatchField,
+  type SmartInputSettings,
+  type SmartParseResult,
   type Tag,
   type Task,
   type TaskList,
@@ -31,11 +33,12 @@ import {
   toggleGroup,
   type SelectMode,
 } from '@dida/shared';
-import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { batchContextSections, BatchToolbar, type BatchContext } from './BatchPanel.js';
 import { ContextMenu, IconButton, MenuButton, TaskCheckbox, type ContextMenuSection } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { KanbanBoard, type ManualBoardActions } from './KanbanBoard.js';
+import { QuickAdd } from './QuickAdd.js';
 import { chipStyle, tagsOf, taskContextSections } from './taskMeta.js';
 import { scopeKey, viewLayouts, viewTitle, type ListPaneView } from './views.js';
 
@@ -61,7 +64,10 @@ interface TaskListPaneProps {
   searchMatches?: Record<string, SearchMatchField[]>;
   onSearch?: (query: string) => void;
   onToggleSidebar: () => void;
-  onAddTask: (title: string) => Promise<boolean>;
+  /** `smart`: what 智能识别 found (null: nothing, or switched off). */
+  onAddTask: (title: string, smart: SmartParseResult | null) => Promise<boolean>;
+  /** 设置 → 智能识别; null while loading or switched off. */
+  smartInput: SmartInputSettings | null;
   onSelectTask: (taskId: string) => void;
   onToggleTask: (task: Task) => void;
   /**
@@ -371,7 +377,12 @@ export function TaskListPane(props: TaskListPaneProps) {
         </div>
       )}
 
-      {view && props.addTarget !== null && !boardMode && <QuickAdd key={scopeKey(view)} target={props.addTarget} onAdd={props.onAddTask} />}
+      {view && props.addTarget !== null && !boardMode && <QuickAdd
+          key={scopeKey(view)}
+          target={props.addTarget}
+          onAdd={props.onAddTask}
+          smart={props.smartInput ? { settings: props.smartInput, lists: props.lists, now: props.now, timeZone: props.timeZone } : null}
+        />}
 
       {boardMode ? (
         board ? (
@@ -620,38 +631,6 @@ function SearchBox({ initial, onSearch }: { initial: string; onSearch: (query: s
         maxLength={100}
         autoFocus
         onChange={(e) => setValue(e.target.value)}
-      />
-    </form>
-  );
-}
-
-function QuickAdd({ target, onAdd }: { target: string; onAdd: (title: string) => Promise<boolean> }) {
-  const [title, setTitle] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmed = title.trim();
-    if (!trimmed || busy) return;
-    setBusy(true);
-    // Keep the text if saving failed so nothing typed is lost.
-    if (await onAdd(trimmed)) setTitle('');
-    setBusy(false);
-  }
-
-  return (
-    <form className="quick-add" onSubmit={submit} aria-label="添加任务">
-      <span className="quick-add-icon" aria-hidden="true">
-        <Icon name="plus" size={16} />
-      </span>
-      <input
-        className="quick-add-input"
-        aria-label="添加任务"
-        placeholder={`添加任务至"${target}"，回车即可保存`}
-        value={title}
-        maxLength={512}
-        onChange={(e) => setTitle(e.target.value)}
-        enterKeyHint="done"
       />
     </form>
   );

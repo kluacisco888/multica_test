@@ -102,7 +102,7 @@ test('ordinary users see no 用户管理 entry and the API answers 403', async (
   const user = createUser('plain');
   await logIn(page, user.username, user.password);
   const dialog = await openAccount(page, user.username);
-  await expect(dialog.getByRole('tab')).toHaveText(['账户与安全', '日期与时间', '提醒与通知', '智能清单', '外观', '快捷键']);
+  await expect(dialog.getByRole('tab')).toHaveText(['账户与安全', '日期与时间', '提醒与通知', '智能清单', '外观', '更多设置', '快捷键']);
   await expect(dialog.getByRole('tab', { name: '用户管理' })).toHaveCount(0);
 
   const list = await page.request.get('/api/admin/users');

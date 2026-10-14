@@ -122,7 +122,8 @@ describe('countdowns (review)', () => {
       expect(taskRows).toBeGreaterThan(0);
       expect(await count('countdown_id IS NOT NULL')).toBeGreaterThan(0);
 
-      // 0019_habits (EURO-25) is newer and comes off first.
+      // 0021_smart_input (EURO-27) and 0019_habits (EURO-25) are newer and come off first.
+      expect(await rollbackLastMigration(t.database.pool)).toBe('0021_smart_input');
       expect(await rollbackLastMigration(t.database.pool)).toBe('0019_habits');
       expect(await rollbackLastMigration(t.database.pool)).toBe('0018_countdowns');
       expect(await count('true')).toBe(taskRows);
@@ -160,7 +161,8 @@ describe('countdowns (review)', () => {
       expect(before.matrix[0]).toMatchObject({ matrix_quadrants: [{ probe: 1 }] });
       expect(before.focus).toHaveLength(1);
 
-      // 0019_habits (EURO-25) is newer and comes off first.
+      // 0021_smart_input (EURO-27) and 0019_habits (EURO-25) are newer and come off first.
+      expect(await rollbackLastMigration(t.database.pool)).toBe('0021_smart_input');
       expect(await rollbackLastMigration(t.database.pool)).toBe('0019_habits');
       expect(await rollbackLastMigration(t.database.pool)).toBe('0018_countdowns');
       expect(await snapshot()).toEqual(before);

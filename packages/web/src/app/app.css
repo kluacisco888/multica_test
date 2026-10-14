@@ -495,6 +495,52 @@ body {
   outline: none;
 }
 
+.quick-add-field {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+/* 智能识别 highlights: a layer over the input with the same text metrics; only the highlights show and take clicks. */
+.quick-add-highlights {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.quick-add-highlights-text {
+  font-size: var(--font-size-md);
+  white-space: pre;
+  color: transparent;
+}
+
+.smart-token {
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--color-brand-text);
+  white-space: pre;
+  pointer-events: auto;
+  cursor: pointer;
+  background: var(--color-brand-soft);
+  border: 0;
+  border-radius: 2px;
+}
+
+.smart-token:hover {
+  text-decoration: line-through;
+}
+
+.smart-token:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 1px;
+}
+
 .quick-add-input::placeholder {
   color: var(--color-text-placeholder);
 }
@@ -3416,4 +3462,25 @@ span.task-row-expand {
 .batch-toolbar .ui-menu {
   top: auto;
   bottom: calc(100% + 4px);
+}
+
+/* ---- 设置 → 更多设置 → 智能识别 ---- */
+
+.smart-input-keep {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+}
+
+.smart-input-subtitle {
+  margin: var(--space-5) 0 var(--space-1);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-time {
+  width: 120px;
+  padding: 0 var(--space-2);
 }

@@ -283,6 +283,12 @@ const result = await app.notifier.send(userId, channelId, { title: '提醒：交
 
 规则在 `packages/shared/src/countdown-dates.ts`（`@dida/shared/countdown`，复用 `@dida/shared/lunar`，不进前端包）：公历每年重复落在同月同日，2月29日在平年落在2月28日；农历每年重复按农历月日，小月没有三十就落在廿九；闰月的日期在有同一个闰月的年份落在闰月，其他年份落在同名的普通月。提醒是“下一次的前 N 天的某个时间”（`time: null` 用全天提醒时间），和任务提醒共用 `reminder_deliveries`（`countdown_id`）、重试、补发和失败记录；每次触发后自动排下一年的。倒数日提醒不进应用内提醒弹窗。界面在 `/countdowns`（`/countdowns/archived` 是已归档）。
 
+### 智能识别
+
+在「添加任务」里输入时，前端用 `packages/shared/src/smart-input.ts` 的 `parseSmartInput` 识别日期（今天/明天/后天、周X、下周X、M月D日、D号、N天后）、时间（上午/下午/晚上等模糊时间，以及 3点、下午3点半、15:40）、重复规则（每天、每周X、每个工作日、每月D号、每年M月D日…）、「提醒我」、`*提前N分钟/小时/天`、`#标签`、`~清单`（只认已有清单）和 `!高`/`!中`/`!低`。识别出的部分在输入框里高亮，点一下（或 Tab 到它按回车）取消。保存时由 `smartCreateRequest` 合成 `POST /api/tasks` 的请求，没有的标签会先创建。
+
+设置在「设置 → 更多设置 → 智能识别」，存在 `PATCH /api/settings` 的 `smartInput`（`enabled` 总开关、`keepText` 保留识别文字、`morning`/`afternoon`/`evening` 模糊时间，默认 10:00/14:00/20:00；只改传入的字段）。
+
 ### 节假日数据与农历（ADR-0006）
 
 - 后端每天 04:15（`DEFAULT_TIMEZONE`）和每次启动时，从 `HOLIDAY_DATA_URL`（默认 jsDelivr 上的 NateScarlet/holiday-cn）拉取当年和下一年的 `<year>.json`，存进 `holiday_years` 表。定时任务用 pg-boss（表在数据库的 `pgboss` schema 里，启动时自动安装）。

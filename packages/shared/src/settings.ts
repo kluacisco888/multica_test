@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { defaultQuadrants, matrixQuadrantsSchema, quadrantSchema } from './matrix.js';
 import { DEFAULT_ALL_DAY_REMINDER_TIME, timeOfDaySchema } from './reminders.js';
 import { DEFAULT_POMODORO_SETTINGS, pomodoroSettingsPatchSchema, pomodoroSettingsSchema } from './focus.js';
+import { DEFAULT_SMART_INPUT_SETTINGS, smartInputSettingsPatchSchema, smartInputSettingsSchema } from './smart-input.js';
 import { hiddenSmartListsSchema, smartListIdSchema } from './smart-lists.js';
 import { DEFAULT_TIME_ZONE, timeZoneSchema } from './task-dates.js';
 import { DEFAULT_THEME_COLOR, DEFAULT_THEME_MODE, themeColorSchema, themeModeSchema } from './theme.js';
@@ -10,7 +11,7 @@ import { MAX_VIEW_OPTIONS, viewKeySchema, viewOptionsSchema, type ViewOptions } 
 /**
  * Per-user preferences (设置): the time zone (spec 用户故事 26), hidden
  * 智能清单 (60), each view's 排序 / 分组 (64), the 主题 (104) and the
- * 四象限 rules (72) and the 番茄设置 (86).
+ * 四象限 rules (72), the 番茄设置 (86) and 智能识别 (57–58).
  */
 
 export const settingsSchema = z.object({
@@ -30,6 +31,8 @@ export const settingsSchema = z.object({
   matrixQuadrants: z.array(quadrantSchema),
   /** 番茄设置 (spec 用户故事 86). */
   pomodoro: pomodoroSettingsSchema,
+  /** 智能识别: on / off, 保留识别文字, 模糊时间 (spec 用户故事 57–58). */
+  smartInput: smartInputSettingsSchema,
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -42,6 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   themeColor: DEFAULT_THEME_COLOR,
   matrixQuadrants: defaultQuadrants(),
   pomodoro: { ...DEFAULT_POMODORO_SETTINGS },
+  smartInput: { ...DEFAULT_SMART_INPUT_SETTINGS },
 };
 
 /**
@@ -62,6 +66,8 @@ export const updateSettingsRequestSchema = z
     matrixQuadrants: matrixQuadrantsSchema.nullable(),
     /** Merged: only the given lengths change. */
     pomodoro: pomodoroSettingsPatchSchema,
+    /** Merged: only the given fields change. */
+    smartInput: smartInputSettingsPatchSchema,
   })
   .partial()
   .strict();

@@ -40,6 +40,8 @@ import {
   type TrashedTask,
   type UpdateSettingsRequest,
   type UpdateTaskRequest,
+  smartCreateRequest,
+  type SmartParseResult,
 } from '@dida/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as api from '../api.js';
@@ -633,12 +635,31 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     });
   }
 
-  async function addTask(title: string) {
+  /** The ids of 智能识别's #标签: existing ones by name (ignoring case), the others created. */
+  async function smartTagIds(names: readonly string[]): Promise<string[]> {
+    const known = new Map((tags ?? []).map((t) => [t.name.toLowerCase(), t.id]));
+    const ids: string[] = [];
+    let created = false;
+    for (const name of names) {
+      let id = known.get(name.toLowerCase());
+      if (!id) {
+        id = (await api.createTag({ name })).id;
+        known.set(name.toLowerCase(), id);
+        created = true;
+      }
+      ids.push(id);
+    }
+    if (created) void reloadTags();
+    return ids;
+  }
+
+  async function addTask(title: string, smart: SmartParseResult | null = null) {
     if (!view || !addTarget) return false;
     try {
       // Outside a 清单 the task goes to the 收件箱, with what makes it show here
-      // (the 标签, today's date in 今天, 低优先级 in 不重要的 …).
-      const task = await api.createTask({ ...addTarget.request, title });
+      // (the 标签, today's date in 今天, 低优先级 in 不重要的 …); 智能识别 goes on top.
+      const request = smart ? smartCreateRequest(addTarget.request, smart, await smartTagIds(smart.tagNames)) : { ...addTarget.request, title };
+      const task = await api.createTask(request);
       putTask(task);
       // A new task lands first; if it does not sort first here, the server re-keyed the 清单 (long keys): re-read it.
       const rekeyed = listTasks?.some((t) => t.listId === task.listId && t.parentId === null && t.id !== task.id && t.sortOrder <= task.sortOrder);
@@ -1237,6 +1258,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
           now={now}
           onToggleSidebar={() => (isMobile ? setDrawerOpen((v) => !v) : setSidebarOpen((v) => !v))}
           onAddTask={addTask}
+          smartInput={settings?.smartInput.enabled ? settings.smartInput : null}
           onSelectTask={selectTask}
           onToggleTask={(task) => changeTask(task, { status: task.status !== 'open' ? 'open' : 'completed' })}
           onIndent={indentTask}

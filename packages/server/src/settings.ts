@@ -5,6 +5,8 @@ import {
   storedQuadrants,
   pomodoroSettingsSchema,
   type PomodoroSettings,
+  smartInputSettingsSchema,
+  type SmartInputSettings,
   smartListIdSchema,
   themeColorSchema,
   themeModeSchema,
@@ -45,6 +47,8 @@ function toSettings(row: SettingsRow | undefined): Settings {
     matrixQuadrants: storedQuadrants(row.matrixQuadrants),
     // Missing lengths take their defaults; a broken value falls back to all defaults.
     pomodoro: pomodoroSettingsSchema.catch(DEFAULT_SETTINGS.pomodoro).parse(row.pomodoro),
+    // Same for 智能识别.
+    smartInput: smartInputSettingsSchema.catch(DEFAULT_SETTINGS.smartInput).parse(row.smartInput),
   };
 }
 
@@ -60,6 +64,8 @@ export interface SettingsPatch {
   matrixQuadrants?: Quadrant[] | null;
   /** Merged: only the given lengths change. */
   pomodoro?: Partial<PomodoroSettings>;
+  /** Merged: only the given fields change. */
+  smartInput?: Partial<SmartInputSettings>;
 }
 
 export async function readSettings(db: Executor, userId: string): Promise<Settings> {
@@ -71,11 +77,12 @@ export async function readSettings(db: Executor, userId: string): Promise<Settin
 export async function writeSettings(ops: SyncOps, tx: Tx, userId: string, patch: SettingsPatch): Promise<Settings> {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(${SETTINGS_LOCK}, hashtext(${userId}))`);
   const [existing] = await tx.select().from(userSettings).where(liveSettingsWhere(userId));
-  const { viewOptions, pomodoro, ...rest } = patch;
+  const { viewOptions, pomodoro, smartInput, ...rest } = patch;
   const columns = {
     ...rest,
     ...(viewOptions ? { viewOptions: mergeViewOptions(existing?.viewOptions ?? {}, viewOptions) } : {}),
     ...(pomodoro ? { pomodoro: { ...toSettings(existing).pomodoro, ...pomodoro } } : {}),
+    ...(smartInput ? { smartInput: { ...toSettings(existing).smartInput, ...smartInput } } : {}),
   };
   if (!existing) return toSettings(await ops.insert(userSettings, { ...DEFAULT_SETTINGS, matrixQuadrants: null, ...columns }));
   return toSettings((await ops.update(userSettings, existing.id, columns)) ?? undefined);
