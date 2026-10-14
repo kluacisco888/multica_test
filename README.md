@@ -283,6 +283,12 @@ const result = await app.notifier.send(userId, channelId, { title: '提醒：交
 
 规则在 `packages/shared/src/countdown-dates.ts`（`@dida/shared/countdown`，复用 `@dida/shared/lunar`，不进前端包）：公历每年重复落在同月同日，2月29日在平年落在2月28日；农历每年重复按农历月日，小月没有三十就落在廿九；闰月的日期在有同一个闰月的年份落在闰月，其他年份落在同名的普通月。提醒是“下一次的前 N 天的某个时间”（`time: null` 用全天提醒时间），和任务提醒共用 `reminder_deliveries`（`countdown_id`）、重试、补发和失败记录；每次触发后自动排下一年的。倒数日提醒不进应用内提醒弹窗。界面在 `/countdowns`（`/countdowns/archived` 是已归档）。
 
+### 移动布局与 PWA
+
+屏幕宽度小于 768px 时用移动布局：侧栏是抽屉，底部导航有 任务、日历、专注、习惯、更多（四象限、倒数日、搜索、设置）；打开任务详情、习惯详情或多选时底部导航让位。任务行上用手指右滑（超过行宽 25%、至少 72px）完成或取消完成，左滑删除（进回收站）；鼠标不触发，滑动距离不够会弹回。
+
+应用带 Web App Manifest（`/manifest.webmanifest`，由 `packages/web/vite.config.ts` 生成）和图标（`packages/web/public/icons/`），可以「添加到主屏幕」，以独立窗口打开。没有 Service Worker：不做离线缓存，也不做 Web Push。Chrome 只在 HTTPS 或 localhost 下提示安装。改了 Logo 后运行 `node scripts/generate-pwa-icons.mjs` 重新生成图标。
+
 ### 节假日数据与农历（ADR-0006）
 
 - 后端每天 04:15（`DEFAULT_TIMEZONE`）和每次启动时，从 `HOLIDAY_DATA_URL`（默认 jsDelivr 上的 NateScarlet/holiday-cn）拉取当年和下一年的 `<year>.json`，存进 `holiday_years` 表。定时任务用 pg-boss（表在数据库的 `pgboss` schema 里，启动时自动安装）。

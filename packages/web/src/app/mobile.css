@@ -1,0 +1,154 @@
+/* ================= 移动布局 (EURO-29, spec 用户故事 107–108) ================= */
+
+/* ---- 底部导航 ---- */
+
+/* In normal flow under the shell (not position: fixed: a fixed bar takes the
+ * layout viewport's width, which a phone browser widens to fit any overflow). */
+.tabbar {
+  position: relative;
+  z-index: 15; /* under the drawer (20 / 21), dialogs and toasts */
+  height: calc(var(--tabbar-height) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--color-bg);
+  border-top: 1px solid var(--color-divider-strong);
+}
+
+.tabbar-items {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tabbar-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tabbar-item-active {
+  color: var(--color-brand-text); /* 10px label: the darker brand shade for 4.5:1 */
+}
+
+.tabbar-item:focus-visible {
+  outline-offset: -4px;
+}
+
+/* The shell leaves room for the bar; toasts and 应用内提醒 sit above it. */
+.shell.shell-tabbar {
+  height: calc(100vh - var(--tabbar-height) - env(safe-area-inset-bottom, 0px));
+  height: calc(100dvh - var(--tabbar-height) - env(safe-area-inset-bottom, 0px));
+}
+
+.shell-tabbar .toast,
+.shell-tabbar .reminder-alerts {
+  bottom: calc(var(--tabbar-height) + var(--space-3) + env(safe-area-inset-bottom, 0px));
+}
+
+/* ---- 更多: a bottom sheet ---- */
+
+.ui-dialog.tabbar-more {
+  width: 100%;
+  max-width: none;
+  margin: auto 0 0;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+
+.tabbar-more .ui-dialog-body {
+  padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
+}
+
+.tabbar-more-items {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tabbar-more-item {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-2) 0;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.tabbar-more-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  color: var(--color-brand);
+  background: var(--color-bg-sidebar);
+  border-radius: var(--radius-lg);
+}
+
+/* ---- 左滑删除 / 右滑完成 ---- */
+
+.task-swipe {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Lets the browser scroll vertically while horizontal moves reach the row. */
+.task-swipe > .task-row {
+  position: relative;
+  z-index: 1;
+  background: var(--color-bg);
+  touch-action: pan-y;
+}
+
+.task-swipe-settling > .task-row {
+  transition: transform 0.2s ease-out;
+}
+
+.task-swipe-action {
+  position: absolute;
+  top: 0;
+  bottom: 1px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-5);
+  font-size: var(--font-size-sm);
+  color: var(--color-on-swipe);
+}
+
+.task-swipe-complete {
+  left: 0;
+  right: 0;
+  justify-content: flex-start;
+  background: var(--color-swipe-complete);
+}
+
+.task-swipe-delete {
+  left: 0;
+  right: 0;
+  justify-content: flex-end;
+  background: var(--color-swipe-delete);
+}
