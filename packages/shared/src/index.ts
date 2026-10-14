@@ -35,3 +35,4 @@ export * from './focus.js';
 export * from './countdowns.js';
 export * from './habits.js';
 export * from './smart-input.js';
+export * from './backup.js';

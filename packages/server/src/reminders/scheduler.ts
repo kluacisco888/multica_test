@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, min, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, min, notInArray, sql } from 'drizzle-orm';
 import {
   countdownReminderMessage,
   nextRetryAt,
@@ -82,6 +82,8 @@ export interface ReminderService {
 }
 
 const ACTIVE = ['scheduled', 'delivering'] as const;
+/** How long a delivery that crashed waits before it is tried again. */
+const CRASH_RETRY_MS = 15 * 60_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MISSED_ERROR = '服务停机超过 24 小时，未能发送';
 const CHANNEL_DELETED_ERROR = '渠道已删除';
@@ -410,14 +412,32 @@ export function createReminderService(deps: {
     return countdownReminderMessage({ name: countdown.name, calendar: countdown.calendar, lunar }, next.date, next.days);
   }
 
+  /** A delivery that crashed is tried again later instead of staying first in line. */
+  async function postpone(id: string, userId: string) {
+    try {
+      await sync.transaction(userId, (ops) => ops.update(reminderDeliveries, id, { nextAttemptAt: new Date(clock.now().getTime() + CRASH_RETRY_MS) }));
+    } catch (err) {
+      log.error({ err, deliveryId: id }, 'could not postpone a crashed reminder delivery');
+    }
+  }
+
   async function runTick(): Promise<TickResult> {
     const result: TickResult = { fired: 0, sent: 0, failed: 0, retrying: 0, cancelled: 0, missed: 0 };
+    // Deliveries that crashed this tick: never picked again in the same tick.
+    const crashed = new Set<string>();
     for (;;) {
       const now = clock.now();
       const due = await db
         .select({ id: reminderDeliveries.id, userId: reminderDeliveries.userId })
         .from(reminderDeliveries)
-        .where(and(inArray(reminderDeliveries.status, [...ACTIVE]), isNull(reminderDeliveries.deletedAt), lte(reminderDeliveries.nextAttemptAt, now)))
+        .where(
+          and(
+            inArray(reminderDeliveries.status, [...ACTIVE]),
+            isNull(reminderDeliveries.deletedAt),
+            lte(reminderDeliveries.nextAttemptAt, now),
+            crashed.size > 0 ? notInArray(reminderDeliveries.id, [...crashed]) : undefined,
+          ),
+        )
         .orderBy(asc(reminderDeliveries.nextAttemptAt), asc(reminderDeliveries.id))
         .limit(100);
       for (const { id, userId } of due) {
@@ -425,6 +445,8 @@ export function createReminderService(deps: {
           await deliver(id, userId, result);
         } catch (err) {
           log.error({ err, deliveryId: id }, 'reminder delivery crashed');
+          crashed.add(id);
+          await postpone(id, userId);
         }
       }
       if (due.length < 100) break;

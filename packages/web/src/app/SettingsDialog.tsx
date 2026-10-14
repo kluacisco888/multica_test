@@ -17,11 +17,12 @@ import { changePassword, errorMessage, logout } from '../api.js';
 import { Button, Dialog } from '../ui/controls.js';
 import { Icon, type IconName } from '../ui/Icon.js';
 import { HolidaySettings } from './HolidaySettings.js';
+import { BackupSettings } from './settings/BackupSettings.js';
 import { NotificationSettings } from './settings/NotificationSettings.js';
 import { ShortcutList } from './ShortcutsPanel.js';
 import { UserAdmin } from './settings/UserAdmin.js';
 
-export type SettingsTab = 'account' | 'smart' | 'datetime' | 'notifications' | 'appearance' | 'more' | 'shortcuts' | 'users';
+export type SettingsTab = 'account' | 'smart' | 'datetime' | 'notifications' | 'appearance' | 'more' | 'integrations' | 'shortcuts' | 'users';
 
 const TABS: { id: SettingsTab; label: string; icon: IconName }[] = [
   { id: 'account', label: '账户与安全', icon: 'user' },
@@ -30,6 +31,7 @@ const TABS: { id: SettingsTab; label: string; icon: IconName }[] = [
   { id: 'smart', label: '智能清单', icon: 'today' },
   { id: 'appearance', label: '外观', icon: 'palette' },
   { id: 'more', label: '更多设置', icon: 'settings' },
+  { id: 'integrations', label: '关联与导入', icon: 'download' },
   { id: 'shortcuts', label: '快捷键', icon: 'keyboard' },
 ];
 /** The 后台, last in the list and only for 管理员 (others never see the entry). */
@@ -40,7 +42,7 @@ const ADMIN_TAB: (typeof TABS)[number] = { id: 'users', label: '用户管理', i
  * panel on the right. 账户与安全: who is signed in, change password, log out
  * (spec 用户故事 7、8). 智能清单: show / hide each one in the sidebar (60). 日期与时间: the time zone (用户故事 26) and the
  * 节假日数据 card (用户故事 114). 提醒与通知: 全天提醒时间, 通知渠道 and failed 提醒 (用户故事 74–77、80、83、85).
- * 外观: 主题 mode and 颜色系列 (用户故事 104). 更多设置: 智能识别 (57–58). 快捷键: the fixed list (105–106).
+ * 外观: 主题 mode and 颜色系列 (用户故事 104). 更多设置: 智能识别 (57–58). 关联与导入: 备份与还原 (110–112). 快捷键: the fixed list (105–106).
  * 用户管理 (管理员 only): the 后台 (用户故事 9).
  */
 export function SettingsDialog({
@@ -106,6 +108,7 @@ export function SettingsDialog({
           {tab === 'notifications' && <NotificationsPanel settings={settings} onSave={onSaveSettings} />}
           {tab === 'appearance' && <AppearancePanel settings={settings} onSave={onSaveSettings} />}
           {tab === 'more' && <SmartInputPanel settings={settings} onSave={onSaveSettings} />}
+          {tab === 'integrations' && <IntegrationsPanel />}
           {tab === 'shortcuts' && <ShortcutsSettingsPanel />}
           {tab === 'users' && user.isAdmin && <UsersPanel user={user} />}
         </div>
@@ -247,6 +250,18 @@ function AppearancePanel({ settings, onSave }: { settings: Settings | null; onSa
           ))}
         </div>
       </fieldset>
+    </section>
+  );
+}
+
+function IntegrationsPanel() {
+  const id = useId();
+  return (
+    <section className="account-section" aria-labelledby={`${id}-title`}>
+      <h3 id={`${id}-title`} className="account-section-title">
+        关联与导入
+      </h3>
+      <BackupSettings />
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import path from 'node:path';
 import fastifyCookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
+import { BACKUP_IMPORT_MAX_BYTES } from '@dida/shared';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import { createAccounts, type Accounts } from './accounts.js';
 import { createAttachmentStore, type AttachmentStore } from './attachments/store.js';
@@ -13,6 +14,7 @@ import { createCredentialCipher } from './notify/credentials.js';
 import { createNotifier, type Notifier } from './notify/notifier.js';
 import { adminRoutes } from './routes/admin.js';
 import { attachmentRoutes } from './routes/attachments.js';
+import { backupRoutes } from './routes/backup.js';
 import { authRoutes } from './routes/auth.js';
 import { calendarRoutes } from './routes/calendar.js';
 import { commentRoutes } from './routes/comments.js';
@@ -50,6 +52,8 @@ export interface AppDeps {
   clock?: Clock;
   syncEntities?: readonly SyncEntity[];
   logger?: FastifyServerOptions['logger'];
+  /** Largest backup file (导入导出), both ways; tests lower it. Defaults to BACKUP_IMPORT_MAX_BYTES. */
+  backupMaxBytes?: number;
   /** Extra routes (tests register fixture resource routes); added after the built-in ones. */
   routes?: (app: FastifyInstance) => void;
 }
@@ -162,6 +166,7 @@ export async function buildApp(deps: AppDeps) {
   focusRoutes(app);
   countdownRoutes(app);
   habitRoutes(app);
+  backupRoutes(app, { cipher, maxBytes: deps.backupMaxBytes ?? BACKUP_IMPORT_MAX_BYTES });
   deps.routes?.(app);
 
   if (config.webDistDir) {

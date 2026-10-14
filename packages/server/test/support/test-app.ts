@@ -39,6 +39,8 @@ export interface TestAppOptions {
   routes?: (app: FastifyInstance) => void;
   /** Runs after migrations, before the app is built (e.g. create fixture tables). */
   prepare?: (database: TestDatabase) => Promise<void>;
+  /** Largest backup file (导入导出). */
+  backupMaxBytes?: number;
   /** Fastify logger options, e.g. a capturing `stream` to assert on log lines. */
   logger?: AppDeps['logger'];
 }
@@ -72,6 +74,7 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
     ...(options.syncEntities ? { syncEntities: options.syncEntities } : {}),
     ...(options.routes ? { routes: options.routes } : {}),
     ...(options.logger ? { logger: options.logger } : {}),
+    ...(options.backupMaxBytes ? { backupMaxBytes: options.backupMaxBytes } : {}),
   });
   await app.ready();
 
