@@ -18,7 +18,7 @@ import { Markdown } from '../ui/Markdown.js';
 import { ChecklistEditor } from './ChecklistEditor.js';
 import { TaskAttachments } from './TaskAttachments.js';
 import { TaskComments } from './TaskComments.js';
-import { chipStyle, priorityItems, tagItems, tagsOf, taskActionItems } from './taskMeta.js';
+import { chipStyle, priorityItems, tagItems, tagsOf, taskActionItems, toggledTagIds } from './taskMeta.js';
 
 interface TaskDetailProps {
   task: Task | null;
@@ -152,7 +152,7 @@ export function TaskDetail({
                     className="tag-chip-remove"
                     aria-label={`移除标签：${tag.name}`}
                     title="移除标签"
-                    onClick={() => change({ tagIds: task.tagIds.filter((id) => id !== tag.id) })}
+                    onClick={() => change({ tagIds: toggledTagIds(task, tag.id, tags) })}
                   >
                     <Icon name="close" size={10} strokeWidth={2.5} />
                   </button>

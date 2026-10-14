@@ -63,6 +63,7 @@ import { CalendarPane } from './CalendarPane.js';
 import { FocusPane } from './FocusPane.js';
 import { useFocusTimer } from './focusTimer.js';
 import { MatrixPane } from './MatrixPane.js';
+import { MobileTabBar } from './MobileTabBar.js';
 import { CountdownPane } from './CountdownPane.js';
 import { Rail } from './Rail.js';
 import { ReminderAlerts } from './ReminderAlerts.js';
@@ -1072,416 +1073,431 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       ? selectedTask !== null
       : (!isMobile && !timeline && !board) || selectedTask !== null;
   const sidebarVisible = isMobile ? drawerOpen : sidebarOpen && !route.calendar && !route.matrix && !route.focus && !route.countdowns && !route.habits;
+  // 底部导航 (spec 用户故事 107): on the module pages; a full-page 任务 / 习惯 and the 多选 toolbar take the bottom instead.
+  const tabBarVisible = isMobile && selectedTask === null && !(route.habits && route.habitId) && batchTasks.length === 0;
 
   return (
-    <div
-      className={`shell ${sidebarVisible ? 'shell-sidebar-open' : 'shell-sidebar-closed'} ${selectedTask ? 'shell-has-task' : ''} ${
-        route.calendar ? 'shell-calendar' : ''}
-      } ${route.focus ? 'shell-focus' : ''
-      } ${route.matrix ? 'shell-matrix' : ''} ${route.countdowns ? 'shell-countdowns' : ''} ${board ? 'shell-kanban' : ''}`}
-    >
-      {!isMobile && (
-        <Rail
-          user={user}
-          onOpenAccount={() => setDialog({ kind: 'settings', tab: 'account' })}
-          onOpenSettings={() => setDialog({ kind: 'settings', tab: 'notifications' })}
-          onHome={() => navigate({ listId: null, taskId: null })}
-          onCalendar={() => openCalendar()}
-          onMatrix={openMatrix}
-          onFocus={openFocus}
-          onCountdowns={() => openCountdowns()}
-          onSearch={() => openSearch()}
-          onHabits={openHabits}
-          active={route.habits ? 'habits' : route.calendar ? 'calendar' : route.matrix ? 'matrix' : route.focus ? 'focus' : route.countdowns ? 'countdowns' : view?.kind === 'search' ? 'search' : 'tasks'}
-        />
-      )}
-      {isMobile && drawerOpen && <div className="shell-scrim" aria-hidden="true" onClick={() => setDrawerOpen(false)} />}
-      {sidebarVisible && (
-        <Sidebar
-          sidebar={sidebar}
-          tags={tags ?? []}
-          currentListId={currentList?.id ?? null}
-          currentTagId={currentTag?.id ?? null}
-          isDrawer={isMobile}
-          user={user}
-          onOpenAccount={() => setDialog({ kind: 'settings', tab: 'account' })}
-          onOpenSettings={() => setDialog({ kind: 'settings', tab: 'notifications' })}
-          onClose={() => setDrawerOpen(false)}
-          onOpenList={openList}
-          onAddList={(folderId) => setDialog({ kind: 'list', list: null, folderId })}
-          onAddFolder={() => setDialog({ kind: 'folder', folder: null })}
-          onEditList={(list) => setDialog({ kind: 'list', list, folderId: list.folderId })}
-          onDeleteList={(list) => setDialog({ kind: 'delete-list', list })}
-          onArchiveList={(list, archived) => void archiveList(list, archived)}
-          trashActive={route.trash === true}
-          onOpenTrash={openTrash}
-          onRenameFolder={(folder) => setDialog({ kind: 'folder', folder })}
-          onDeleteFolder={(folder) => setDialog({ kind: 'delete-folder', folder })}
-          onToggleFolder={toggleFolder}
-          onMove={moveSidebarItem}
-          onOpenTag={openTag}
-          onAddTag={(parentId) => setDialog({ kind: 'tag', tag: null, parentId })}
-          onEditTag={(tag) => setDialog({ kind: 'tag', tag, parentId: tag.parentId })}
-          onDeleteTag={(tag) => setDialog({ kind: 'delete-tag', tag })}
-          hiddenSmartLists={settings?.hiddenSmartLists ?? []}
-          smartCounts={smartCounts}
-          currentSmartId={route.smartId ?? null}
-          onOpenSmart={openSmart}
-          onHideSmart={hideSmartList}
-          filters={filters ?? []}
-          currentFilterId={currentFilter?.id ?? null}
-          onOpenFilter={openFilter}
-          onAddFilter={() => setDialog({ kind: 'filter', filter: null })}
-          onEditFilter={(filter) => setDialog({ kind: 'filter', filter })}
-          onDeleteFilter={(filter) => setDialog({ kind: 'delete-filter', filter })}
-          onOpenSearch={() => openSearch()}
-          onOpenCalendar={() => openCalendar()}
-          onOpenHabits={openHabits}
-          onOpenMatrix={openMatrix}
-          onOpenFocus={openFocus}
-          onOpenCountdowns={() => openCountdowns()}
-        />
-      )}
-      {route.countdowns && (
-        <CountdownPane
-          archived={route.countdowns === 'archived'}
-          today={today}
-          isMobile={isMobile}
-          sidebarVisible={sidebarVisible}
-          channels={channels}
-          allDayReminderTime={settings?.allDayReminderTime ?? DEFAULT_ALL_DAY_REMINDER_TIME}
-          onToggleSidebar={() => setDrawerOpen((v) => !v)}
-          onShowArchived={openCountdowns}
+    <>
+      <div
+        className={`shell ${sidebarVisible ? 'shell-sidebar-open' : 'shell-sidebar-closed'} ${selectedTask ? 'shell-has-task' : ''} ${
+          route.calendar ? 'shell-calendar' : ''} ${route.focus ? 'shell-focus' : ''} ${route.matrix ? 'shell-matrix' : ''} ${route.countdowns ? 'shell-countdowns' : ''} ${board ? 'shell-kanban' : ''} ${tabBarVisible ? 'shell-tabbar' : ''}`}
+      >
+        {!isMobile && (
+          <Rail
+            user={user}
+            onOpenAccount={() => setDialog({ kind: 'settings', tab: 'account' })}
+            onOpenSettings={() => setDialog({ kind: 'settings', tab: 'notifications' })}
+            onHome={() => navigate({ listId: null, taskId: null })}
+            onCalendar={() => openCalendar()}
+            onMatrix={openMatrix}
+            onFocus={openFocus}
+            onCountdowns={() => openCountdowns()}
+            onSearch={() => openSearch()}
+            onHabits={openHabits}
+            active={route.habits ? 'habits' : route.calendar ? 'calendar' : route.matrix ? 'matrix' : route.focus ? 'focus' : route.countdowns ? 'countdowns' : view?.kind === 'search' ? 'search' : 'tasks'}
+          />
+        )}
+        {isMobile && drawerOpen && <div className="shell-scrim" aria-hidden="true" onClick={() => setDrawerOpen(false)} />}
+        {sidebarVisible && (
+          <Sidebar
+            sidebar={sidebar}
+            tags={tags ?? []}
+            currentListId={currentList?.id ?? null}
+            currentTagId={currentTag?.id ?? null}
+            isDrawer={isMobile}
+            user={user}
+            onOpenAccount={() => setDialog({ kind: 'settings', tab: 'account' })}
+            onOpenSettings={() => setDialog({ kind: 'settings', tab: 'notifications' })}
+            onClose={() => setDrawerOpen(false)}
+            onOpenList={openList}
+            onAddList={(folderId) => setDialog({ kind: 'list', list: null, folderId })}
+            onAddFolder={() => setDialog({ kind: 'folder', folder: null })}
+            onEditList={(list) => setDialog({ kind: 'list', list, folderId: list.folderId })}
+            onDeleteList={(list) => setDialog({ kind: 'delete-list', list })}
+            onArchiveList={(list, archived) => void archiveList(list, archived)}
+            trashActive={route.trash === true}
+            onOpenTrash={openTrash}
+            onRenameFolder={(folder) => setDialog({ kind: 'folder', folder })}
+            onDeleteFolder={(folder) => setDialog({ kind: 'delete-folder', folder })}
+            onToggleFolder={toggleFolder}
+            onMove={moveSidebarItem}
+            onOpenTag={openTag}
+            onAddTag={(parentId) => setDialog({ kind: 'tag', tag: null, parentId })}
+            onEditTag={(tag) => setDialog({ kind: 'tag', tag, parentId: tag.parentId })}
+            onDeleteTag={(tag) => setDialog({ kind: 'delete-tag', tag })}
+            hiddenSmartLists={settings?.hiddenSmartLists ?? []}
+            smartCounts={smartCounts}
+            currentSmartId={route.smartId ?? null}
+            onOpenSmart={openSmart}
+            onHideSmart={hideSmartList}
+            filters={filters ?? []}
+            currentFilterId={currentFilter?.id ?? null}
+            onOpenFilter={openFilter}
+            onAddFilter={() => setDialog({ kind: 'filter', filter: null })}
+            onEditFilter={(filter) => setDialog({ kind: 'filter', filter })}
+            onDeleteFilter={(filter) => setDialog({ kind: 'delete-filter', filter })}
+            onOpenSearch={() => openSearch()}
+            onOpenCalendar={() => openCalendar()}
+            onOpenHabits={openHabits}
+            onOpenMatrix={openMatrix}
+            onOpenFocus={openFocus}
+            onOpenCountdowns={() => openCountdowns()}
+          />
+        )}
+        {route.countdowns && (
+          <CountdownPane
+            archived={route.countdowns === 'archived'}
+            today={today}
+            isMobile={isMobile}
+            sidebarVisible={sidebarVisible}
+            channels={channels}
+            allDayReminderTime={settings?.allDayReminderTime ?? DEFAULT_ALL_DAY_REMINDER_TIME}
+            onToggleSidebar={() => setDrawerOpen((v) => !v)}
+            onShowArchived={openCountdowns}
+            onError={fail}
+          />
+        )}
+        {route.habits && (
+          <HabitsPane
+            today={today}
+            isMobile={isMobile}
+            selectedHabitId={route.habitId ?? null}
+            onSelectHabit={(habitId) => navigate({ listId: null, taskId: null, habits: true, habitId })}
+            onToggleSidebar={() => setDrawerOpen((v) => !v)}
+            onError={setError}
+          />
+        )}
+        {route.trash && (
+          <TrashPane
+            tasks={trash}
+            lists={sidebar?.lists ?? []}
+            sidebarVisible={sidebarVisible}
+            timeZone={timeZone}
+            now={now}
+            onToggleSidebar={() => (isMobile ? setDrawerOpen((v) => !v) : setSidebarOpen((v) => !v))}
+            onRestore={(task) => void restoreTask(task)}
+            onPurge={(task) => setDialog({ kind: 'purge-task', task })}
+            onEmpty={() => setDialog({ kind: 'empty-trash' })}
+          />
+        )}
+        {route.focus && (
+          <FocusPane
+            timer={focusTimer}
+            pomodoro={settings?.pomodoro ?? DEFAULT_SETTINGS.pomodoro}
+            timeZone={timeZone}
+            isMobile={isMobile}
+            sidebarVisible={sidebarVisible}
+            onToggleSidebar={() => setDrawerOpen((v) => !v)}
+            onSaveSettings={saveSettings}
+            onError={fail}
+          />
+        )}
+        {route.matrix && !(isMobile && selectedTask) && (
+          <MatrixPane
+            smart={smartAdd}
+            quadrants={settings?.matrixQuadrants ?? DEFAULT_QUADRANTS}
+            tasks={listTasks}
+            lists={sidebar?.lists ?? []}
+            tags={tags ?? []}
+            selectedTaskId={route.taskId}
+            timeZone={timeZone}
+            now={now}
+            isMobile={isMobile}
+            sidebarVisible={sidebarVisible}
+            onToggleSidebar={() => setDrawerOpen((v) => !v)}
+            onSelectTask={selectTask}
+            onToggleTask={(task) => void changeTask(task, { status: task.status !== 'open' ? 'open' : 'completed' })}
+            onChangeTask={(task, patch) => void changeTask(task, patch)}
+            onDeleteTask={(task) => void deleteTask(task)}
+            onMoveTask={moveMatrixTask}
+            onAddTask={addMatrixTask}
+            onEditQuadrant={(index) => setDialog({ kind: 'quadrant', index })}
+            onResetQuadrant={(index) => {
+              const quadrant = DEFAULT_QUADRANTS[index];
+              if (quadrant) void saveQuadrant(index, quadrant);
+            }}
+          />
+        )}
+        {!route.trash && !route.calendar && !route.matrix && !route.focus && !route.countdowns && !route.habits && !(isMobile && selectedTask) && timeline && view && (
+          <TimelinePane
+            key={viewKey(view)}
+            view={view}
+            tasks={listTasks}
+            viewOptions={viewOptions ?? { sortBy: 'custom', groupBy: 'none' }}
+            onChangeViewOptions={changeViewOptions}
+            tags={tags ?? []}
+            lists={sidebar?.lists ?? []}
+            selectedTaskId={route.taskId}
+            sidebarVisible={sidebarVisible}
+            timeZone={timeZone}
+            now={now}
+            onToggleSidebar={() => (isMobile ? setDrawerOpen((v) => !v) : setSidebarOpen((v) => !v))}
+            onSelectTask={selectTask}
+            onMoveTask={(task, dates) => void moveTask(task, dates)}
+            onEditList={currentList && !currentList.isInbox ? () => setDialog({ kind: 'list', list: currentList, folderId: currentList.folderId }) : null}
+          />
+        )}
+        {calendarMode && calendarAnchor && !(isMobile && selectedTask) && (
+          <CalendarPane
+            smart={smartAdd}
+            mode={calendarMode}
+            anchor={calendarAnchor}
+            today={today}
+            tasks={listTasks}
+            days={calendarInfo}
+            lists={sidebar?.lists ?? []}
+            timeZone={timeZone}
+            now={now}
+            selectedTaskId={route.taskId}
+            isMobile={isMobile}
+            sidebarVisible={sidebarVisible}
+            onToggleSidebar={() => setDrawerOpen((v) => !v)}
+            onNavigate={(mode, date) => openCalendar(mode, date)}
+            onSelectTask={selectTask}
+            onCreateTask={addCalendarTask}
+            onMoveTask={moveCalendarTask}
+          />
+        )}
+        {!route.trash && !route.calendar && !route.matrix && !route.focus && !route.countdowns && !route.habits && !(isMobile && selectedTask) && !timeline && (
+          <TaskListPane
+            // A new view starts with its sections expanded.
+            key={view ? viewKey(view) : 'none'}
+            view={view}
+            tasks={view?.kind === 'search' && !view.query ? [] : listTasks}
+            viewOptions={viewOptions ?? { sortBy: 'custom', groupBy: 'none' }}
+            onChangeViewOptions={changeViewOptions}
+            addTarget={addTarget?.name ?? null}
+            searchMatches={tasks?.scope === currentScope ? tasks?.matches : undefined}
+            onSearch={(q) => openSearch(q)}
+            indentable={indentable}
+            tags={tags ?? []}
+            lists={sidebar?.lists ?? []}
+            selectedTaskId={route.taskId}
+            sidebarVisible={sidebarVisible}
+            timeZone={timeZone}
+            now={now}
+            onToggleSidebar={() => (isMobile ? setDrawerOpen((v) => !v) : setSidebarOpen((v) => !v))}
+            onAddTask={addTask}
+            smart={smartAdd}
+            onSelectTask={selectTask}
+            onToggleTask={(task) => changeTask(task, { status: task.status !== 'open' ? 'open' : 'completed' })}
+            onIndent={indentTask}
+            onChangeTask={(task, patch) => void changeTask(task, patch)}
+            onDeleteTask={(task) => void deleteTask(task)}
+            onArchiveList={currentList && !currentList.isInbox ? (archived) => void archiveList(currentList, archived) : null}
+            onEditList={currentList && !currentList.isInbox ? () => setDialog({ kind: 'list', list: currentList, folderId: currentList.folderId }) : null}
+            columns={view?.kind === 'list' ? listColumns : null}
+            kanban={kanbanActions}
+            multiSelectedIds={batchTasks.map((t) => t.id)}
+            onMultiSelect={multiSelect}
+            batch={batch}
+            onBatchDelete={() => void runBatch({ op: 'delete' })}
+            isMobile={isMobile}
+            onMoveTask={(task, afterId) => void reorderTask(task, afterId)}
+          />
+        )}
+        {batch && !isMobile && !route.trash && !route.calendar && !timeline && (
+          <BatchPanel ctx={batch} onCancel={() => setMulti({ scope: null, ids: [] })} onDelete={() => void runBatch({ op: 'delete' })} />
+        )}
+        {pickingBatchDate && batch && (
+          <BatchDateDialog
+            initial={today}
+            onCancel={() => setPickingBatchDate(false)}
+            onSave={(date) => {
+              setPickingBatchDate(false);
+              void runBatch({ op: 'dates', dates: { allDay: true, startDate: null, dueDate: date } });
+            }}
+          />
+        )}
+        {showDetail && !batch && !(isMobile && route.trash) && (
+          <TaskDetail
+            key={selectedTask?.id ?? 'empty'}
+            task={selectedTask}
+            tasks={listTasks ?? []}
+            lists={sidebar?.lists ?? []}
+            tags={tags ?? []}
+            userName={user.username}
+            isMobile={isMobile}
+            timeZone={timeZone}
+            allDayReminderTime={settings?.allDayReminderTime ?? DEFAULT_ALL_DAY_REMINDER_TIME}
+            channels={channels}
+            now={now}
+            onBack={() => selectTask(null)}
+            onChange={changeTask}
+            onSelectTask={selectTask}
+            onAddSubtask={addSubtask}
+            onIndent={indentTask}
+            onDelete={(task) => void deleteTask(task)}
+            indentable={indentable}
+            onError={fail}
+          />
+        )}
+
+        {/* 专注结束 is announced wherever the user is (the 提示音 plays too). */}
+        <p className="visually-hidden" role="status" aria-live="polite">
+          {focusTimer.announcement}
+        </p>
+
+        <ReminderAlerts
+          timeZone={timeZone}
+          now={now}
+          onCompleted={() => {
+            void reloadTasks();
+            void reloadSidebar();
+          }}
           onError={fail}
         />
-      )}
-      {route.habits && (
-        <HabitsPane
-          today={today}
-          isMobile={isMobile}
-          selectedHabitId={route.habitId ?? null}
-          onSelectHabit={(habitId) => navigate({ listId: null, taskId: null, habits: true, habitId })}
-          onToggleSidebar={() => setDrawerOpen((v) => !v)}
-          onError={setError}
-        />
-      )}
-      {route.trash && (
-        <TrashPane
-          tasks={trash}
-          lists={sidebar?.lists ?? []}
-          sidebarVisible={sidebarVisible}
-          timeZone={timeZone}
-          now={now}
-          onToggleSidebar={() => (isMobile ? setDrawerOpen((v) => !v) : setSidebarOpen((v) => !v))}
-          onRestore={(task) => void restoreTask(task)}
-          onPurge={(task) => setDialog({ kind: 'purge-task', task })}
-          onEmpty={() => setDialog({ kind: 'empty-trash' })}
-        />
-      )}
-      {route.focus && (
-        <FocusPane
-          timer={focusTimer}
-          pomodoro={settings?.pomodoro ?? DEFAULT_SETTINGS.pomodoro}
-          timeZone={timeZone}
-          isMobile={isMobile}
-          sidebarVisible={sidebarVisible}
-          onToggleSidebar={() => setDrawerOpen((v) => !v)}
-          onSaveSettings={saveSettings}
-          onError={fail}
-        />
-      )}
-      {route.matrix && !(isMobile && selectedTask) && (
-        <MatrixPane
-          smart={smartAdd}
-          quadrants={settings?.matrixQuadrants ?? DEFAULT_QUADRANTS}
-          tasks={listTasks}
-          lists={sidebar?.lists ?? []}
-          tags={tags ?? []}
-          selectedTaskId={route.taskId}
-          timeZone={timeZone}
-          now={now}
-          isMobile={isMobile}
-          sidebarVisible={sidebarVisible}
-          onToggleSidebar={() => setDrawerOpen((v) => !v)}
-          onSelectTask={selectTask}
-          onToggleTask={(task) => void changeTask(task, { status: task.status !== 'open' ? 'open' : 'completed' })}
-          onChangeTask={(task, patch) => void changeTask(task, patch)}
-          onDeleteTask={(task) => void deleteTask(task)}
-          onMoveTask={moveMatrixTask}
-          onAddTask={addMatrixTask}
-          onEditQuadrant={(index) => setDialog({ kind: 'quadrant', index })}
-          onResetQuadrant={(index) => {
-            const quadrant = DEFAULT_QUADRANTS[index];
-            if (quadrant) void saveQuadrant(index, quadrant);
-          }}
-        />
-      )}
-      {!route.trash && !route.calendar && !route.matrix && !route.focus && !route.countdowns && !route.habits && !(isMobile && selectedTask) && timeline && view && (
-        <TimelinePane
-          key={viewKey(view)}
-          view={view}
-          tasks={listTasks}
-          viewOptions={viewOptions ?? { sortBy: 'custom', groupBy: 'none' }}
-          onChangeViewOptions={changeViewOptions}
-          tags={tags ?? []}
-          lists={sidebar?.lists ?? []}
-          selectedTaskId={route.taskId}
-          sidebarVisible={sidebarVisible}
-          timeZone={timeZone}
-          now={now}
-          onToggleSidebar={() => (isMobile ? setDrawerOpen((v) => !v) : setSidebarOpen((v) => !v))}
-          onSelectTask={selectTask}
-          onMoveTask={(task, dates) => void moveTask(task, dates)}
-          onEditList={currentList && !currentList.isInbox ? () => setDialog({ kind: 'list', list: currentList, folderId: currentList.folderId }) : null}
-        />
-      )}
-      {calendarMode && calendarAnchor && !(isMobile && selectedTask) && (
-        <CalendarPane
-          smart={smartAdd}
-          mode={calendarMode}
-          anchor={calendarAnchor}
-          today={today}
-          tasks={listTasks}
-          days={calendarInfo}
-          lists={sidebar?.lists ?? []}
-          timeZone={timeZone}
-          now={now}
-          selectedTaskId={route.taskId}
-          isMobile={isMobile}
-          sidebarVisible={sidebarVisible}
-          onToggleSidebar={() => setDrawerOpen((v) => !v)}
-          onNavigate={(mode, date) => openCalendar(mode, date)}
-          onSelectTask={selectTask}
-          onCreateTask={addCalendarTask}
-          onMoveTask={moveCalendarTask}
-        />
-      )}
-      {!route.trash && !route.calendar && !route.matrix && !route.focus && !route.countdowns && !route.habits && !(isMobile && selectedTask) && !timeline && (
-        <TaskListPane
-          // A new view starts with its sections expanded.
-          key={view ? viewKey(view) : 'none'}
-          view={view}
-          tasks={view?.kind === 'search' && !view.query ? [] : listTasks}
-          viewOptions={viewOptions ?? { sortBy: 'custom', groupBy: 'none' }}
-          onChangeViewOptions={changeViewOptions}
-          addTarget={addTarget?.name ?? null}
-          searchMatches={tasks?.scope === currentScope ? tasks?.matches : undefined}
-          onSearch={(q) => openSearch(q)}
-          indentable={indentable}
-          tags={tags ?? []}
-          lists={sidebar?.lists ?? []}
-          selectedTaskId={route.taskId}
-          sidebarVisible={sidebarVisible}
-          timeZone={timeZone}
-          now={now}
-          onToggleSidebar={() => (isMobile ? setDrawerOpen((v) => !v) : setSidebarOpen((v) => !v))}
-          onAddTask={addTask}
-          smart={smartAdd}
-          onSelectTask={selectTask}
-          onToggleTask={(task) => changeTask(task, { status: task.status !== 'open' ? 'open' : 'completed' })}
-          onIndent={indentTask}
-          onChangeTask={(task, patch) => void changeTask(task, patch)}
-          onDeleteTask={(task) => void deleteTask(task)}
-          onArchiveList={currentList && !currentList.isInbox ? (archived) => void archiveList(currentList, archived) : null}
-          onEditList={currentList && !currentList.isInbox ? () => setDialog({ kind: 'list', list: currentList, folderId: currentList.folderId }) : null}
-          columns={view?.kind === 'list' ? listColumns : null}
-          kanban={kanbanActions}
-          multiSelectedIds={batchTasks.map((t) => t.id)}
-          onMultiSelect={multiSelect}
-          batch={batch}
-          onBatchDelete={() => void runBatch({ op: 'delete' })}
-          isMobile={isMobile}
-          onMoveTask={(task, afterId) => void reorderTask(task, afterId)}
-        />
-      )}
-      {batch && !isMobile && !route.trash && !route.calendar && !timeline && (
-        <BatchPanel ctx={batch} onCancel={() => setMulti({ scope: null, ids: [] })} onDelete={() => void runBatch({ op: 'delete' })} />
-      )}
-      {pickingBatchDate && batch && (
-        <BatchDateDialog
-          initial={today}
-          onCancel={() => setPickingBatchDate(false)}
-          onSave={(date) => {
-            setPickingBatchDate(false);
-            void runBatch({ op: 'dates', dates: { allDay: true, startDate: null, dueDate: date } });
-          }}
-        />
-      )}
-      {showDetail && !batch && !(isMobile && route.trash) && (
-        <TaskDetail
-          key={selectedTask?.id ?? 'empty'}
-          task={selectedTask}
-          tasks={listTasks ?? []}
-          lists={sidebar?.lists ?? []}
-          tags={tags ?? []}
-          userName={user.username}
-          isMobile={isMobile}
-          timeZone={timeZone}
-          allDayReminderTime={settings?.allDayReminderTime ?? DEFAULT_ALL_DAY_REMINDER_TIME}
-          channels={channels}
-          now={now}
-          onBack={() => selectTask(null)}
-          onChange={changeTask}
-          onSelectTask={selectTask}
-          onAddSubtask={addSubtask}
-          onIndent={indentTask}
-          onDelete={(task) => void deleteTask(task)}
-          indentable={indentable}
-          onError={fail}
-        />
-      )}
 
-      {/* 专注结束 is announced wherever the user is (the 提示音 plays too). */}
-      <p className="visually-hidden" role="status" aria-live="polite">
-        {focusTimer.announcement}
-      </p>
+        {error && (
+          <div className="toast" role="alert">
+            <span>{error}</span>
+            <button type="button" className="toast-close" onClick={() => setError(null)}>
+              知道了
+            </button>
+          </div>
+        )}
 
-      <ReminderAlerts
-        timeZone={timeZone}
-        now={now}
-        onCompleted={() => {
-          void reloadTasks();
-          void reloadSidebar();
-        }}
-        onError={fail}
-      />
-
-      {error && (
-        <div className="toast" role="alert">
-          <span>{error}</span>
-          <button type="button" className="toast-close" onClick={() => setError(null)}>
-            知道了
-          </button>
-        </div>
-      )}
-
-      {dialog.kind === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog({ kind: 'none' })} />}
-      {dialog.kind === 'settings' && (
-        <SettingsDialog
-          user={user}
-          initialTab={dialog.tab}
-          settings={settings}
-          onClose={() => {
-            setDialog({ kind: 'none' });
-            void reloadChannels();
-          }}
-          onLoggedOut={onLoggedOut}
-          onSaveSettings={saveSettings}
-        />
-      )}
-      {dialog.kind === 'list' && (
-        <ListDialog
-          list={dialog.list}
-          defaultFolderId={dialog.folderId}
-          folders={sidebar?.folders ?? []}
-          onCancel={() => setDialog({ kind: 'none' })}
-          onSave={(draft) => saveList(draft, dialog.list)}
-        />
-      )}
-      {dialog.kind === 'folder' && (
-        <FolderDialog
-          folder={dialog.folder}
-          onCancel={() => setDialog({ kind: 'none' })}
-          onSave={(name) => saveFolder(name, dialog.folder)}
-        />
-      )}
-      {dialog.kind === 'delete-list' && (
-        <ConfirmDialog
-          title="删除清单"
-          message={`删除清单「${dialog.list.name}」后，其中的任务会移到回收站，${TRASH_RETENTION_DAYS} 天内可以还原（还原到收件箱）。`}
-          confirmLabel="删除"
-          onCancel={() => setDialog({ kind: 'none' })}
-          onConfirm={() => removeList(dialog.list)}
-        />
-      )}
-      {dialog.kind === 'delete-folder' && (
-        <ConfirmDialog
-          title="删除文件夹"
-          message={`删除文件夹「${dialog.folder.name}」后，其中的清单会移到文件夹外，不会被删除。`}
-          confirmLabel="删除"
-          onCancel={() => setDialog({ kind: 'none' })}
-          onConfirm={() => removeFolder(dialog.folder)}
-        />
-      )}
-      {dialog.kind === 'purge-task' && (
-        <ConfirmDialog
-          title="彻底删除"
-          message={`彻底删除「${dialog.task.title}」后无法恢复。`}
-          confirmLabel="彻底删除"
-          onCancel={() => setDialog({ kind: 'none' })}
-          onConfirm={() => purgeTask(dialog.task)}
-        />
-      )}
-      {dialog.kind === 'empty-trash' && (
-        <ConfirmDialog
-          title="清空回收站"
-          message="回收站里的任务会被彻底删除，无法恢复。"
-          confirmLabel="清空"
-          onCancel={() => setDialog({ kind: 'none' })}
-          onConfirm={emptyTrash}
-        />
-      )}
-      {dialog.kind === 'tag' && (
-        <TagDialog
-          tag={dialog.tag}
-          tags={tags ?? []}
-          defaultParentId={dialog.parentId}
-          onCancel={() => setDialog({ kind: 'none' })}
-          onSave={(draft) => saveTag(draft, dialog.tag)}
-        />
-      )}
-      {dialog.kind === 'filter' && (
-        <FilterDialog
-          filter={dialog.filter}
-          lists={sidebar?.lists ?? []}
-          tags={tags ?? []}
-          onCancel={() => setDialog({ kind: 'none' })}
-          onSave={(draft) => saveFilter(draft, dialog.filter)}
-        />
-      )}
-      {dialog.kind === 'quadrant' && settings?.matrixQuadrants[dialog.index] && (
-        <FilterDialog
-          kind="quadrant"
-          filter={settings.matrixQuadrants[dialog.index] ?? null}
-          lists={sidebar?.lists ?? []}
-          tags={tags ?? []}
-          onCancel={() => setDialog({ kind: 'none' })}
-          onSave={(draft) => saveQuadrant(dialog.index, draft)}
-        />
-      )}
-      {dialog.kind === 'delete-filter' && (
-        <ConfirmDialog
-          title="删除过滤器"
-          message={`删除过滤器「${dialog.filter.name}」后，其中的任务不受影响。`}
-          confirmLabel="删除"
-          onCancel={() => setDialog({ kind: 'none' })}
-          onConfirm={() => removeFilter(dialog.filter)}
-        />
-      )}
-      {dialog.kind === 'delete-column' && (
-        <DeleteColumnDialog
-          columnName={dialog.column.name}
-          taskCount={dialog.taskCount}
-          targets={[
-            ...(listColumns ?? []).filter((c) => c.id !== dialog.column.id).map((c) => ({ id: c.id, name: c.name })),
-            { id: null, name: UNGROUPED_COLUMN_TITLE },
-          ]}
-          onCancel={() => setDialog({ kind: 'none' })}
-          onConfirm={(choice) => removeColumn(dialog.column, choice)}
-        />
-      )}
-      {dialog.kind === 'delete-tag' && (
-        <ConfirmDialog
-          title="删除标签"
-          message={`删除标签「${dialog.tag.name}」后，任务上的这个标签会被移除，任务本身不受影响。${
-            (tags ?? []).some((t) => t.parentId === dialog.tag.id) ? '它的子标签会移到顶层。' : ''
-          }`}
-          confirmLabel="删除"
-          onCancel={() => setDialog({ kind: 'none' })}
-          onConfirm={() => removeTag(dialog.tag)}
-        />
-      )}
-    </div>
+        {dialog.kind === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog({ kind: 'none' })} />}
+        {dialog.kind === 'settings' && (
+          <SettingsDialog
+            user={user}
+            initialTab={dialog.tab}
+            settings={settings}
+            onClose={() => {
+              setDialog({ kind: 'none' });
+              void reloadChannels();
+            }}
+            onLoggedOut={onLoggedOut}
+            onSaveSettings={saveSettings}
+          />
+        )}
+        {dialog.kind === 'list' && (
+          <ListDialog
+            list={dialog.list}
+            defaultFolderId={dialog.folderId}
+            folders={sidebar?.folders ?? []}
+            onCancel={() => setDialog({ kind: 'none' })}
+            onSave={(draft) => saveList(draft, dialog.list)}
+          />
+        )}
+        {dialog.kind === 'folder' && (
+          <FolderDialog
+            folder={dialog.folder}
+            onCancel={() => setDialog({ kind: 'none' })}
+            onSave={(name) => saveFolder(name, dialog.folder)}
+          />
+        )}
+        {dialog.kind === 'delete-list' && (
+          <ConfirmDialog
+            title="删除清单"
+            message={`删除清单「${dialog.list.name}」后，其中的任务会移到回收站，${TRASH_RETENTION_DAYS} 天内可以还原（还原到收件箱）。`}
+            confirmLabel="删除"
+            onCancel={() => setDialog({ kind: 'none' })}
+            onConfirm={() => removeList(dialog.list)}
+          />
+        )}
+        {dialog.kind === 'delete-folder' && (
+          <ConfirmDialog
+            title="删除文件夹"
+            message={`删除文件夹「${dialog.folder.name}」后，其中的清单会移到文件夹外，不会被删除。`}
+            confirmLabel="删除"
+            onCancel={() => setDialog({ kind: 'none' })}
+            onConfirm={() => removeFolder(dialog.folder)}
+          />
+        )}
+        {dialog.kind === 'purge-task' && (
+          <ConfirmDialog
+            title="彻底删除"
+            message={`彻底删除「${dialog.task.title}」后无法恢复。`}
+            confirmLabel="彻底删除"
+            onCancel={() => setDialog({ kind: 'none' })}
+            onConfirm={() => purgeTask(dialog.task)}
+          />
+        )}
+        {dialog.kind === 'empty-trash' && (
+          <ConfirmDialog
+            title="清空回收站"
+            message="回收站里的任务会被彻底删除，无法恢复。"
+            confirmLabel="清空"
+            onCancel={() => setDialog({ kind: 'none' })}
+            onConfirm={emptyTrash}
+          />
+        )}
+        {dialog.kind === 'tag' && (
+          <TagDialog
+            tag={dialog.tag}
+            tags={tags ?? []}
+            defaultParentId={dialog.parentId}
+            onCancel={() => setDialog({ kind: 'none' })}
+            onSave={(draft) => saveTag(draft, dialog.tag)}
+          />
+        )}
+        {dialog.kind === 'filter' && (
+          <FilterDialog
+            filter={dialog.filter}
+            lists={sidebar?.lists ?? []}
+            tags={tags ?? []}
+            onCancel={() => setDialog({ kind: 'none' })}
+            onSave={(draft) => saveFilter(draft, dialog.filter)}
+          />
+        )}
+        {dialog.kind === 'quadrant' && settings?.matrixQuadrants[dialog.index] && (
+          <FilterDialog
+            kind="quadrant"
+            filter={settings.matrixQuadrants[dialog.index] ?? null}
+            lists={sidebar?.lists ?? []}
+            tags={tags ?? []}
+            onCancel={() => setDialog({ kind: 'none' })}
+            onSave={(draft) => saveQuadrant(dialog.index, draft)}
+          />
+        )}
+        {dialog.kind === 'delete-filter' && (
+          <ConfirmDialog
+            title="删除过滤器"
+            message={`删除过滤器「${dialog.filter.name}」后，其中的任务不受影响。`}
+            confirmLabel="删除"
+            onCancel={() => setDialog({ kind: 'none' })}
+            onConfirm={() => removeFilter(dialog.filter)}
+          />
+        )}
+        {dialog.kind === 'delete-column' && (
+          <DeleteColumnDialog
+            columnName={dialog.column.name}
+            taskCount={dialog.taskCount}
+            targets={[
+              ...(listColumns ?? []).filter((c) => c.id !== dialog.column.id).map((c) => ({ id: c.id, name: c.name })),
+              { id: null, name: UNGROUPED_COLUMN_TITLE },
+            ]}
+            onCancel={() => setDialog({ kind: 'none' })}
+            onConfirm={(choice) => removeColumn(dialog.column, choice)}
+          />
+        )}
+        {dialog.kind === 'delete-tag' && (
+          <ConfirmDialog
+            title="删除标签"
+            message={`删除标签「${dialog.tag.name}」后，任务上的这个标签会被移除，任务本身不受影响。${
+              (tags ?? []).some((t) => t.parentId === dialog.tag.id) ? '它的子标签会移到顶层。' : ''
+            }`}
+            confirmLabel="删除"
+            onCancel={() => setDialog({ kind: 'none' })}
+            onConfirm={() => removeTag(dialog.tag)}
+          />
+        )}
+      </div>
+        {tabBarVisible && (
+          <MobileTabBar
+            active={route.calendar ? 'calendar' : route.focus ? 'focus' : route.habits ? 'habits' : route.matrix || route.countdowns || view?.kind === 'search' ? 'more' : 'tasks'}
+            onTasks={() => navigate({ listId: null, taskId: null })}
+            onCalendar={() => openCalendar()}
+            onFocus={openFocus}
+            onHabits={openHabits}
+            onMatrix={openMatrix}
+            onCountdowns={() => openCountdowns()}
+            onSearch={() => openSearch()}
+            onSettings={() => setDialog({ kind: 'settings', tab: 'notifications' })}
+          />
+        )}
+    </>
   );
 }
 

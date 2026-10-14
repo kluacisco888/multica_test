@@ -64,6 +64,10 @@
   --color-text-section: #6f7176; /* sidebar section labels (reference #b6b8bd) */
   --color-text-done: #757678; /* completed task titles (reference #a2a3a3) */
   --color-danger: #d32f2f; /* reference #e03131 */
+  /* 左滑删除 / 右滑完成 action behind a 任务 row: the same in every theme (white text above 4.5:1). */
+  --color-swipe-complete: #2f5ae0;
+  --color-swipe-delete: #d32f2f;
+  --color-on-swipe: #ffffff;
   /* Task dates: reference blue #4772fa (4.15:1 at 12px) darkened like --color-brand-text; overdue uses --color-danger. */
   --color-date: #2f5ae0;
   --color-date-range: #ecf0fe; /* days inside a selected 时间段 */
@@ -145,6 +149,7 @@
   --sidebar-width: 240px;
   --list-pane-width: 650px;
   --header-height: 64px;
+  --tabbar-height: 56px; /* 底部导航 on phones (滴答 App tab bar) */
   --sidebar-item-height: 38px;
   --task-row-height: 40px;
   --subtask-indent: 24px; /* one 子任务 level in the task list */

@@ -308,6 +308,8 @@
     padding: 0 var(--matrix-padding) var(--space-4);
     overflow-x: auto;
     scroll-snap-type: x mandatory;
+    /* Contain absolutely positioned bits (visually-hidden labels) in the scroller, or they widen the page. */
+    position: relative;
   }
 
   .matrix-quadrant {

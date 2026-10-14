@@ -35,6 +35,7 @@ import {
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { batchContextSections, BatchToolbar, type BatchContext } from './BatchPanel.js';
 import { ContextMenu, IconButton, MenuButton, TaskCheckbox, type ContextMenuSection } from '../ui/controls.js';
+import { useSwipe } from './swipe.js';
 import { Icon } from '../ui/Icon.js';
 import { KanbanBoard, type ManualBoardActions } from './KanbanBoard.js';
 import { QuickAdd, type SmartAddOptions } from './QuickAdd.js';
@@ -313,6 +314,8 @@ export function TaskListPane(props: TaskListPaneProps) {
     onClearMulti: () => props.onMultiSelect([]),
     onMoveBy: reorderable ? moveBy : null,
     drag,
+    // 多选 rows are tapped, not swiped.
+    swipe: props.isMobile && multi.size === 0 ? { onToggle: (task: Task) => void props.onToggleTask(task), onDelete: props.onDeleteTask } : null,
   };
 
   const layoutSections = layoutMenuSections(viewOptions, props.onChangeViewOptions, view ? viewLayouts(view) : []);
@@ -661,6 +664,8 @@ interface TaskRowsProps {
   onClearMulti: () => void;
   /** Alt + ↑ / ↓ (keyboard 拖拽排序); null where the order cannot change. */
   onMoveBy: ((task: Task, step: -1 | 1) => boolean) | null;
+  /** Phone: 右滑 toggles 完成, 左滑 deletes (spec 用户故事 108); null on desktop. */
+  swipe: { onToggle: (task: Task) => void; onDelete: (task: Task) => void } | null;
   drag: {
     draggedId: string | null;
     hint: DropHint;
@@ -702,7 +707,9 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
     onClearMulti,
     onMoveBy,
     drag,
+    swipe,
   } = rest;
+  const swipeGesture = useSwipe({ onLeft: () => swipe?.onDelete(task), onRight: () => swipe?.onToggle(task) });
   const multiSelected = multi.has(task.id);
   const matchedIn = matches?.[task.id]?.filter((f) => f !== 'title') ?? [];
   const titleRef = useRef<HTMLButtonElement>(null);
@@ -752,13 +759,14 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
     if (onIndent(task, e.shiftKey)) e.preventDefault();
   }
 
-  return (
-    <li className="task-item">
+  const swipeOffset = swipe ? swipeGesture.offset : 0;
+  const row = (
       <div
         className={`task-row ${selected ? 'task-row-selected' : ''} ${multiSelected ? 'task-row-multi' : ''} ${done ? 'task-row-done' : ''} ${
           drag?.draggedId === task.id ? 'task-row-dragging' : ''
         }`}
-        style={{ '--task-depth': depth - 1 } as CSSProperties}
+        style={{ '--task-depth': depth - 1, transform: swipeOffset ? `translateX(${swipeOffset}px)` : undefined } as CSSProperties}
+        {...(swipe ? swipeGesture.handlers : {})}
         onContextMenu={onContextMenu}
         data-drop={drag?.hint?.id === task.id ? drag.hint.position : undefined}
         draggable={drag !== null && !done}
@@ -854,6 +862,29 @@ function TaskRow({ node, ...rest }: Omit<TaskRowsProps, 'nodes'> & { node: TaskN
           </span>
         )}
       </div>
+  );
+
+  return (
+    <li className="task-item">
+      {swipe ? (
+        <div className={`task-swipe ${swipeGesture.settling ? 'task-swipe-settling' : ''}`}>
+          {swipeOffset > 0 && (
+            <span className="task-swipe-action task-swipe-complete" aria-hidden="true">
+              <Icon name={done ? 'restore' : 'check'} size={18} />
+              {done ? '取消完成' : '完成'}
+            </span>
+          )}
+          {swipeOffset < 0 && (
+            <span className="task-swipe-action task-swipe-delete" aria-hidden="true">
+              <Icon name="trash" size={18} />
+              删除
+            </span>
+          )}
+          {row}
+        </div>
+      ) : (
+        row
+      )}
       {children.length > 0 && !isCollapsed && (
         <ul id={childListId} className="task-rows" aria-label={`「${task.title}」的子任务`}>
           <TaskRows nodes={children} {...rest} />
