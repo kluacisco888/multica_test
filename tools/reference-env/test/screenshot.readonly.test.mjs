@@ -465,3 +465,57 @@ test('WebSockets opened in a Worker or SharedWorker never reach the server', { s
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+// EURO-22 第 4 轮：worker 根本起不来（每个文档的响应都加上 CSP worker-src 'none'，由浏览器执行）。
+// 各种起 worker 的写法都试一遍：同源脚本、blob、module、SharedWorker，以及继承文档策略的 about:blank / srcdoc / data: iframe 里起的。
+const WORKER_ENTRIES = {
+  'same-origin script': `new Worker('/w.js')`,
+  'module worker': `new Worker('/w.js', { type: 'module' })`,
+  'blob worker': `new Worker(URL.createObjectURL(new Blob([W])))`,
+  'data: worker': `new Worker('data:text/javascript,' + encodeURIComponent(W))`,
+  SharedWorker: `new SharedWorker('/w.js?shared')`,
+  'about:blank iframe': `const f = document.createElement('iframe'); document.body.append(f); new f.contentWindow.Worker(f.contentWindow.URL.createObjectURL(new f.contentWindow.Blob([W])))`,
+  'srcdoc iframe': `const f = document.createElement('iframe'); f.srcdoc = '<scr' + 'ipt>new Worker(URL.createObjectURL(new Blob([parent.W])))</scr' + 'ipt>'; document.body.append(f)`,
+  'blob: iframe': `const f = document.createElement('iframe'); f.src = URL.createObjectURL(new Blob(['<scr' + 'ipt>new Worker(URL.createObjectURL(new Blob([parent.W])))</scr' + 'ipt>'], { type: 'text/html' })); document.body.append(f)`,
+};
+
+test('workers cannot start at all, however they are created; blocked workers are recorded', { skip: !hasChromium && 'Chromium 未安装' }, async () => {
+  for (const [name, code] of Object.entries(WORKER_ENTRIES)) {
+    const seen = [];
+    const server = createServer((req, res) => {
+      seen.push(`${req.method} ${req.url}`);
+      if (req.url === '/') {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        res.end(`<!doctype html><title>w</title><body><script>
+  window.W = "new WebSocket('ws://" + location.host + "/w-ws'); fetch('/w-post', { method: 'POST', body: 'x' });";
+  const W = window.W;
+  try { ${code}; } catch (e) {}
+</script>`);
+      } else if (req.url.startsWith('/w.js')) {
+        res.writeHead(200, { 'content-type': 'text/javascript' });
+        res.end("new WebSocket('ws://' + location.host + '/w-ws'); onconnect = () => {};");
+      } else {
+        res.writeHead(204);
+        res.end();
+      }
+    });
+    server.on('upgrade', (req, socket) => {
+      seen.push(`UPGRADE ${req.url}`);
+      socket.destroy();
+    });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const home = mkdtempSync(path.join(tmpdir(), 'ref-env-it-'));
+    mkdirSync(path.join(home, 'profile'), { mode: 0o700 });
+    try {
+      const r = await run([`http://127.0.0.1:${server.address().port}/`, '-o', path.join(home, 'x.png'), '--wait', '1500'], { DIDA_REF_HOME: home });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      assert.equal(r.code, 0, `${name}: ${r.err}`);
+      assert.deepEqual(seen.filter((s) => !/^(GET|HEAD|OPTIONS) /.test(s)), [], `${name}: requests that reached the server`);
+      assert.ok(!seen.some((s) => s.startsWith('GET /w.js')), `${name}: the worker script was never fetched: ${seen}`);
+      assert.ok(JSON.parse(r.out).blockedRequests.some((b) => b.startsWith('WORKER ')), `${name}: blocked worker recorded`);
+    } finally {
+      server.close();
+      rmSync(home, { recursive: true, force: true });
+    }
+  }
+});

@@ -99,27 +99,99 @@ async function main() {
     return ownFrames.has(frameId);
   };
 
+  // ---- Workers (EURO-22 第 3 次审查) ----
+  // A WebSocket opened inside a Worker / SharedWorker passes routeWebSocket (pages only), Fetch (no WebSockets)
+  // and Network.setBlockedURLs (no WebSockets either). Holding new workers with waitForDebuggerOnStart does not
+  // help: Playwright attaches to every worker too and resumes it at once, and a proxy cannot tell wss from https
+  // (both are CONNECT tunnels). So workers are not allowed to start at all: every document gets
+  // `Content-Security-Policy: worker-src 'none'` added to its response here. The
+  // browser enforces it (not page JS), for Worker, SharedWorker and ServiceWorker, blob: and data: scripts, and
+  // for the about:blank / srcdoc / blob / data frames that inherit the document's policy. A blocked worker is
+  // recorded in blockedRequests as `WORKER <url>`. Backstop: any worker target that still appears fails the run.
+  const WORKER_CSP = "worker-src 'none'";
   const heldPages = [];
+  const startedWorkers = [];
+  const workerTargets = new Set();
   const browserSession = await context.browser().newBrowserCDPSession();
-  browserSession.on('Fetch.requestPaused', async ({ requestId, request, frameId }) => {
+  browserSession.on('Fetch.requestPaused', async ({ requestId, request, frameId, responseStatusCode, responseStatusText, responseHeaders }) => {
+    if (responseStatusCode !== undefined) {
+      // Response stage (documents only): add the worker ban. (Fetch.continueResponse ignores new headers, so
+      // the response is fulfilled with its own body.) Redirects create no document: they go on as they are.
+      if (responseStatusCode >= 300 && responseStatusCode < 400) {
+        return browserSession.send('Fetch.continueRequest', { requestId }).catch(() => {});
+      }
+      try {
+        const { body, base64Encoded } = await browserSession.send('Fetch.getResponseBody', { requestId });
+        await browserSession.send('Fetch.fulfillRequest', {
+          requestId,
+          responseCode: responseStatusCode,
+          ...(responseStatusText ? { responsePhrase: responseStatusText } : {}),
+          responseHeaders: [...(responseHeaders ?? []), { name: 'Content-Security-Policy', value: WORKER_CSP }],
+          body: base64Encoded ? body : Buffer.from(body).toString('base64'),
+        });
+      } catch {
+        // A document that cannot carry the ban does not get through.
+        blocked.push(`无法加上 worker 禁令 ${request.method} ${request.url}`);
+        await browserSession.send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' }).catch(() => {});
+      }
+      return;
+    }
     const fail = (why) => {
       blocked.push(`${why}${request.method} ${request.url}`);
       return browserSession.send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' }).catch(() => {});
     };
+    if (frameId && workerTargets.has(frameId)) return fail('worker ');
     if (frameId && !(await isOwnFrame(frameId))) {
+      if (workerTargets.has(frameId)) return fail('worker ');
       heldPages.push(request.url);
       return fail('新页面 ');
     }
     if (!isReadOnlyMethod(request.method)) return fail('');
     return browserSession.send('Fetch.continueRequest', { requestId }).catch(() => {});
   });
-  await browserSession.send('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] });
+  await browserSession.send('Fetch.enable', {
+    patterns: [
+      { urlPattern: '*', requestStage: 'Request' },
+      { urlPattern: '*', resourceType: 'Document', requestStage: 'Response' },
+    ],
+  });
   browserSession.on('Target.attachedToTarget', ({ targetInfo }) => {
+    if (targetInfo.type === 'shared_worker' || targetInfo.type === 'worker') {
+      workerTargets.add(targetInfo.targetId);
+      startedWorkers.push(`${targetInfo.type} ${targetInfo.url}`);
+      browserSession.send('Target.closeTarget', { targetId: targetInfo.targetId }).catch(() => {});
+      return;
+    }
     if (targetInfo.type !== 'page' || targetInfo.targetId === pageTargetId) return;
     heldPages.push(targetInfo.url || 'about:blank');
     browserSession.send('Target.closeTarget', { targetId: targetInfo.targetId }).catch(() => {});
   });
-  await browserSession.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true, filter: [{ type: 'page' }] });
+  await browserSession.send('Target.setAutoAttach', {
+    autoAttach: true,
+    waitForDebuggerOnStart: false,
+    flatten: true,
+    // Not service_worker: those are off (serviceWorkers: 'block'), and attaching to the profile's registered
+    // ones made dida's page load hang.
+    filter: [{ type: 'page' }, { type: 'shared_worker' }],
+  });
+  // Dedicated workers are children of the page: Playwright reports them.
+  page.on('worker', (worker) => startedWorkers.push(`worker ${worker.url()}`));
+  // The worker ban, as the page sees it: record what it stopped.
+  // (from the page's own violation events, and from DevTools issues, which also cover frames the init script
+  //  never ran in, e.g. a fresh about:blank iframe)
+  const recordedWorkers = new Set();
+  const recordWorker = (url) => {
+    const entry = `WORKER ${url || 'blob'}`;
+    if (recordedWorkers.has(entry)) return;
+    recordedWorkers.add(entry);
+    blocked.push(entry);
+  };
+  await context.exposeBinding('__didaRefWorkerBlocked', (_source, url) => recordWorker(String(url)));
+  pageSession.on('Audits.issueAdded', ({ issue }) => {
+    const csp = issue.details?.contentSecurityPolicyIssueDetails;
+    if (csp?.violatedDirective === 'worker-src') recordWorker(csp.blockedURL);
+  });
+  await pageSession.send('Audits.enable');
 
   // New tabs and windows are where the write guard leaks (EURO-22 审查: a popup's sendBeacon reached the server even
   // though the popup was closed at once), so pages may not open them at all: window.open, links and forms aimed at
@@ -129,6 +201,18 @@ async function main() {
     blockedPopups.push(String(what));
   });
   await context.addInitScript(() => {
+    document.addEventListener(
+      'securitypolicyviolation',
+      (event) => {
+        if (event.effectiveDirective !== 'worker-src') return;
+        try {
+          window.__didaRefWorkerBlocked(event.blockedURI || 'blob');
+        } catch {
+          // binding not ready: the worker is still blocked
+        }
+      },
+      true,
+    );
     const report = (what) => {
       try {
         window.__didaRefPopupBlocked(what);
@@ -235,6 +319,7 @@ async function main() {
     p.close().catch(() => {});
   });
   const checkPages = (where) => {
+    if (startedWorkers.length > 0) throw new Error(`${where}后台 worker 启动了（${startedWorkers.join(', ')}），已关闭；为保护参照账号，本次运行失败`);
     if (heldPages.length > 0) throw new Error(`${where}打开了新页面（${heldPages.join(', ')}），它的请求全部拦下，页面已关闭；为保护参照账号，本次运行失败`);
     if (extraPages.length > 0) throw new Error(`${where}打开了新页面（${extraPages.join(', ')}），已关闭；为保护参照账号，本次运行失败`);
     if (blockedPopups.length > 0) throw new Error(`${where}页面想打开新页面（${blockedPopups.join(', ')}），已阻止；为保护参照账号，本次运行失败`);
