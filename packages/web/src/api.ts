@@ -100,6 +100,8 @@ import {
   type UpdateSettingsRequest,
   type UpdateTagRequest,
   type UpdateTaskRequest,
+  importResponseSchema,
+  type ImportResponse,
 } from '@dida/shared';
 
 /** A failed API call with the server's error code and Chinese message. */
@@ -108,6 +110,8 @@ export class ApiCallError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /** Details some errors carry (e.g. the records an import refused). */
+    readonly issues: unknown[] = [],
   ) {
     super(message);
   }
@@ -128,7 +132,7 @@ async function check(res: Response): Promise<Response> {
   if (res.ok) return res;
   const parsed = apiErrorSchema.safeParse(await res.json().catch(() => null));
   throw parsed.success
-    ? new ApiCallError(res.status, parsed.data.error.code, parsed.data.error.message)
+    ? new ApiCallError(res.status, parsed.data.error.code, parsed.data.error.message, parsed.data.error.issues)
     : new ApiCallError(res.status, 'unknown', `请求失败（${res.status}）`);
 }
 
@@ -522,4 +526,16 @@ export async function checkInHabit(id: string, date: string, count: number): Pro
 /** 撤销打卡 of a day. */
 export async function undoCheckIn(id: string, date: string): Promise<Habit> {
   return habitSchema.parse(await (await call('DELETE', `/api/habits/${encodeURIComponent(id)}/checkins/${date}`)).json());
+}
+
+/* ---- 导入导出 (spec 用户故事 110–112) ---- */
+
+/** Same-origin download URLs; the session cookie authorises them. */
+export const BACKUP_EXPORT_URL = '/api/backup/export';
+export const TASKS_CSV_URL = '/api/backup/tasks.csv';
+
+/** Import a JSON backup; a refused file throws ApiCallError whose `issues` name the records. */
+export async function importBackup(doc: unknown): Promise<ImportResponse> {
+  const res = await call('POST', '/api/backup/import', doc);
+  return importResponseSchema.parse(await res.json());
 }

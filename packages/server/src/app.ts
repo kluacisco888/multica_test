@@ -13,6 +13,7 @@ import { createCredentialCipher } from './notify/credentials.js';
 import { createNotifier, type Notifier } from './notify/notifier.js';
 import { adminRoutes } from './routes/admin.js';
 import { attachmentRoutes } from './routes/attachments.js';
+import { backupRoutes } from './routes/backup.js';
 import { authRoutes } from './routes/auth.js';
 import { calendarRoutes } from './routes/calendar.js';
 import { commentRoutes } from './routes/comments.js';
@@ -162,6 +163,7 @@ export async function buildApp(deps: AppDeps) {
   focusRoutes(app);
   countdownRoutes(app);
   habitRoutes(app);
+  backupRoutes(app, { cipher });
   deps.routes?.(app);
 
   if (config.webDistDir) {
