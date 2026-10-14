@@ -141,7 +141,7 @@ API 测试和 e2e 用的 PostgreSQL：设置了 `TEST_DATABASE_URL` 就用它（
 
 ### CI
 
-CI 定义在 `ci/github-actions.yml`：lint、类型检查、四层测试，再加一遍 compose 部署和备份恢复的冒烟测试。智能体的 GitHub token 没有 `workflow` 权限，推不了 `.github/workflows/`，所以要由维护者执行 `git mv ci/github-actions.yml .github/workflows/ci.yml` 来启用。
+CI 定义在 `.github/workflows/ci.yml`，在 GitHub Actions 上对每个 PR 和 main 的每次推送运行，每个 PR 都要过 CI。`check` 任务跑的就是本地 `pnpm check` 的那几步（lint、构建、类型检查、四层测试，API 测试和 e2e 用 Postgres service 容器）；`compose` 任务再跑一遍 compose 部署和备份恢复的冒烟测试。
 
 ### 数据层约定（ADR-0004）
 
