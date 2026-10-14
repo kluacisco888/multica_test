@@ -136,5 +136,35 @@ describe('countdowns (review)', () => {
       const back = await db.execute<{ present: boolean }>(sql`SELECT to_regclass('countdowns') IS NOT NULL AS present`);
       expect(back.rows[0]?.present).toBe(true);
     });
+
+    it('leaves the data of 0015_pinned_tasks, 0016_matrix_quadrants and 0017_focus alone', async () => {
+      const db = t.database.db;
+      const u = await account();
+      const task = await api(u, 'POST', '/api/tasks', { title: '置顶任务' });
+      expect(task.statusCode, task.body).toBe(201);
+      expect((await api(u, 'PATCH', `/api/tasks/${task.json().id}`, { pinned: true })).statusCode).toBe(200);
+      expect((await api(u, 'POST', '/api/focus/start', { mode: 'pomodoro', taskId: task.json().id })).statusCode).toBeLessThan(300);
+      expect((await api(u, 'PATCH', '/api/settings', { allDayReminderTime: '08:00' })).statusCode).toBe(200);
+      await db.execute(sql`UPDATE user_settings SET matrix_quadrants = '[{"probe":1}]'::jsonb WHERE user_id = ${u.id}`);
+      await api(u, 'POST', '/api/countdowns', { name: 'x', date: '2026-11-01', reminders: [{ type: 'day', daysBefore: 0, time: '09:00' }] });
+
+      const snapshot = async () => ({
+        pin: (await db.execute(sql`SELECT id, pin_order FROM tasks WHERE user_id = ${u.id} ORDER BY id`)).rows,
+        matrix: (await db.execute(sql`SELECT matrix_quadrants, pomodoro FROM user_settings WHERE user_id = ${u.id}`)).rows,
+        focus: (await db.execute(sql`SELECT id, task_id, status, mode FROM focus_sessions WHERE user_id = ${u.id} ORDER BY id`)).rows,
+      });
+      const before = await snapshot();
+      expect(before.pin[0]).toMatchObject({ pin_order: expect.any(String) });
+      expect(before.matrix[0]).toMatchObject({ matrix_quadrants: [{ probe: 1 }] });
+      expect(before.focus).toHaveLength(1);
+
+      expect(await rollbackLastMigration(t.database.pool)).toBe('0018_countdowns');
+      expect(await snapshot()).toEqual(before);
+      await runMigrations(db);
+      expect(await snapshot()).toEqual(before);
+      // The app still works on the re-migrated schema.
+      expect((await api(u, 'GET', '/api/countdowns')).statusCode).toBe(200);
+      expect((await api(u, 'GET', '/api/focus/current')).statusCode).toBeLessThan(500);
+    });
   });
 });
