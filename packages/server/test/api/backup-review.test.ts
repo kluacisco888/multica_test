@@ -161,3 +161,32 @@ describe('导入导出（审查补充）', () => {
     expect(res.statusCode, 'a 2MB title is imported as is').toBe(400);
   });
 });
+
+describe('导出大小估算（审查补充，第 2 轮）', () => {
+  // 审查发现的缺陷（EURO-30 review 第 2 轮）：修复后把 it.fails 改回 it。
+  it.fails('a deleted 附件 (file removed) no longer counts towards the export size', async () => {
+    const t = await createTestApp({ backupMaxBytes: 64 * 1024 });
+    try {
+      const u = await t.createUser('est1');
+      const task = (await t.app.inject({ method: 'POST', url: '/api/tasks', headers: u.headers, payload: { title: 'f' } })).json() as { id: string };
+      const upload = async () =>
+        (
+          await t.app.inject({
+            method: 'POST',
+            url: `/api/tasks/${task.id}/attachments?name=a.bin`,
+            headers: { ...u.headers, 'content-type': 'application/octet-stream' },
+            payload: Buffer.alloc(40 * 1024, 1),
+          })
+        ).json() as { id: string };
+      const first = await upload();
+      await upload();
+      expect((await t.app.inject({ method: 'GET', url: '/api/backup/export', headers: u.headers })).statusCode).toBe(413);
+      // The error message says to delete some 附件; doing so must make the export possible.
+      expect((await t.app.inject({ method: 'DELETE', url: `/api/attachments/${first.id}`, headers: u.headers })).statusCode).toBe(204);
+      const res = await t.app.inject({ method: 'GET', url: '/api/backup/export', headers: u.headers });
+      expect(res.statusCode, res.body).toBe(200);
+    } finally {
+      await t.close();
+    }
+  });
+});
