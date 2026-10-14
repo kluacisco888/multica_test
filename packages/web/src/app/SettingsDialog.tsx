@@ -7,6 +7,7 @@ import {
   THEME_MODE_LABELS,
   THEME_MODES,
   type CurrentUser,
+  type SmartInputSettings,
   type SmartListId,
   type Settings,
   type UpdateSettingsRequest,
@@ -20,7 +21,7 @@ import { NotificationSettings } from './settings/NotificationSettings.js';
 import { ShortcutList } from './ShortcutsPanel.js';
 import { UserAdmin } from './settings/UserAdmin.js';
 
-export type SettingsTab = 'account' | 'smart' | 'datetime' | 'notifications' | 'appearance' | 'shortcuts' | 'users';
+export type SettingsTab = 'account' | 'smart' | 'datetime' | 'notifications' | 'appearance' | 'more' | 'shortcuts' | 'users';
 
 const TABS: { id: SettingsTab; label: string; icon: IconName }[] = [
   { id: 'account', label: '账户与安全', icon: 'user' },
@@ -28,6 +29,7 @@ const TABS: { id: SettingsTab; label: string; icon: IconName }[] = [
   { id: 'notifications', label: '提醒与通知', icon: 'bell' },
   { id: 'smart', label: '智能清单', icon: 'today' },
   { id: 'appearance', label: '外观', icon: 'palette' },
+  { id: 'more', label: '更多设置', icon: 'settings' },
   { id: 'shortcuts', label: '快捷键', icon: 'keyboard' },
 ];
 /** The 后台, last in the list and only for 管理员 (others never see the entry). */
@@ -38,7 +40,7 @@ const ADMIN_TAB: (typeof TABS)[number] = { id: 'users', label: '用户管理', i
  * panel on the right. 账户与安全: who is signed in, change password, log out
  * (spec 用户故事 7、8). 智能清单: show / hide each one in the sidebar (60). 日期与时间: the time zone (用户故事 26) and the
  * 节假日数据 card (用户故事 114). 提醒与通知: 全天提醒时间, 通知渠道 and failed 提醒 (用户故事 74–77、80、83、85).
- * 外观: 主题 mode and 颜色系列 (用户故事 104). 快捷键: the fixed list (105–106).
+ * 外观: 主题 mode and 颜色系列 (用户故事 104). 更多设置: 智能识别 (57–58). 快捷键: the fixed list (105–106).
  * 用户管理 (管理员 only): the 后台 (用户故事 9).
  */
 export function SettingsDialog({
@@ -103,6 +105,7 @@ export function SettingsDialog({
           {tab === 'datetime' && <DateTimePanel settings={settings} onSave={onSaveSettings} />}
           {tab === 'notifications' && <NotificationsPanel settings={settings} onSave={onSaveSettings} />}
           {tab === 'appearance' && <AppearancePanel settings={settings} onSave={onSaveSettings} />}
+          {tab === 'more' && <SmartInputPanel settings={settings} onSave={onSaveSettings} />}
           {tab === 'shortcuts' && <ShortcutsSettingsPanel />}
           {tab === 'users' && user.isAdmin && <UsersPanel user={user} />}
         </div>
@@ -363,6 +366,88 @@ function DateTimePanel({ settings, onSave }: { settings: Settings | null; onSave
         </p>
       )}
       <HolidaySettings />
+    </section>
+  );
+}
+
+const FUZZY_TIMES = [
+  { key: 'morning', label: '上午' },
+  { key: 'afternoon', label: '下午' },
+  { key: 'evening', label: '晚上' },
+] as const;
+
+/**
+ * 更多设置 → 智能识别 (spec 用户故事 57–58), where 滴答 has it: the 总开关,
+ * 保留识别文字, and the 模糊时间 (上午 / 下午 / 晚上) default times.
+ * Changes save at once; a failed save reverts them.
+ */
+function SmartInputPanel({ settings, onSave }: { settings: Settings | null; onSave: (patch: UpdateSettingsRequest) => Promise<boolean> }) {
+  const id = useId();
+  const [local, setLocal] = useState<SmartInputSettings | null>(settings?.smartInput ?? null);
+  const current = local ?? settings?.smartInput ?? null;
+  if (!current) {
+    return (
+      <p className="list-pane-status" role="status">
+        正在加载…
+      </p>
+    );
+  }
+
+  async function change(patch: Partial<SmartInputSettings>) {
+    const previous = current;
+    setLocal({ ...(previous as SmartInputSettings), ...patch });
+    if (!(await onSave({ smartInput: patch }))) setLocal(previous);
+  }
+
+  return (
+    <section className="account-section" aria-labelledby={`${id}-title`}>
+      <h3 id={`${id}-title`} className="account-section-title">
+        智能识别
+      </h3>
+      <div className="settings-card">
+        <div className="settings-row">
+          <div className="settings-row-stacked">
+            <label htmlFor={`${id}-enabled`} className="settings-row-label">
+              智能识别
+            </label>
+            <p id={`${id}-enabled-hint`} className="settings-row-hint">
+              添加任务时，识别日期、时间、重复、提醒、#标签、~清单和 !优先级。
+            </p>
+          </div>
+          <input
+            id={`${id}-enabled`}
+            type="checkbox"
+            role="switch"
+            className="ui-switch"
+            aria-describedby={`${id}-enabled-hint`}
+            checked={current.enabled}
+            onChange={(e) => void change({ enabled: e.target.checked })}
+          />
+        </div>
+        <label className="smart-input-keep">
+          <input type="checkbox" checked={current.keepText} disabled={!current.enabled} onChange={(e) => void change({ keepText: e.target.checked })} />
+          保留识别文字
+        </label>
+      </div>
+      <h4 className="smart-input-subtitle">模糊时间</h4>
+      <p className="field-hint">输入“上午”“下午”“晚上”而没写具体钟点时，用下面的时间。</p>
+      <div className="settings-card">
+        {FUZZY_TIMES.map(({ key, label }) => (
+          <div key={key} className="settings-row">
+            <label htmlFor={`${id}-${key}`}>{label}</label>
+            <input
+              id={`${id}-${key}`}
+              type="time"
+              className="settings-select settings-time"
+              value={current[key]}
+              required
+              onChange={(e) => {
+                if (/^\d{2}:\d{2}$/.test(e.target.value)) void change({ [key]: e.target.value });
+              }}
+            />
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

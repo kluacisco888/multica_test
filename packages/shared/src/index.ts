@@ -34,3 +34,4 @@ export * from './matrix.js';
 export * from './focus.js';
 export * from './countdowns.js';
 export * from './habits.js';
+export * from './smart-input.js';

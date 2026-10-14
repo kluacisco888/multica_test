@@ -1,0 +1,1 @@
+ALTER TABLE "user_settings" ADD COLUMN "smart_input" jsonb DEFAULT '{}'::jsonb NOT NULL;

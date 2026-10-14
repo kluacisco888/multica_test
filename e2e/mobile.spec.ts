@@ -221,7 +221,7 @@ test.describe('移动布局', () => {
     await shot('01-login');
 
     await logIn(page, user.username, user.password);
-    await addTasks(page, '每月底跑量化', '问一下续费', '周报');
+    await addTasks(page, '跑量化报表', '问一下续费', '周报');
     await page.getByRole('button', { name: '周报', exact: true }).click();
     await page.getByRole('complementary', { name: '任务详情' }).getByRole('textbox', { name: '描述' }).fill('- 本周进展\n- 下周计划');
     await page.getByRole('complementary', { name: '任务详情' }).getByRole('textbox', { name: '描述' }).blur();

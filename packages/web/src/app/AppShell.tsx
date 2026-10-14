@@ -40,6 +40,9 @@ import {
   type TrashedTask,
   type UpdateSettingsRequest,
   type UpdateTaskRequest,
+  smartCreateRequest,
+  type CreateTaskRequest,
+  type SmartParseResult,
 } from '@dida/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as api from '../api.js';
@@ -71,6 +74,7 @@ import { TaskDetail } from './TaskDetail.js';
 import { BatchDateDialog, BatchPanel, type BatchContext } from './BatchPanel.js';
 import type { ManualBoardActions } from './KanbanBoard.js';
 import { TaskListPane } from './TaskListPane.js';
+import type { SmartAddOptions } from './QuickAdd.js';
 import { TimelinePane } from './TimelinePane.js';
 import { TrashPane } from './TrashPane.js';
 import { HabitsPane } from './HabitsPane.js';
@@ -245,6 +249,13 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   }
 
   const timeZone = settings?.timeZone ?? DEFAULT_TIME_ZONE;
+  const smartInput = settings?.smartInput;
+  const sidebarLists = sidebar?.lists;
+  /** 智能识别 for every 新建任务 field (添加任务, 看板, 四象限, 日历); null when switched off. */
+  const smartAdd = useMemo<SmartAddOptions | null>(
+    () => (smartInput?.enabled ? { settings: smartInput, lists: sidebarLists ?? [], now, timeZone } : null),
+    [smartInput, sidebarLists, now, timeZone],
+  );
   const today = todayIn(now, timeZone);
   const calendarMode = route.calendar ? (route.calendar.mode ?? storedCalendarMode()) : null;
   const calendarAnchor = route.calendar ? (route.calendar.date ?? today) : null;
@@ -419,9 +430,11 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     boardListId === null
       ? null
       : {
-          async onAddTask(columnId, title) {
+          async onAddTask(columnId, title, smart) {
             try {
-              putTask(await api.createTask({ listId: boardListId, title, columnId }));
+              // A ~清单 naming another 清单 sends the task there, outside this board's 分栏.
+              const elsewhere = smart?.listId && smart.listId !== boardListId;
+              putTask(await api.createTask(await newTaskRequest({ listId: boardListId, ...(elsewhere ? {} : { columnId }) }, title, smart)));
               void reloadSidebar();
               return true;
             } catch (e) {
@@ -571,11 +584,12 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   }
 
   /** + in a quadrant: into the 收件箱 (or the quadrant's only 清单) with the quadrant's 优先级. */
-  async function addMatrixTask(index: number, title: string) {
+  async function addMatrixTask(index: number, title: string, smart: SmartParseResult | null = null) {
     if (!settings) return false;
     const listIds = settings.matrixQuadrants[index]?.rules.listIds ?? [];
     try {
-      putTask(await api.createTask({ title, priority: quadrantPriority(settings.matrixQuadrants, index), ...(listIds.length === 1 ? { listId: listIds[0] } : {}) }));
+      const base = { priority: quadrantPriority(settings.matrixQuadrants, index), ...(listIds.length === 1 ? { listId: listIds[0] } : {}) };
+      putTask(await api.createTask(await newTaskRequest(base, title, smart)));
       void reloadSidebar();
       return true;
     } catch (e) {
@@ -601,9 +615,9 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   }
 
   /** Click on an empty day or time slot of the 日历 (spec 用户故事 71): into the 收件箱 with that date. */
-  async function addCalendarTask(title: string, dates: TaskDatesInput) {
+  async function addCalendarTask(title: string, dates: TaskDatesInput, smart: SmartParseResult | null = null) {
     try {
-      putTask(await api.createTask({ title, dates }));
+      putTask(await api.createTask(await newTaskRequest({ dates }, title, smart)));
       void reloadSidebar();
       return true;
     } catch (e) {
@@ -634,12 +648,35 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     });
   }
 
-  async function addTask(title: string) {
+  /** The ids of 智能识别's #标签: existing ones by name (ignoring case), the others created. */
+  async function smartTagIds(names: readonly string[]): Promise<string[]> {
+    const known = new Map((tags ?? []).map((t) => [t.name.toLowerCase(), t.id]));
+    const ids: string[] = [];
+    let created = false;
+    for (const name of names) {
+      let id = known.get(name.toLowerCase());
+      if (!id) {
+        id = (await api.createTag({ name })).id;
+        known.set(name.toLowerCase(), id);
+        created = true;
+      }
+      ids.push(id);
+    }
+    if (created) void reloadTags();
+    return ids;
+  }
+
+  /** The new task's request: what the view adds (`base`) with 智能识别 on top. */
+  async function newTaskRequest(base: Omit<CreateTaskRequest, 'title'>, title: string, smart: SmartParseResult | null): Promise<CreateTaskRequest> {
+    return smart ? smartCreateRequest(base, smart, await smartTagIds(smart.tagNames)) : { ...base, title };
+  }
+
+  async function addTask(title: string, smart: SmartParseResult | null = null) {
     if (!view || !addTarget) return false;
     try {
       // Outside a 清单 the task goes to the 收件箱, with what makes it show here
-      // (the 标签, today's date in 今天, 低优先级 in 不重要的 …).
-      const task = await api.createTask({ ...addTarget.request, title });
+      // (the 标签, today's date in 今天, 低优先级 in 不重要的 …); 智能识别 goes on top.
+      const task = await api.createTask(await newTaskRequest(addTarget.request, title, smart));
       putTask(task);
       // A new task lands first; if it does not sort first here, the server re-keyed the 清单 (long keys): re-read it.
       const rekeyed = listTasks?.some((t) => t.listId === task.listId && t.parentId === null && t.id !== task.id && t.sortOrder <= task.sortOrder);
@@ -1157,6 +1194,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
         )}
         {route.matrix && !(isMobile && selectedTask) && (
           <MatrixPane
+            smart={smartAdd}
             quadrants={settings?.matrixQuadrants ?? DEFAULT_QUADRANTS}
             tasks={listTasks}
             lists={sidebar?.lists ?? []}
@@ -1201,6 +1239,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
         )}
         {calendarMode && calendarAnchor && !(isMobile && selectedTask) && (
           <CalendarPane
+            smart={smartAdd}
             mode={calendarMode}
             anchor={calendarAnchor}
             today={today}
@@ -1239,6 +1278,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
             now={now}
             onToggleSidebar={() => (isMobile ? setDrawerOpen((v) => !v) : setSidebarOpen((v) => !v))}
             onAddTask={addTask}
+            smart={smartAdd}
+            addDates={addTarget?.request.dates ?? null}
             onSelectTask={selectTask}
             onToggleTask={(task) => changeTask(task, { status: task.status !== 'open' ? 'open' : 'completed' })}
             onIndent={indentTask}

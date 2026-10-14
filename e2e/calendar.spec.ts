@@ -88,8 +88,8 @@ test('月视图: 农历 and 休 / 班, add on a day, drag a 日期区间 and a t
   // The + in the header adds a task for today (desktop only, like the reference).
   if (!isMobile(page)) {
     await page.getByRole('button', { name: '添加任务' }).click();
-    await quickAdd(page, '今天的事');
-    expect((await taskByTitle(page, '今天的事')).dates).toEqual({ allDay: true, startDate: null, dueDate: '2026-10-13' });
+    await quickAdd(page, '整理桌面');
+    expect((await taskByTitle(page, '整理桌面')).dates).toEqual({ allDay: true, startDate: null, dueDate: '2026-10-13' });
   }
 
   // Drag and drop is a mouse gesture; touch users change dates in the detail.
