@@ -61,6 +61,24 @@ export async function nextRevision(tx: Tx, userId: string): Promise<number> {
   return row.revision;
 }
 
+/**
+ * Take the user's revision counter row lock (held until commit) without
+ * bumping the revision. Every sync transaction takes it first, so all writes
+ * of one user run one after another and always in the same lock order
+ * (revision row, then advisory / row locks). Checks made after it (does this
+ * 标签 / 清单 still exist?) therefore see every write committed before, and
+ * a concurrent 删除 cannot slip in between the check and the write.
+ */
+export async function lockRevision(tx: Tx, userId: string): Promise<void> {
+  await tx
+    .insert(userRevisions)
+    .values({ userId, revision: 0 })
+    .onConflictDoUpdate({
+      target: userRevisions.userId,
+      set: { revision: sql`${userRevisions.revision}` },
+    });
+}
+
 function liveRecord(table: SyncTable, userId: string, id: string) {
   return and(eq(table.id, id), eq(table.userId, userId), isNull(table.deletedAt));
 }
@@ -164,6 +182,7 @@ export function createSyncWriter(db: Db, clock: Clock): SyncWriter {
   return {
     transaction(userId, fn) {
       return db.transaction(async (tx) => {
+        await lockRevision(tx, userId);
         const touched: Touched = new Map();
         const result = await fn(createOps(tx, userId, clock, touched), tx);
         if (hooks.size > 0) {

@@ -19,9 +19,20 @@ export function priorityItems(task: Task, onChange: (patch: UpdateTaskRequest) =
   }));
 }
 
+/**
+ * The task's `tagIds` to send, keeping the order they were added in. Ids of 标签
+ * that no longer exist (left by an older race) are dropped: the server refuses
+ * them, and this way such a task heals on its next 标签 change.
+ */
+function liveTagIds(task: Task, tags: Tag[]): string[] {
+  const live = new Set(tags.map((t) => t.id));
+  return task.tagIds.filter((id) => live.has(id));
+}
+
 /** Toggle one 标签 on a task, keeping the order the others were added in. */
-export function toggledTagIds(task: Task, tagId: string): string[] {
-  return task.tagIds.includes(tagId) ? task.tagIds.filter((id) => id !== tagId) : [...task.tagIds, tagId];
+export function toggledTagIds(task: Task, tagId: string, tags: Tag[]): string[] {
+  const kept = liveTagIds(task, tags);
+  return kept.includes(tagId) ? kept.filter((id) => id !== tagId) : [...kept, tagId];
 }
 
 export function tagItems(task: Task, tags: Tag[], onChange: (patch: UpdateTaskRequest) => void): MenuItem[] {
@@ -29,7 +40,7 @@ export function tagItems(task: Task, tags: Tag[], onChange: (patch: UpdateTaskRe
     label: tag.parentId ? `${tags.find((t) => t.id === tag.parentId)?.name ?? ''}/${tag.name}` : tag.name,
     icon: 'tag',
     checked: task.tagIds.includes(tag.id),
-    onSelect: () => onChange({ tagIds: toggledTagIds(task, tag.id) }),
+    onSelect: () => onChange({ tagIds: toggledTagIds(task, tag.id, tags) }),
   }));
 }
 

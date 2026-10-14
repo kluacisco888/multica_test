@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { createUser, isMobile, logIn, openSidebar } from './support.js';
+import { createUser, e2eSql, isMobile, logIn, openSidebar } from './support.js';
 
 /*
  * 优先级 and nested 标签 (EURO-8, spec 用户故事 18、19、22).
@@ -277,4 +277,49 @@ test('Tab in a 标签 view moves focus and never moves a task to another 清单'
   // Both 清单 still hold exactly their own top-level task.
   expect(await tasksOf(listA.id)).toEqual([expect.objectContaining({ title: '甲的任务', parentId: null })]);
   expect(await tasksOf(listB.id)).toEqual([expect.objectContaining({ title: '乙的任务', parentId: null })]);
+});
+
+test('a task still carrying a deleted 标签 id (left by the old race, EURO-35) can gain and lose 标签', async ({ page }) => {
+  const user = createUser('stale-tag');
+  await logIn(page, user.username, user.password);
+  await addTasks(page, '旧任务');
+  for (const name of ['留下', '已删', '新加']) await createTag(page, name);
+  await openInbox(page);
+  await openTask(page, '旧任务');
+  await toggleTagInDetail(page, '留下');
+  await toggleTagInDetail(page, '已删');
+  await expect(detail(page).getByRole('list', { name: '标签' }).getByRole('listitem')).toHaveText(['留下', '已删']);
+
+  // What the race used to leave: the 标签 is deleted, its id stays on the task.
+  const deleted = await e2eSql(
+    `UPDATE tags SET deleted_at = now() WHERE name = '已删' AND user_id = (SELECT id FROM users WHERE username = $1) RETURNING id`,
+    [user.username],
+  );
+  const staleId = deleted.rows[0].id as string;
+  const tagIdsInDb = async () =>
+    (await e2eSql(`SELECT tag_ids FROM tasks WHERE title = '旧任务' AND user_id = (SELECT id FROM users WHERE username = $1)`, [user.username]))
+      .rows[0].tag_ids as string[];
+  expect(await tagIdsInDb()).toContain(staleId);
+
+  await page.reload();
+  await expect(listTitle(page)).toHaveText('收件箱');
+  const chips = () => detail(page).getByRole('list', { name: '标签' }).getByRole('listitem');
+
+  // Add through the detail pane's 标签 menu: saved, and the stale id is gone.
+  await openTask(page, '旧任务');
+  await expect(chips()).toHaveText(['留下']);
+  await toggleTagInDetail(page, '新加');
+  await expect(chips()).toHaveText(['留下', '新加']);
+  await expect.poll(tagIdsInDb).not.toContain(staleId);
+
+  // Remove with the chip button, and toggle through the right-click menu; both survive a reload.
+  await detail(page).getByRole('button', { name: '移除标签：留下' }).click();
+  await expect(chips()).toHaveText(['新加']);
+  await backToList(page);
+  await row(page, '旧任务').click({ button: 'right' });
+  await page.getByRole('menu', { name: '任务操作：旧任务' }).getByRole('menuitemcheckbox', { name: '留下' }).click();
+  await expect(row(page, '旧任务').getByRole('list', { name: '标签' }).getByRole('listitem')).toHaveText(['新加', '留下']);
+  await page.reload();
+  await expect(row(page, '旧任务').getByRole('list', { name: '标签' }).getByRole('listitem')).toHaveText(['新加', '留下']);
+  expect(await tagIdsInDb()).toHaveLength(2);
 });
