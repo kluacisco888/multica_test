@@ -158,6 +158,57 @@ test.describe('移动布局', () => {
     await expect(page.getByText('左滑删掉我')).toBeVisible();
   });
 
+  test('手势和鼠标拖拽排序互不干扰; vertical touch moves and taps are not swipes (review)', async ({ page }) => {
+    const user = createUser('mobile-swipe-drag');
+    await logIn(page, user.username, user.password);
+    // New tasks land on top: shown 丙, 乙, 甲.
+    await addTasks(page, '甲', '乙', '丙');
+    const titles = () => openTasks(page).locator('.task-row-title').allInnerTexts();
+    await expect.poll(titles).toEqual(['丙', '乙', '甲']);
+
+    // Mouse drag (拖拽排序) on a 390px screen: reorders, does not complete or delete.
+    await taskRow(openTasks(page), '甲').dragTo(taskRow(openTasks(page), '丙'), { targetPosition: { x: 80, y: 4 } });
+    await expect.poll(titles).toEqual(['甲', '丙', '乙']);
+    await expect(completedTasks(page)).toHaveCount(0);
+    await page.reload();
+    await expect.poll(titles).toEqual(['甲', '丙', '乙']);
+
+    // A mouse press-and-drag sideways is not a swipe.
+    const box = await taskRow(openTasks(page), '乙').boundingBox();
+    if (!box) throw new Error('row not visible');
+    await page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.9, box.y + box.height / 2, { steps: 10 });
+    await page.mouse.up();
+    await expect.poll(titles).toEqual(['甲', '丙', '乙']);
+    await expect(completedTasks(page)).toHaveCount(0);
+
+    // A touch swipe does not reorder: 右滑 on 丙 completes it, the rest keep their order.
+    await swipe(page, taskRow(openTasks(page), '丙'), 200, 0.3);
+    await expect.poll(titles).toEqual(['甲', '乙']);
+    await expect(completedTasks(page).getByRole('button', { name: '丙', exact: true })).toBeVisible();
+
+    // A mostly vertical touch move is a scroll, not a swipe.
+    const r = await taskRow(openTasks(page), '乙').boundingBox();
+    if (!r) throw new Error('row not visible');
+    const cdp = await page.context().newCDPSession(page);
+    const x = r.x + r.width * 0.3;
+    const y = r.y + r.height / 2;
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+    for (let i = 1; i <= 12; i++) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + i * 12, y: y + i * 20 }] });
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await cdp.detach();
+    await expect.poll(titles).toEqual(['甲', '乙']);
+    await expect(taskRow(openTasks(page), '乙')).toHaveCSS('transform', 'none');
+
+    // After a short (sprung back) swipe, the next tap still opens the task.
+    await swipe(page, taskRow(openTasks(page), '甲'), 40, 0.3);
+    await page.getByRole('button', { name: '甲', exact: true }).tap();
+    await expect(page.getByRole('complementary', { name: '任务详情' })).toBeVisible();
+  });
+
   test('390px: every main page fits the screen (screenshots for the PR)', async ({ page }, testInfo) => {
     const user = createUser('mobile-pages');
     const shot = async (name: string) => {
