@@ -8,7 +8,7 @@ import { createTestApp, type TestApp, type TestUser } from '../support/test-app.
 
 /*
  * EURO-26 review: edge cases of the 倒数日 API, task reminders next to
- * 倒数日 reminders in the failure list, and migration 0015 rolled back with
+ * 倒数日 reminders in the failure list, and migration 0018 rolled back with
  * data in `reminder_deliveries`.
  */
 
@@ -113,7 +113,7 @@ describe('countdowns (review)', () => {
     });
   });
 
-  describe('migration 0015 rollback with data', () => {
+  describe('migration 0018 rollback with data', () => {
     it('drops 倒数日 reminders, keeps task reminders, restores NOT NULL, and migrates up again', async () => {
       const db = t.database.db;
       const count = async (where: string) =>
@@ -122,7 +122,7 @@ describe('countdowns (review)', () => {
       expect(taskRows).toBeGreaterThan(0);
       expect(await count('countdown_id IS NOT NULL')).toBeGreaterThan(0);
 
-      expect(await rollbackLastMigration(t.database.pool)).toBe('0015_countdowns');
+      expect(await rollbackLastMigration(t.database.pool)).toBe('0018_countdowns');
       expect(await count('true')).toBe(taskRows);
       const col = await db.execute<{ is_nullable: string }>(
         sql`SELECT is_nullable FROM information_schema.columns WHERE table_name = 'reminder_deliveries' AND column_name = 'task_id'`,
