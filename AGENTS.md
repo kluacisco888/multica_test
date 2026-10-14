@@ -13,3 +13,7 @@ Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `
 ### Domain docs
 
 Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Image budget
+
+Opening images bloats the session and makes requests time out (the error looks like "model temporarily unavailable"). Read `docs/agents/image-budget.md` before taking or viewing any screenshot.
