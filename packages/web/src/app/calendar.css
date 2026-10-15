@@ -459,13 +459,18 @@
 }
 
 .calendar-tg-day-weekend > .calendar-day-head,
-.calendar-allday-weekend:not(.calendar-cell-drop),
+.calendar-allday-weekend,
 .calendar-tg-col-weekend {
   background: var(--color-calendar-weekend);
 }
 
 .calendar-allday-cell:hover {
   background: var(--color-calendar-cell-hover);
+}
+
+/* After the cell's own, 周末 and hover backgrounds, so the drop highlight wins over all of them. */
+.calendar-allday-cell.calendar-cell-drop {
+  background: var(--color-date-range);
 }
 
 .calendar-tg-scroll {
