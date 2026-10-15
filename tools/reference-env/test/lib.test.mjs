@@ -5,6 +5,7 @@ import { tmpdir, hostname } from 'node:os';
 import path from 'node:path';
 
 import {
+  backupDownloadLink,
   isReadOnlyMethod,
   resolveOutputPath,
   parseArgs,
@@ -141,6 +142,51 @@ test('parseScript rejects typing, dragging, unknown steps and bad values', () =>
   ]) {
     assert.throws(() => parseScript(JSON.stringify([step])), /步骤/, JSON.stringify(step));
   }
+});
+
+test('parseScript allows one backup download, only from 生成备份, saved as .csv (ADR-0010)', () => {
+  assert.deepEqual(parseScript(JSON.stringify([{ download: 'text="生成备份"', saveAs: 'backup.csv' }])), [
+    { action: 'download', selector: 'text="生成备份"', output: 'backup.csv' },
+  ]);
+  for (const step of [
+    { download: 'text="导出"', saveAs: 'x.csv' },
+    { download: 'text="生成备份"', saveAs: 'x.png' },
+    { download: 'text="生成备份"' },
+    { download: 'text="生成备份"', saveAs: 'x.csv', extra: 1 },
+  ]) {
+    assert.throws(() => parseScript(JSON.stringify([step])), /步骤/, JSON.stringify(step));
+  }
+  const twice = JSON.stringify([
+    { download: 'text="生成备份"', saveAs: 'a.csv' },
+    { download: 'text="生成备份"', saveAs: 'b.csv' },
+  ]);
+  assert.throws(() => parseScript(twice), /最多导出一次/);
+});
+
+test('fetchBackup: one per script, .csv, picks the newest successful export notice (https only)', () => {
+  assert.deepEqual(parseScript(JSON.stringify([{ fetchBackup: true, saveAs: 'b.csv' }])), [{ action: 'fetchBackup', output: 'b.csv', waitMinutes: 10 }]);
+  for (const step of [{ fetchBackup: 'yes', saveAs: 'b.csv' }, { fetchBackup: true, saveAs: 'b.png' }, { fetchBackup: true, saveAs: 'b.csv', waitMinutes: 99 }]) {
+    assert.throws(() => parseScript(JSON.stringify([step])), /步骤/, JSON.stringify(step));
+  }
+  assert.throws(() => parseScript(JSON.stringify([{ download: 'text="生成备份"', saveAs: 'a.csv' }, { fetchBackup: true, saveAs: 'b.csv' }])), /最多导出一次/);
+  const notice = (createdTime, status, downloadLink) => ({ type: 'exportTask', createdTime, data: { status, downloadLink } });
+  assert.equal(
+    backupDownloadLink([
+      notice('2026-10-14T00:00:00Z', 'success', 'https://x.example/old.csv'),
+      notice('2026-10-15T00:00:00Z', 'success', 'https://x.example/new.csv'),
+      notice('2026-10-16T00:00:00Z', 'fail', 'https://x.example/failed.csv'),
+      { type: 'other', data: { status: 'success', downloadLink: 'https://x.example/other' } },
+    ]),
+    'https://x.example/new.csv',
+  );
+  assert.equal(backupDownloadLink([notice('2026-10-15T00:00:00Z', 'success', 'http://x.example/a.csv')]), null);
+  assert.equal(backupDownloadLink({}), null);
+});
+
+test('download output must be outside the repository and .csv', () => {
+  assert.throws(() => resolveOutputPath('/repo/x.csv', '/repo', '/', '.csv'), /仓库内/);
+  assert.throws(() => resolveOutputPath('/tmp/x.png', '/repo', '/', '.csv'), /\.csv/);
+  assert.equal(resolveOutputPath('/tmp/x.csv', '/repo', '/', '.csv'), '/tmp/x.csv');
 });
 
 test('forbiddenControl refuses modifier clicks on links (new tabs bypass the write guard)', () => {

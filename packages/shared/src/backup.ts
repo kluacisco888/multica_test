@@ -104,6 +104,8 @@ export type ImportResponse = z.infer<typeof importResponseSchema>;
 
 /** 任务 第 3 条（id …）：原因 */
 export function describeImportIssue(issue: ImportIssue): string {
+  // 滴答清单 CSV: `index` is the line of the file.
+  if (issue.entity === 'ticktickCsv') return issue.index > 0 ? `第 ${issue.index} 行：${issue.message}` : issue.message;
   const name = BACKUP_ENTITY_NAMES[issue.entity as BackupEntityType] ?? issue.entity;
   const where = issue.index > 0 ? `${name} 第 ${issue.index} 条` : name;
   return `${where}${issue.id ? `（id ${issue.id}）` : ''}：${issue.message}`;

@@ -1,0 +1,57 @@
+[
+  {
+    "wait": 2000
+  },
+  {
+    "scroll": "xpath=(//*[text()=\"账号管理\"])[1]/ancestor::*[1]",
+    "by": 5000
+  },
+  {
+    "scroll": "xpath=(//*[text()=\"账号管理\"])[1]/ancestor::*[2]",
+    "by": 5000
+  },
+  {
+    "scroll": "xpath=(//*[text()=\"账号管理\"])[1]/ancestor::*[3]",
+    "by": 5000
+  },
+  {
+    "scroll": "xpath=(//*[text()=\"账号管理\"])[1]/ancestor::*[4]",
+    "by": 5000
+  },
+  {
+    "scroll": "xpath=(//*[text()=\"账号管理\"])[1]/ancestor::*[5]",
+    "by": 5000
+  },
+  {
+    "scroll": "xpath=(//*[text()=\"账号管理\"])[1]/ancestor::*[6]",
+    "by": 5000
+  },
+  {
+    "scroll": "xpath=(//*[text()=\"账号管理\"])[1]/ancestor::*[7]",
+    "by": 5000
+  },
+  {
+    "scroll": "xpath=(//*[text()=\"账号管理\"])[1]/ancestor::*[8]",
+    "by": 5000
+  },
+  {
+    "scroll": "xpath=(//*[text()=\"账号管理\"])[1]/ancestor::*[9]",
+    "by": 5000
+  },
+  {
+    "wait": 1000
+  },
+  {
+    "waitFor": "text=\"生成备份\""
+  },
+  {
+    "screenshot": "account-backup.png"
+  },
+  {
+    "download": "text=\"生成备份\"",
+    "saveAs": "dida-backup.csv"
+  },
+  {
+    "wait": 2000
+  }
+]

@@ -38,6 +38,11 @@ describe('describeImportIssue', () => {
     expect(describeImportIssue({ entity: 'task', index: 3, id: 'abc', message: '清单不存在' })).toBe('任务 第 3 条（id abc）：清单不存在');
   });
 
+  it('names the line of a 滴答清单 CSV', () => {
+    expect(describeImportIssue({ entity: 'ticktickCsv', index: 9, id: null, message: '提醒不合法' })).toBe('第 9 行：提醒不合法');
+    expect(describeImportIssue({ entity: 'ticktickCsv', index: 0, id: null, message: '不是滴答清单的备份文件' })).toBe('不是滴答清单的备份文件');
+  });
+
   it('leaves out the position for file-level problems', () => {
     expect(describeImportIssue({ entity: 'unknown', index: 0, id: null, message: '不认识的数据类型' })).toBe('unknown：不认识的数据类型');
   });

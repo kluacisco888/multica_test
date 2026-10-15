@@ -88,3 +88,22 @@ test('生成备份 says why when the server refuses (too large to import back)',
   await card.getByRole('button', { name: '生成备份' }).click();
   await expect(card.getByRole('status', { name: '生成备份状态' })).toHaveText(message);
 });
+
+test('导入滴答清单备份: the mock 滴答 CSV goes in, a bad line is named', async ({ page }, testInfo) => {
+  const user = createUser('backup-tt');
+  await logIn(page, user.username, user.password);
+  const mock = await readFile(new URL('../packages/server/test/fixtures/ticktick-backup.mock.csv', import.meta.url), 'utf8');
+
+  // A broken row first: nothing is imported, the line is listed.
+  const broken = mock.replace('"FREQ=YEARLY;INTERVAL=1;BYMONTH=12;BYMONTHDAY=31"', '"FREQ=DAILY;INTERVAL=364"');
+  const card = await openBackup(page);
+  await card.getByLabel('选择滴答清单备份文件').setInputFiles({ name: 'TickTick-backup.csv', mimeType: 'text/csv', buffer: Buffer.from(broken) });
+  await expect(card.getByRole('status', { name: '导入状态' })).toHaveText('滴答清单备份里有不能导入的行，没有导入任何内容');
+  await expect(card.getByRole('list', { name: '出错的数据' })).toContainText('第 16 行：重复规则「FREQ=DAILY;INTERVAL=364」：重复间隔最多 99');
+
+  await card.getByLabel('选择滴答清单备份文件').setInputFiles({ name: 'TickTick-backup.csv', mimeType: 'text/csv', buffer: Buffer.from(mock) });
+  await expect(card.getByRole('status', { name: '导入状态' })).toContainText('导入完成：文件夹 1 条、清单 2 条、标签 3 条、任务 10 条、检查项 3 条');
+  await page.screenshot({ path: testInfo.outputPath(`backup-ticktick-${testInfo.project.name}.png`) });
+  await card.getByRole('button', { name: '刷新页面' }).click();
+  await expect(page.getByText('示例任务：买牛奶')).toBeVisible();
+});

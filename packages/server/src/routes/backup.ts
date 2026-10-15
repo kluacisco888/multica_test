@@ -4,6 +4,7 @@ import { sessionUser } from '../auth.js';
 import { exportTasksCsv } from '../backup/csv.js';
 import { BackupTooLarge, exportAccount, type BackupDeps } from '../backup/export.js';
 import { importAccount, ImportFailed } from '../backup/import.js';
+import { importTickTick } from '../backup/ticktick.js';
 import { sendError } from '../http-errors.js';
 import type { CredentialCipher } from '../notify/credentials.js';
 import { readSettings } from '../settings.js';
@@ -67,6 +68,20 @@ export function backupRoutes(app: FastifyInstance, { cipher, maxBytes }: { ciphe
       .header('cache-control', 'no-store')
       // BOM so spreadsheet apps read the Chinese text as UTF-8.
       .send(`\uFEFF${csv}`);
+  });
+
+  // 滴答清单 backups are posted as the CSV file itself.
+  app.addContentTypeParser('text/csv', { parseAs: 'string', bodyLimit: maxBytes }, (_request, body, done) => done(null, body));
+
+  app.post('/api/backup/import-ticktick', { bodyLimit: maxBytes, onRequest: app.authenticate }, async (request, reply) => {
+    const userId = sessionUser(request).id;
+    if (typeof request.body !== 'string') return sendError(reply, 415, 'unsupported_media_type', '请用 text/csv 上传滴答清单的备份文件');
+    try {
+      return { imported: await importTickTick(deps(), userId, request.body) };
+    } catch (error) {
+      if (error instanceof ImportFailed) return sendError(reply, 400, 'import_failed', error.message, error.issues);
+      throw error;
+    }
   });
 
   // Large body limit, so check the session before the body is read (the

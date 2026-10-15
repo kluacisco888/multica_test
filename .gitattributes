@@ -1,0 +1,2 @@
+# Mock 滴答清单 backup: byte-for-byte as 滴答 writes it (CR inside fields).
+packages/server/test/fixtures/*.csv -text

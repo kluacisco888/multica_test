@@ -81,6 +81,8 @@ node screenshot.mjs 'https://dida365.com/webapp/#q/all/tasks' -o ~/reference-sho
 | `{ "wait": 1000 }` | 等若干毫秒（最多 120000） |
 | `{ "waitFor": "<选择器>" }` | 等元素出现（15 秒超时） |
 | `{ "screenshot": "month.png", "fullPage": false }` | 中途截一张，相对路径相对于 `-o` 所在目录，同样不能在仓库内 |
+| `{ "download": "text=\"生成备份\"", "saveAs": "x.csv" }` | ADR-0010：点「生成备份」并接收浏览器下载（滴答直接给文件时）。只认这一个按钮，文件只能是 `.csv`、存到仓库外（权限 600） |
+| `{ "fetchBackup": true, "saveAs": "x.csv", "waitMinutes": 10 }` | ADR-0010：滴答在后台生成备份时（弹窗「稍后可在通知中心下载文件」），用 GET 读通知列表 `https://api.dida365.com/api/v2/notification?autoMarkRead=false`（不标已读，地址写死在 `lib.mjs`），取最新一条成功的导出通知里的 https 下载地址并下载。最多等 `waitMinutes` 分钟 |
 
 新标签页和新窗口一律不许打开，分两层（EURO-22 审查）：
 
@@ -91,6 +93,8 @@ node screenshot.mjs 'https://dida365.com/webapp/#q/all/tasks' -o ~/reference-sho
 
 后台 worker（Worker、SharedWorker）一律不许启动（EURO-22 第 3 次审查：worker 里开的 WebSocket 不经过 `routeWebSocket`，CDP 的 `Fetch` 和 `Network.setBlockedURLs` 也都管不到 WebSocket）。做法是浏览器层给每个文档的响应加上 `Content-Security-Policy: worker-src 'none'`，由浏览器执行，about:blank / srcdoc / blob 这类继承文档策略的 iframe 也一样。被挡下的 worker 记进 `blockedRequests`，写作 `WORKER <地址>`；万一还有 worker 启动了，立刻关掉，这次运行失败。试过的其他办法：先挂起 worker 再下发设置（Playwright 自己也挂在 worker 上，会马上让它继续跑，抢不过）；只放行 HTTP 的代理（wss 和 https 都走 CONNECT 隧道，分不出来）。截至 EURO-22，滴答网页版的三个参照脚本里没有出现过创建 worker 的情况。
 （试过用 `waitForDebuggerOnStart` 先挂起新页面再关：`window.open` 开的弹窗和打开它的页面共用渲染进程，挂起弹窗会把原页面一起冻住，点击一直不返回，所以改用按 frame 拦请求。）
+
+一个脚本里 `download` 和 `fetchBackup` 合计最多一次（ADR-0010：每个子任务最多导出一次）。失败的运行也会在 stderr 打出 `blockedRequests`。
 
 没有输入和拖动类的步骤；其他字段一律拒绝，整份脚本在启动浏览器之前就校验完。点击前工具会检查目标控件（离它最近的按钮 / 链接 / 菜单项）：输入框、下拉框、可编辑区域，以及文字里带「删除、新建、添加、完成、保存、确定、移动、归档、放弃、清空、退出、订阅、升级、编辑、上传」等字样的控件都拒绝点击，脚本报错退出、不截图。写请求的拦截不受脚本影响。
 
