@@ -178,6 +178,8 @@
    * value is in the comment. */
   --color-calendar-bg: #f8faff; /* days of the month, header */
   --color-calendar-outside: #f5f7fc; /* days of the previous / next month */
+  /* 周六 / 周日 in 月, 周 and 多日 (EURO-40: reference #f5f7fc at the top of the grid, #f6f7fc lower down). */
+  --color-calendar-weekend: #f5f7fc;
   --color-calendar-line: #e9ebf0; /* reference #eceef3 rows, #e9eaef columns */
   --color-calendar-cell-hover: #f0f3fd;
   --color-calendar-festival: #087a5b; /* 国庆节, 重阳节, 万圣夜 (reference #0cce9f) */
@@ -370,6 +372,7 @@
   --color-timeline-bar: var(--accent);
   --color-calendar-bg: color-mix(in srgb, var(--accent) 3%, white);
   --color-calendar-outside: color-mix(in srgb, var(--accent) 5%, #f7f7f7);
+  --color-calendar-weekend: color-mix(in srgb, var(--accent) 5%, #f7f7f7);
   --color-calendar-cell-hover: color-mix(in srgb, var(--accent) 8%, white);
 }
 
@@ -458,6 +461,8 @@
   --color-habit-art-ink: #c9cfe8;
   --color-habit-art-paper: #1c1c1e;
   --color-calendar-outside: #18181a;
+  /* 周六 / 周日: a step lighter than --color-calendar-bg, like --color-timeline-weekend. */
+  --color-calendar-weekend: color-mix(in srgb, var(--accent) 3%, #232326);
   --color-calendar-line: #2c2c2f;
   --color-calendar-cell-hover: color-mix(in srgb, var(--accent) 10%, #1c1c1e);
   --color-calendar-festival: #3fd3a6;

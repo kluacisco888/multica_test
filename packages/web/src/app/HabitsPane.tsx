@@ -231,7 +231,7 @@ export function HabitsPane(props: HabitsPaneProps) {
       )}
 
       {(!isMobile || selected) && (
-        <aside className="habits-detail" aria-label="习惯详情">
+        <aside className={`habits-detail ${selected ? '' : 'habits-detail-idle'}`} aria-label="习惯详情">
           {selected ? (
             <HabitDetail
               key={selected.id}
