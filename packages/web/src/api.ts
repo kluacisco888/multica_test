@@ -7,6 +7,8 @@ import {
   currentFocusResponseSchema,
   focusRecordsResponseSchema,
   focusStatsSchema,
+  statisticsSchema,
+  type Statistics,
   type CurrentFocusResponse,
   type FocusRecord,
   type FocusStats,
@@ -478,6 +480,12 @@ export async function fetchFocusRecords(): Promise<FocusRecord[]> {
 
 export async function fetchFocusStats(unit: FocusStatUnit, date: string): Promise<FocusStats> {
   return focusStatsSchema.parse(await (await call('GET', `/api/focus/stats?${new URLSearchParams({ unit, date }).toString()}`)).json());
+}
+
+/* ---- 统计 (spec 用户故事 102、103) ---- */
+
+export async function fetchStatistics(): Promise<Statistics> {
+  return statisticsSchema.parse(await (await call('GET', '/api/statistics')).json());
 }
 
 /* ---- 倒数日 (spec 用户故事 99–101) ---- */

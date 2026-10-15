@@ -1,0 +1,308 @@
+/*
+ * 统计 (EURO-28): measured from the reference 统计 → 总览 page (ADR-0007,
+ * 1440×900 and 390×844): content 956px wide and centred, a 62px white
+ * summary bar at y 112, then 468×324 white cards in two columns 20px apart,
+ * 16px between rows; one column on phones.
+ */
+
+.stats-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--color-stats-bg);
+}
+
+.stats-header,
+.stats-body {
+  width: calc(2 * var(--stats-card-width) + var(--stats-gap-x));
+  max-width: calc(100% - 2 * var(--space-4));
+  margin: 0 auto;
+}
+
+.stats-header {
+  display: flex;
+  align-items: center;
+  height: 112px;
+}
+
+.stats-title {
+  margin: 0;
+  font-size: var(--font-size-xxl);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text);
+}
+
+.stats-loading {
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.stats-body {
+  padding-bottom: var(--space-8);
+}
+
+.stats-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-6);
+  min-height: 62px;
+  padding: var(--space-2) var(--space-4);
+  margin-bottom: var(--stats-gap-y);
+  background: var(--color-stats-card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.stats-summary-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+  margin: 0;
+}
+
+/* Value before label, as in the reference: “10293 任务”. */
+.stats-summary-item {
+  display: flex;
+  flex-direction: row-reverse;
+  gap: var(--space-2);
+  align-items: baseline;
+  font-size: var(--font-size-md);
+}
+
+.stats-summary-item dt {
+  color: var(--color-text-secondary);
+}
+
+.stats-summary-item dd {
+  margin: 0;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.stats-summary-level {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.stats-summary-level-name {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-stats-achievement);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--stats-gap-y) var(--stats-gap-x);
+}
+
+.stats-card {
+  display: flex;
+  flex-direction: column;
+  min-height: var(--stats-card-height);
+  padding: var(--space-4);
+  background: var(--color-stats-card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.stats-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 28px;
+}
+
+.stats-card-title {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.stats-card-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* 概览: 3 × 2 figures. */
+.stats-overview {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  row-gap: var(--space-6);
+  margin: 0;
+  text-align: center;
+}
+
+.stats-overview-item {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--space-1);
+}
+
+.stats-overview-item dt {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.stats-figure {
+  margin: 0;
+  font-size: var(--font-size-stats-figure);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-stats-figure);
+}
+
+.stats-achievement {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.stats-achievement-score {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-stats-achievement);
+}
+
+.stats-achievement-badge {
+  padding: 2px var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-stats-achievement);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-xl);
+}
+
+/* The 日 / 周 / 月 pill. */
+.stats-unit-select {
+  height: 24px;
+  padding: 0 var(--space-2);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  color: var(--color-text);
+  background: var(--color-stats-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  cursor: pointer;
+}
+
+.stats-unit-select:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.stats-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.stats-chart-grid {
+  stroke: var(--color-stats-grid);
+  stroke-dasharray: 3 3;
+}
+
+.stats-chart-axis {
+  font-size: 11px;
+  fill: var(--color-text-secondary);
+}
+
+.stats-chart-line {
+  fill: none;
+  stroke: var(--color-stats-chart);
+  stroke-width: 2;
+}
+
+.stats-chart-dot {
+  fill: var(--color-stats-card);
+  stroke: var(--color-stats-chart);
+  stroke-width: 1.5;
+}
+
+.stats-chart-fill-top {
+  stop-color: var(--color-stats-chart-fill-top);
+}
+
+.stats-chart-fill-bottom {
+  stop-color: var(--color-stats-chart-fill-bottom);
+}
+
+.stats-chart-track {
+  fill: var(--color-stats-bar-track);
+}
+
+.stats-chart-bar {
+  fill: var(--color-stats-chart);
+}
+
+/* 本周打卡进展: seven rings, 周日 first. */
+.stats-habit-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--space-2);
+  padding: 0;
+  margin: var(--space-4) 0 0;
+  list-style: none;
+}
+
+.stats-habit-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.stats-habit-ring {
+  width: 40px;
+  height: 40px;
+}
+
+.stats-habit-ring circle {
+  fill: none;
+  stroke-width: 4;
+}
+
+.stats-habit-ring-track {
+  stroke: var(--color-stats-ring-track);
+}
+
+.stats-habit-ring-done {
+  stroke: var(--color-stats-chart);
+  stroke-linecap: round;
+}
+
+.stats-habit-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.stats-habit-today .stats-habit-label {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+/* Phones: one column of cards (reference 390×844). */
+@media (max-width: 767px) {
+  .stats-header {
+    height: var(--header-height);
+  }
+
+  .stats-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+  }
+
+  .stats-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stats-card {
+    min-height: 0;
+  }
+}

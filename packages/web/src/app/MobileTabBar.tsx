@@ -8,7 +8,7 @@ export type MobileTab = 'tasks' | 'calendar' | 'focus' | 'habits' | 'more';
 /**
  * 底部导航 (mobile only, spec 用户故事 107), laid out like the 滴答 App's
  * tab bar: 任务、日历、专注、习惯 and 更多. 更多 opens a sheet with the
- * modules that have no tab (四象限、倒数日、搜索) and 设置.
+ * modules that have no tab (四象限、倒数日、统计、搜索) and 设置.
  */
 export function MobileTabBar({
   active,
@@ -18,6 +18,7 @@ export function MobileTabBar({
   onHabits,
   onMatrix,
   onCountdowns,
+  onStatistics,
   onSearch,
   onSettings,
 }: {
@@ -28,6 +29,7 @@ export function MobileTabBar({
   onHabits: () => void;
   onMatrix: () => void;
   onCountdowns: () => void;
+  onStatistics: () => void;
   onSearch: () => void;
   onSettings: () => void;
 }) {
@@ -41,6 +43,7 @@ export function MobileTabBar({
   const more: { label: string; icon: IconName; onOpen: () => void }[] = [
     { label: '四象限', icon: 'matrix', onOpen: onMatrix },
     { label: '倒数日', icon: 'countdown', onOpen: onCountdowns },
+    { label: '统计', icon: 'chart', onOpen: onStatistics },
     { label: '搜索', icon: 'search', onOpen: onSearch },
     { label: '设置', icon: 'settings', onOpen: onSettings },
   ];

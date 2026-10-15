@@ -242,6 +242,27 @@
   --focus-button-width: 170px;
   --focus-button-height: 48px;
 
+  /* ---- 统计 (EURO-28) ----
+   * Measured from the reference 统计 page (1440×900): page #f5f5f5, white
+   * cards 468×324 in two columns 20px apart (x 240 and 728), 16px between
+   * rows, a 62px summary bar on top, figures in the brand blue, 成就值 green
+   * #06ce90 (darkened to keep 3:1 for its large figure), 99% #ffc817. */
+  --color-stats-bg: #f5f5f5;
+  --color-stats-card: #ffffff;
+  --color-stats-grid: #ececec; /* dashed chart lines */
+  --color-stats-bar-track: #f3f3f3; /* empty 完成率 / 专注 bars */
+  --color-stats-figure: var(--color-brand-text);
+  --color-stats-chart: #4772fa;
+  --color-stats-chart-fill-top: rgb(71 114 250 / 0.55);
+  --color-stats-chart-fill-bottom: rgb(71 114 250 / 0.03);
+  --color-stats-achievement: #06875f;
+  --color-stats-ring-track: #ececec;
+  --stats-card-width: 468px;
+  --stats-card-height: 324px;
+  --stats-gap-x: 20px;
+  --stats-gap-y: 16px;
+  --font-size-stats-figure: 24px;
+
   --kanban-column-width: 258px; /* reference 看板 column (314→572 at 1440) */
   --kanban-column-gap: 20px; /* column → next column / “+ 新分组” */
   --kanban-header-height: 28px;
@@ -448,6 +469,15 @@
   --color-focus-line: #2c2c2f;
   --color-focus-ring: #333337;
   --color-focus-segment: #2a2a2d;
+
+  /* 统计 (EURO-28) */
+  --color-stats-bg: #18181a;
+  --color-stats-card: #252528;
+  --color-stats-grid: #333337;
+  --color-stats-bar-track: #2f2f33;
+  --color-stats-figure: var(--accent-on-dark);
+  --color-stats-achievement: #3fd3a6;
+  --color-stats-ring-track: #3a3a3e;
 
   --shadow-popover: 0 4px 16px rgb(0 0 0 / 0.5), 0 0 1px rgb(255 255 255 / 0.25);
   --shadow-card: 0 2px 12px rgb(0 0 0 / 0.3);

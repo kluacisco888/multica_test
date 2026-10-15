@@ -116,6 +116,12 @@ export const tasks = pgTable(
     columnId: uuid().references(() => kanbanColumns.id),
     /** 置顶: fractional key among the user's pinned tasks (smallest first); null when not pinned. Top-level tasks only. */
     pinOrder: text(),
+    /**
+     * 成就分 (EURO-28): the day the task first became overdue, remembered when
+     * its dates are changed, cleared or purged afterwards, so the −2 stays
+     * (“每个任务只扣一次”). Null while the current dates tell it (or it never was).
+     */
+    overdueOn: date(),
   },
   (t) => [
     syncIndex('tasks', t),

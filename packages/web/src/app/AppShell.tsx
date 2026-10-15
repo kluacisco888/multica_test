@@ -61,6 +61,7 @@ import {
 } from './dialogs.js';
 import { CalendarPane } from './CalendarPane.js';
 import { FocusPane } from './FocusPane.js';
+import { StatisticsPane } from './StatisticsPane.js';
 import { useFocusTimer } from './focusTimer.js';
 import { MatrixPane } from './MatrixPane.js';
 import { MobileTabBar } from './MobileTabBar.js';
@@ -270,7 +271,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const inbox = sidebar?.lists.find((l) => l.isInbox) ?? null;
   const currentTag = route.tagId ? (tags?.find((t) => t.id === route.tagId) ?? null) : null;
   const currentFilter = route.filterId ? (filters?.find((f) => f.id === route.filterId) ?? null) : null;
-  const crossListRoute = Boolean(route.matrix || route.focus || route.countdowns || route.habits || route.calendar || route.trash || route.tagId || route.smartId || route.filterId || (route.search !== null && route.search !== undefined));
+  const crossListRoute = Boolean(route.matrix || route.focus || route.countdowns || route.habits || route.statistics || route.calendar || route.trash || route.tagId || route.smartId || route.filterId || (route.search !== null && route.search !== undefined));
   const currentList = useMemo(() => {
     if (!sidebar || crossListRoute) return null;
     return (route.listId ? sidebar.lists.find((l) => l.id === route.listId) : inbox) ?? null;
@@ -552,6 +553,12 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   /** 习惯打卡 (spec 用户故事 93–98). */
   function openHabits() {
     navigate({ listId: null, taskId: null, habits: true, habitId: null });
+    setDrawerOpen(false);
+  }
+
+  /** 统计 (spec 用户故事 102、103). */
+  function openStatistics() {
+    navigate({ listId: null, taskId: null, statistics: true });
     setDrawerOpen(false);
   }
 
@@ -1067,12 +1074,12 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const timeline = view !== null && viewLayouts(view).includes('timeline') && viewOptions?.layout === 'timeline';
   const board = boardMode && !route.trash;
   // The 日历 takes the whole width too; its task opens beside it.
-  const showDetail = route.focus || route.countdowns || route.habits
+  const showDetail = route.focus || route.countdowns || route.habits || route.statistics
     ? false
     : route.calendar || route.matrix
       ? selectedTask !== null
       : (!isMobile && !timeline && !board) || selectedTask !== null;
-  const sidebarVisible = isMobile ? drawerOpen : sidebarOpen && !route.calendar && !route.matrix && !route.focus && !route.countdowns && !route.habits;
+  const sidebarVisible = isMobile ? drawerOpen : sidebarOpen && !route.calendar && !route.matrix && !route.focus && !route.countdowns && !route.habits && !route.statistics;
   // 底部导航 (spec 用户故事 107): on the module pages; a full-page 任务 / 习惯 and the 多选 toolbar take the bottom instead.
   const tabBarVisible = isMobile && selectedTask === null && !(route.habits && route.habitId) && batchTasks.length === 0;
 
@@ -1080,7 +1087,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     <>
       <div
         className={`shell ${sidebarVisible ? 'shell-sidebar-open' : 'shell-sidebar-closed'} ${selectedTask ? 'shell-has-task' : ''} ${
-          route.calendar ? 'shell-calendar' : ''} ${route.focus ? 'shell-focus' : ''} ${route.matrix ? 'shell-matrix' : ''} ${route.countdowns ? 'shell-countdowns' : ''} ${board ? 'shell-kanban' : ''} ${tabBarVisible ? 'shell-tabbar' : ''}`}
+          route.calendar ? 'shell-calendar' : ''} ${route.focus ? 'shell-focus' : ''} ${route.matrix ? 'shell-matrix' : ''} ${route.countdowns ? 'shell-countdowns' : ''} ${route.statistics ? 'shell-statistics' : ''} ${board ? 'shell-kanban' : ''} ${tabBarVisible ? 'shell-tabbar' : ''}`}
       >
         {!isMobile && (
           <Rail
@@ -1094,7 +1101,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
             onCountdowns={() => openCountdowns()}
             onSearch={() => openSearch()}
             onHabits={openHabits}
-            active={route.habits ? 'habits' : route.calendar ? 'calendar' : route.matrix ? 'matrix' : route.focus ? 'focus' : route.countdowns ? 'countdowns' : view?.kind === 'search' ? 'search' : 'tasks'}
+            onStatistics={openStatistics}
+            active={route.statistics ? 'statistics' : route.habits ? 'habits' : route.calendar ? 'calendar' : route.matrix ? 'matrix' : route.focus ? 'focus' : route.countdowns ? 'countdowns' : view?.kind === 'search' ? 'search' : 'tasks'}
           />
         )}
         {isMobile && drawerOpen && <div className="shell-scrim" aria-hidden="true" onClick={() => setDrawerOpen(false)} />}
@@ -1157,6 +1165,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
             onError={fail}
           />
         )}
+        {route.statistics && <StatisticsPane isMobile={isMobile} onError={fail} />}
         {route.habits && (
           <HabitsPane
             today={today}
@@ -1218,7 +1227,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
             }}
           />
         )}
-        {!route.trash && !route.calendar && !route.matrix && !route.focus && !route.countdowns && !route.habits && !(isMobile && selectedTask) && timeline && view && (
+        {!route.trash && !route.calendar && !route.matrix && !route.focus && !route.countdowns && !route.habits && !route.statistics && !(isMobile && selectedTask) && timeline && view && (
           <TimelinePane
             key={viewKey(view)}
             view={view}
@@ -1258,7 +1267,7 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
             onMoveTask={moveCalendarTask}
           />
         )}
-        {!route.trash && !route.calendar && !route.matrix && !route.focus && !route.countdowns && !route.habits && !(isMobile && selectedTask) && !timeline && (
+        {!route.trash && !route.calendar && !route.matrix && !route.focus && !route.countdowns && !route.habits && !route.statistics && !(isMobile && selectedTask) && !timeline && (
           <TaskListPane
             // A new view starts with its sections expanded.
             key={view ? viewKey(view) : 'none'}
@@ -1487,13 +1496,14 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
       </div>
         {tabBarVisible && (
           <MobileTabBar
-            active={route.calendar ? 'calendar' : route.focus ? 'focus' : route.habits ? 'habits' : route.matrix || route.countdowns || view?.kind === 'search' ? 'more' : 'tasks'}
+            active={route.calendar ? 'calendar' : route.focus ? 'focus' : route.habits ? 'habits' : route.matrix || route.countdowns || route.statistics || view?.kind === 'search' ? 'more' : 'tasks'}
             onTasks={() => navigate({ listId: null, taskId: null })}
             onCalendar={() => openCalendar()}
             onFocus={openFocus}
             onHabits={openHabits}
             onMatrix={openMatrix}
             onCountdowns={() => openCountdowns()}
+            onStatistics={openStatistics}
             onSearch={() => openSearch()}
             onSettings={() => setDialog({ kind: 'settings', tab: 'notifications' })}
           />

@@ -122,7 +122,8 @@ describe('countdowns (review)', () => {
       expect(taskRows).toBeGreaterThan(0);
       expect(await count('countdown_id IS NOT NULL')).toBeGreaterThan(0);
 
-      // 0021_smart_input (EURO-27) and 0019_habits (EURO-25) are newer and come off first.
+      // 0022_task_overdue_on (EURO-28), 0021_smart_input (EURO-27) and 0019_habits (EURO-25) are newer and come off first.
+      expect(await rollbackLastMigration(t.database.pool)).toBe('0022_task_overdue_on');
       expect(await rollbackLastMigration(t.database.pool)).toBe('0021_smart_input');
       expect(await rollbackLastMigration(t.database.pool)).toBe('0019_habits');
       expect(await rollbackLastMigration(t.database.pool)).toBe('0018_countdowns');
@@ -161,7 +162,8 @@ describe('countdowns (review)', () => {
       expect(before.matrix[0]).toMatchObject({ matrix_quadrants: [{ probe: 1 }] });
       expect(before.focus).toHaveLength(1);
 
-      // 0021_smart_input (EURO-27) and 0019_habits (EURO-25) are newer and come off first.
+      // 0022_task_overdue_on (EURO-28), 0021_smart_input (EURO-27) and 0019_habits (EURO-25) are newer and come off first.
+      expect(await rollbackLastMigration(t.database.pool)).toBe('0022_task_overdue_on');
       expect(await rollbackLastMigration(t.database.pool)).toBe('0021_smart_input');
       expect(await rollbackLastMigration(t.database.pool)).toBe('0019_habits');
       expect(await rollbackLastMigration(t.database.pool)).toBe('0018_countdowns');

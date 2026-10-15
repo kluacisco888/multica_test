@@ -36,3 +36,5 @@ export * from './countdowns.js';
 export * from './habits.js';
 export * from './smart-input.js';
 export * from './backup.js';
+export * from './achievement.js';
+export * from './statistics.js';

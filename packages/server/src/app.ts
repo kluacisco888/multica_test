@@ -39,6 +39,7 @@ import { createFocusService, type FocusService } from './focus/service.js';
 import { focusRoutes } from './routes/focus.js';
 import { reminderRoutes } from './routes/reminders.js';
 import { habitRoutes } from './routes/habits.js';
+import { statisticsRoutes } from './routes/statistics.js';
 import { createHabitReminderService, type HabitReminderService } from './reminders/habits.js';
 import { createSessionStore, type SessionStore } from './sessions.js';
 import type { SyncEntity } from './sync/columns.js';
@@ -166,6 +167,7 @@ export async function buildApp(deps: AppDeps) {
   focusRoutes(app);
   countdownRoutes(app);
   habitRoutes(app);
+  statisticsRoutes(app);
   backupRoutes(app, { cipher, maxBytes: deps.backupMaxBytes ?? BACKUP_IMPORT_MAX_BYTES });
   deps.routes?.(app);
 
