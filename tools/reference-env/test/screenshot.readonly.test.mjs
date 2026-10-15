@@ -526,6 +526,8 @@ const TYPE_PAGE = `<!doctype html><title>type-probe</title>
 <div class="add"><input id="add" placeholder="添加任务至“收集箱”，回车即可保存"></div>
 <div class="desc"><h1 id="heading">收集箱</h1><div id="desc" contenteditable="true" style="min-height:20px"></div><span class="placeholder">描述</span></div>
 <p id="preview"></p>
+<section class="pane"><span class="add-placeholder">添加任务</span><div class="detail"><input id="title" aria-label="任务标题"></div></section>
+<div id="add-task"><div class="CodeMirror"><div><textarea id="cm"></textarea></div><pre class="CodeMirror-placeholder"></pre></div></div>
 <script>
   const add = document.getElementById('add');
   add.oninput = () => {
@@ -565,6 +567,8 @@ test('--script types into the 添加任务 field, reads the preview, clears it; 
         { read: '.add', html: true },
         { clear: '#add' },
         { read: '#preview' },
+        // A CodeMirror field inside #add-task (滴答's 添加任务 box) is allowed.
+        { type: '后天', into: '#cm' },
       ]),
     );
     const r = await run([`http://127.0.0.1:${server.address().port}/`, '-o', path.join(home, 'final.png'), '--wait', '200', '--script', script], { DIDA_REF_HOME: home });
@@ -591,7 +595,8 @@ test('--script refuses to type anywhere but the 添加任务 field', { skip: !ha
   const home = mkdtempSync(path.join(tmpdir(), 'ref-env-it-'));
   mkdirSync(path.join(home, 'profile'), { mode: 0o700 });
   try {
-    for (const steps of [[{ type: '你好', into: '#desc' }], [{ type: '你好', into: '#heading' }], [{ clear: '#desc' }]]) {
+    // #title: a 添加任务 hint sits in a container around it, which must not count (EURO-39 审查).
+    for (const steps of [[{ type: '你好', into: '#desc' }], [{ type: '你好', into: '#heading' }], [{ clear: '#desc' }], [{ type: '你好', into: '#title' }]]) {
       const script = path.join(home, 'bad.json');
       writeFileSync(script, JSON.stringify(steps));
       const shot = path.join(home, 'bad.png');

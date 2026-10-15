@@ -17,9 +17,10 @@ import type { CreateTaskRequest, Priority } from './tasks.js';
  * into 滴答's 添加任务 field on 2026-10-15). Recognised:
  *   - dates: 今天 / 明天 / 后天 / 大后天, 周X / 星期X / 礼拜X (the next one,
  *     today included), 本周X / 这周X / 下周X / 下下周X (weeks start on
- *     Monday), 下周 (next Monday), 下个月 (the 1st), M月D日, YYYY年M月D日,
+ *     Monday), 下周 (next Monday), 周末 (the coming Saturday), 下周末 /
+ *     下个周末 (next week's Saturday), 下个月 (the 1st), M月D日, YYYY年M月D日,
  *     D号 (this month, next month once passed), N天后; N小时后 / N分钟后 set
- *     the date and time (now + N, to the minute);
+ *     the time (now + N, to the minute; a second time after 下午3点 …);
  *   - times: 上午, 下午, 晚上 (模糊时间, 滴答: 09:00 / 15:00 / 20:00),
  *     早上 07:00, 中午 12:00, 傍晚 17:00, 凌晨, a clock time after them
  *     (下午3点, 晚上8点半, 上午九点一刻), N点 (digits or Chinese) / HH:mm.
@@ -30,7 +31,7 @@ import type { CreateTaskRequest, Priority } from './tasks.js';
  *     每月, 每月D号, 每年, 每年M月D日. Without a date the first instance is
  *     the first rule date from today on, and with a time one whose time has
  *     not passed yet;
- *   - 提醒: 提醒我 (准时 / 当天; only with a date, time or 重复),
+ *   - 提醒: 提醒我 (准时 / 当天; only with a date, time or 重复; once),
  *     *提前N分钟 / 小时 / 天 (minutes or hours on a date without a time make
  *     it 00:00 that day);
  *   - #标签 (up to the next space), ~清单 (one of the user's 清单, longest
@@ -285,7 +286,9 @@ const DATE_WORDS: [string, number][] = [
 
 const DATE_RES = {
   week: re(`(下下|下个?|本|这个?)?${WEEK}(${WD})`),
-  nextWeek: re(`下个?${WEEK}`),
+  nextWeekend: re('下个?周末'),
+  weekend: re('周末'),
+  nextWeek: re(`下个?${WEEK}(?!末)`),
   nextMonth: re('下个?月(?!\\d|[零〇一二两三四五六七八九十])'),
   fromNow: re(`(${NUM})\\s*(小时|分钟)后`),
   ymd: re(`(?:(\\d{4})年)?(${NUM})月(${NUM})[日号]`),
@@ -318,7 +321,19 @@ function matchDate(text: string, i: number, env: Env): Found | null {
     const minutes = m[2] === '小时' ? n * 60 : n;
     const at = new Date(Math.floor(env.ctx.now.getTime() / 60_000) * 60_000 + minutes * 60_000);
     const { date, time } = zonedDateTime(at.toISOString(), env.ctx.timeZone);
-    return { kind: 'date', length: m[0].length, apply: (d) => Object.assign(d, { date, time: d.time ?? time }) };
+    // A time of its own: after 下午3点 it stays text, as in 滴答 (a time is set once).
+    return { kind: 'time', length: m[0].length, apply: (d) => Object.assign(d, { date: d.date ?? date, time }) };
+  }
+  // 下周末 / 下个周末: next week's Saturday; 周末 (also in 这周末, whose 这 stays text in 滴答): the coming Saturday.
+  m = exec(DATE_RES.nextWeekend, text, i);
+  if (m) {
+    const date = addDays(mondayOf(env.today), 12);
+    return { kind: 'date', length: m[0].length, apply: (d) => void (d.date = date) };
+  }
+  m = exec(DATE_RES.weekend, text, i);
+  if (m) {
+    const date = nextWeekday(env.today, 6);
+    return { kind: 'date', length: m[0].length, apply: (d) => void (d.date = date) };
   }
   m = exec(DATE_RES.week, text, i);
   if (m) {
@@ -552,6 +567,8 @@ export function parseSmartInput(text: string, ctx: SmartParseContext): SmartPars
     // A cancelled phrase stays text as a whole: none of its pieces are matched.
     if (ignored.has(token.text)) continue;
     if (SINGLE.includes(token.kind) && seen.has(token.kind)) continue;
+    // 提醒我 counts once: a second one stays text.
+    if (token.kind === 'reminder' && token.text === '提醒我' && draft.remindMe !== undefined) continue;
     seen.add(token.kind);
     const leads = draft.before.length;
     found.apply(draft);
@@ -609,10 +626,10 @@ function settle(d: Draft, env: Env): Omit<SmartParseResult, 'tokens' | 'title'> 
     // On the anchor's day; without one the next such time: today, or tomorrow once it has passed.
     let day = anchor ? anchorDay(anchor, ctx.timeZone) : today;
     if (!anchor) {
-      const evening = hhmm(Number(time.slice(0, 2)) + 12, Number(time.slice(3)));
       // A bare 9点 is 09:00 or 21:00, whichever comes first; 十二点: 12:00 or midnight.
       if (d.bareHour && passed(today, time)) {
-        if (time.startsWith('12')) [day, time] = [addDays(today, 1), `00${time.slice(2)}`];
+        const evening = time.startsWith('12') ? null : hhmm(Number(time.slice(0, 2)) + 12, Number(time.slice(3)));
+        if (!evening) [day, time] = [addDays(today, 1), `00${time.slice(2)}`];
         else if (!passed(today, evening)) time = evening;
         else day = addDays(today, 1);
       } else if (passed(today, time)) day = addDays(today, 1);

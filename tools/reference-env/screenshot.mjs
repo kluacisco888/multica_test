@@ -365,16 +365,23 @@ const MAX_READ_MATCHES = 20;
 const MAX_READ_TEXT = 2_000;
 const MAX_READ_HTML = 8_000;
 
-/** ADR-0010: the field must be a text field whose hint says 添加任务 (forbiddenTypingTarget). */
+/**
+ * ADR-0010: the field must be a text field whose hint says 添加任务 (forbiddenTypingTarget).
+ * Only the field itself and the editor it belongs to (CodeMirror, ProseMirror …) are looked at, never the
+ * containers around it: a 添加任务 hint elsewhere on the page must not let another field through (EURO-39 审查).
+ * The one exception is an explicit container id, `#add-task` / `#quick-add` (滴答's 添加任务 box).
+ */
 async function checkTypingTarget(target, selector) {
   const info = await target.evaluate((el) => {
     const labels = [];
-    for (let node = el, depth = 0; node && depth < 10; node = node.parentElement, depth++) {
+    const editor = el.closest('.CodeMirror, .cm-editor, .ProseMirror, .ql-container, [contenteditable="true"]') ?? el;
+    for (const node of new Set([el, editor])) {
       for (const attr of ['placeholder', 'aria-label', 'data-placeholder', 'title']) labels.push(node.getAttribute(attr));
-      if (node.id) labels.push(`#${node.id}`);
-      // Editors (ProseMirror, Draft.js …) draw their hint in a child element instead of an attribute.
+      // Editors draw their hint in a child element instead of an attribute.
       for (const hint of node.querySelectorAll('[class*="placeholder" i]')) labels.push(hint.textContent);
     }
+    const box = el.closest('#add-task, #quick-add');
+    if (box) labels.push(`#${box.id}`);
     return { tag: el.tagName.toLowerCase(), type: el.getAttribute('type'), editable: el.isContentEditable, labels };
   });
   const reason = forbiddenTypingTarget(info);

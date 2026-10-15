@@ -1,0 +1,49 @@
+[
+ {
+  "type": "下个周末买菜",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "screenshot": "t3-22-typed.png"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "press": "Escape"
+ }
+]

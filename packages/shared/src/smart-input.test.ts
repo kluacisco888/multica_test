@@ -122,6 +122,10 @@ describe('智能识别: dates', () => {
     ['这周五写周报', '2026-10-16'],
     ['下周写周报', '2026-10-19'],
     ['下个月写周报', '2026-11-01'],
+    // 滴答 (EURO-39 返工, typed on Thursday 10-15: 下周末 → 10-24, 周末 → 10-17).
+    ['下周末写周报', '2026-10-24'],
+    ['下个周末写周报', '2026-10-24'],
+    ['周末写周报', '2026-10-17'],
   ])('%s → %s, 全天', (text, date) => {
     const r = parseSmartInput(text, ctx());
     expect(r.dates).toEqual(allDay(date));
@@ -139,6 +143,18 @@ describe('智能识别: dates', () => {
     expect(parseSmartInput('1小时后开会', ctx({ now }))).toMatchObject({ title: '开会', dates: timed('2026-10-14', '15:50') });
     expect(parseSmartInput('30分钟后开会', ctx({ now }))).toMatchObject({ title: '开会', dates: timed('2026-10-14', '15:20') });
     expect(parseSmartInput('10小时后开会', ctx({ now })).dates).toEqual(timed('2026-10-15', '00:50'));
+  });
+
+  it('这周末: only 周末 is recognised, 这 stays in the title (滴答)', () => {
+    expect(parseSmartInput('这周末写周报', ctx())).toMatchObject({ title: '这写周报', dates: allDay('2026-10-17') });
+    // On Saturday the 周末 is today.
+    expect(parseSmartInput('周末写周报', ctx({ now: new Date('2026-10-17T00:00:00.000Z') })).dates).toEqual(allDay('2026-10-17'));
+  });
+
+  it('N小时后 after a written time stays text: the time is set once (滴答)', () => {
+    const r = parseSmartInput('下午3点 2小时后开会', ctx({ now: new Date('2026-10-14T07:30:00.000Z') }));
+    expect(r.tokens.map((t) => t.text)).toEqual(['下午3点']);
+    expect(r.title).toBe('2小时后开会');
   });
 
   it('月底 is not a date (滴答)', () => {
@@ -299,6 +315,13 @@ describe('智能识别: 提醒', () => {
     expect(r.dates).toEqual(allDay('2026-10-15'));
     expect(r.reminders).toEqual([{ type: 'day', daysBefore: 0, time: null }]);
     expect(r.title).toBe('交电费');
+  });
+
+  it('a second 提醒我 stays text; alone, neither is recognised (滴答)', () => {
+    expect(parseSmartInput('提醒我 提醒我 买菜', ctx())).toMatchObject({ tokens: [], reminders: [], title: '提醒我 提醒我 买菜' });
+    const r = parseSmartInput('明天提醒我 提醒我 买菜', ctx());
+    expect(r.tokens.map((t) => t.text)).toEqual(['明天', '提醒我']);
+    expect(r).toMatchObject({ title: '提醒我 买菜', reminders: [{ type: 'day', daysBefore: 0, time: null }] });
   });
 
   it('提醒我 without a date or time is not recognised (滴答)', () => {
