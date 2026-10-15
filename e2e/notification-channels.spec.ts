@@ -1,20 +1,21 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { startFakeSmtp, type FakeSmtpServer } from '../packages/server/test/fakes/fake-smtp.js';
 import { startFakeWebhook, type FakeWebhookServer } from '../packages/server/test/fakes/fake-webhook.js';
-import { createUser, isMobile, logIn, openSidebar } from './support.js';
+import { createUser, fakeListen, isMobile, logIn, openSidebar } from './support.js';
 
 /*
  * 设置 →「提醒与通知」: 通知渠道 (EURO-11, spec 用户故事 74–77、85).
- * The fake Webhook and fake SMTP run in the test process on 127.0.0.1, which
- * the e2e server can reach; nothing is sent to the internet.
+ * The fake Webhook and fake SMTP run in the test process (127.0.0.1, or the
+ * Docker bridge for the compose run), which the server under test can reach;
+ * nothing is sent to the internet.
  */
 
 let hook: FakeWebhookServer;
 let smtp: FakeSmtpServer;
 
 test.beforeAll(async () => {
-  hook = await startFakeWebhook();
-  smtp = await startFakeSmtp({ credentials: { username: 'me@qq.com', password: 'right-auth-code' } });
+  hook = await startFakeWebhook({ listen: fakeListen() });
+  smtp = await startFakeSmtp({ listen: fakeListen(), credentials: { username: 'me@qq.com', password: 'right-auth-code' } });
 });
 test.afterAll(async () => {
   await hook.close();

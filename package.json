@@ -15,6 +15,7 @@
     "test:api": "vitest run --project api",
     "test:fakes": "vitest run --project fakes",
     "test:e2e": "pnpm build && playwright test",
+    "test:e2e:compose": "node scripts/e2e-compose.mjs",
     "test:db:down": "docker compose -f docker-compose.test.yml down -v",
     "check": "pnpm lint && pnpm typecheck && pnpm test"
   },

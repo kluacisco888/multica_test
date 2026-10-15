@@ -21,6 +21,18 @@ export interface FakeSmtpOptions {
    * first two deliveries fail temporarily). Defaults to 250.
    */
   dataReplies?: number[];
+  /**
+   * Where to listen, and the host name clients use to reach it. Defaults to
+   * 127.0.0.1 for both; the compose e2e run binds the Docker bridge so the app
+   * container can connect (`host.docker.internal`).
+   */
+  listen?: FakeListen;
+}
+
+/** Bind address of a fake receiver and the host name it is reached under. */
+export interface FakeListen {
+  bind: string;
+  publicHost: string;
 }
 
 export interface FakeSmtpServer {
@@ -174,12 +186,13 @@ export async function startFakeSmtp(options: FakeSmtpOptions = {}): Promise<Fake
     send('220 fake-smtp ESMTP ready');
   });
 
-  server.listen(0, '127.0.0.1');
+  const listen = options.listen ?? { bind: '127.0.0.1', publicHost: '127.0.0.1' };
+  server.listen(0, listen.bind);
   await once(server, 'listening');
   const { port } = server.address() as net.AddressInfo;
 
   return {
-    host: '127.0.0.1',
+    host: listen.publicHost,
     port,
     messages,
     failNext(...codes) {

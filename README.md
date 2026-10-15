@@ -139,6 +139,24 @@ API 测试和 e2e 用的 PostgreSQL：设置了 `TEST_DATABASE_URL` 就用它（
 
 写 API 测试用 `packages/server/test/support/test-app.ts` 的 `createTestApp()`：真实 Fastify + 迁移好的独立数据库，时钟可注入，`createUser()` 建用户并真实登录，返回带会话 Cookie 的请求头。e2e 用 `e2e/support.ts` 的 `createUser()`（调用构建好的 `dida` CLI）给每个测试建独立用户；e2e 服务器的初始管理员是 `admin` / `e2e-admin-password`。
 
+#### 在 compose 部署里跑 e2e（验收用）
+
+```bash
+pnpm test:e2e:compose -- --project=desktop      # 1440px 一轮
+pnpm test:e2e:compose -- --project=mobile       # 390px 一轮
+node scripts/e2e-compose.mjs --project-name dd-e2e --port 18190 --pg-port 18191 -- e2e/acceptance-flows.spec.ts
+```
+
+`scripts/e2e-compose.mjs` 每次都起一套全新的部署再测，测完清理：
+
+1. 确认 `127.0.0.1` 上的端口空闲、compose 项目还不存在（拒绝 `dida-clone` 和 `multica` 这两个项目名）。
+2. 照 `cp .env.example .env` 在 `test-results/compose-e2e/<项目名>/.env` 生成本次的配置，只改端口、随机密钥、e2e 管理员密码和节假日数据地址。仓库根目录的 `.env` 不用也不改。
+3. `docker compose -p <项目名> -f docker-compose.yml -f docker-compose.e2e.yml up -d --build --wait`。叠加文件只给测试用：镜像打成 `dida-clone-app:e2e`（不覆盖 `dida-clone-app:local`）、PostgreSQL 映射到 `127.0.0.1:<pg-port>`（只给 `e2eSql` 用），容器里加上 `host.docker.internal`。
+4. Playwright 直接连 `http://127.0.0.1:<port>`，不起 `scripts/e2e-server.mjs`。`dida …` 在 app 容器里执行；假 SMTP、假飞书和 holiday-cn 替身在测试进程里，监听 Docker 网桥（`docker0` 网关），容器通过 `host.docker.internal` 访问，消息不出本机。
+5. 最后 `docker compose -p <项目名> down -v`，并检查这个项目没有剩下容器、数据卷和网络；有剩余就以失败退出。`--keep` 跳过清理，方便排查，清理命令会打印出来。
+
+`e2e/acceptance-flows.spec.ts` 是跨功能的主流程（EURO-33）。用户故事 1–115 和测试的对应关系见 `docs/e2e-coverage.md`。
+
 ### CI
 
 CI 定义在 `.github/workflows/ci.yml`，在 GitHub Actions 上对每个 PR 和 main 的每次推送运行，每个 PR 都要过 CI。`check` 任务跑的就是本地 `pnpm check` 的那几步（lint、构建、类型检查、四层测试，API 测试和 e2e 用 Postgres service 容器）；`compose` 任务再跑一遍 compose 部署和备份恢复的冒烟测试。

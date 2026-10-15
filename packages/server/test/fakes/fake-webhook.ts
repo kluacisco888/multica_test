@@ -1,6 +1,7 @@
 import { once } from 'node:events';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { FakeListen } from './fake-smtp.js';
 
 export interface ReceivedWebhook {
   method: string;
@@ -32,7 +33,7 @@ export interface FakeWebhookServer {
 const OK: FakeWebhookReply = { status: 200, body: { code: 0, msg: 'success' } };
 
 /** In-process HTTP endpoint that records every request it receives. */
-export async function startFakeWebhook(): Promise<FakeWebhookServer> {
+export async function startFakeWebhook(options: { listen?: FakeListen } = {}): Promise<FakeWebhookServer> {
   const requests: ReceivedWebhook[] = [];
   const queued: FakeWebhookReply[] = [];
 
@@ -61,12 +62,13 @@ export async function startFakeWebhook(): Promise<FakeWebhookServer> {
     });
   });
 
-  server.listen(0, '127.0.0.1');
+  const listen = options.listen ?? { bind: '127.0.0.1', publicHost: '127.0.0.1' };
+  server.listen(0, listen.bind);
   await once(server, 'listening');
   const { port } = server.address() as AddressInfo;
 
   return {
-    url: `http://127.0.0.1:${port}`,
+    url: `http://${listen.publicHost}:${port}`,
     requests,
     replyNext(...replies) {
       queued.push(...replies);
