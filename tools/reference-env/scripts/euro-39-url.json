@@ -1,0 +1,22 @@
+[
+ {
+  "type": "https://www.example.com",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 4000
+ },
+ {
+  "read": "#add-task",
+  "html": true
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "press": "Escape"
+ }
+]

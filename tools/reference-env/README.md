@@ -5,7 +5,7 @@
 ## 只读规则
 
 - 只截图。不在参照账号里新建、修改或删除任何东西，包括任务、清单、标签、设置。需要看某个状态时，请维护者在小号里准备好，不要自己动手。
-- 截图工具只导航和截图，不输入、不拖动，并且拦截所有非 GET/HEAD/OPTIONS 请求，以及全部 WebSocket 连接（WS 握手虽然是 GET，但连上后可以写数据）。输出里的 `blockedRequests` 会列出被拦截的请求，WebSocket 记为 `WS <地址>`。不要绕开这个工具去驱动已登录的浏览器。
+- 截图工具只导航和截图，不拖动；只在「添加任务」输入框里打字预览、不按回车（ADR-0010，见下面「打字预览」），并且拦截所有非 GET/HEAD/OPTIONS 请求，以及全部 WebSocket 连接（WS 握手虽然是 GET，但连上后可以写数据）。输出里的 `blockedRequests` 会列出被拦截的请求，WebSocket 记为 `WS <地址>`。不要绕开这个工具去驱动已登录的浏览器。
 - 光打开网址截不出来的界面（例如日历的周、日、多日视图），可以用 `--script` 交给工具一个导航脚本，只做导航类的点击、悬停、滚动（ADR-0008），见下面「导航脚本」。多选（Shift / Ctrl / Cmd + 点击）和右键菜单只改页面上的选中状态、打开菜单，也可以在脚本里做。PR 里附上用过的脚本和输出的 `blockedRequests`。
 - 如果页面一定要发出被拦截的写请求才能显示，就停下来，请维护者在 noVNC 里截图，不要放开拦截。
 - 不要在 noVNC 里的浏览器设置中开启「启动时继续浏览上次打开的网页」。截图工具在浏览器启动后才开始拦截，恢复出来的页面在这之前发出的请求拦不到。
@@ -81,6 +81,9 @@ node screenshot.mjs 'https://dida365.com/webapp/#q/all/tasks' -o ~/reference-sho
 | `{ "wait": 1000 }` | 等若干毫秒（最多 120000） |
 | `{ "waitFor": "<选择器>" }` | 等元素出现（15 秒超时） |
 | `{ "screenshot": "month.png", "fullPage": false }` | 中途截一张，相对路径相对于 `-o` 所在目录，同样不能在仓库内 |
+| `{ "read": "<选择器>", "html": false }` | 只读：把所有匹配元素（最多 20 个）的文字、位置（`rect`），`html: true` 时还有 HTML，记进输出的 `reads` |
+| `{ "type": "明天上午开会", "into": "<选择器>" }` | 打字预览（ADR-0010）：一个字一个字打进输入框，1–200 字，不能有换行、制表符等控制字符 |
+| `{ "clear": "<选择器>" }` | 清空同一个输入框（全选后删除） |
 
 新标签页和新窗口一律不许打开，分两层（EURO-22 审查）：
 
@@ -92,7 +95,13 @@ node screenshot.mjs 'https://dida365.com/webapp/#q/all/tasks' -o ~/reference-sho
 后台 worker（Worker、SharedWorker）一律不许启动（EURO-22 第 3 次审查：worker 里开的 WebSocket 不经过 `routeWebSocket`，CDP 的 `Fetch` 和 `Network.setBlockedURLs` 也都管不到 WebSocket）。做法是浏览器层给每个文档的响应加上 `Content-Security-Policy: worker-src 'none'`，由浏览器执行，about:blank / srcdoc / blob 这类继承文档策略的 iframe 也一样。被挡下的 worker 记进 `blockedRequests`，写作 `WORKER <地址>`；万一还有 worker 启动了，立刻关掉，这次运行失败。试过的其他办法：先挂起 worker 再下发设置（Playwright 自己也挂在 worker 上，会马上让它继续跑，抢不过）；只放行 HTTP 的代理（wss 和 https 都走 CONNECT 隧道，分不出来）。截至 EURO-22，滴答网页版的三个参照脚本里没有出现过创建 worker 的情况。
 （试过用 `waitForDebuggerOnStart` 先挂起新页面再关：`window.open` 开的弹窗和打开它的页面共用渲染进程，挂起弹窗会把原页面一起冻住，点击一直不返回，所以改用按 frame 拦请求。）
 
-没有输入和拖动类的步骤；其他字段一律拒绝，整份脚本在启动浏览器之前就校验完。点击前工具会检查目标控件（离它最近的按钮 / 链接 / 菜单项）：输入框、下拉框、可编辑区域，以及文字里带「删除、新建、添加、完成、保存、确定、移动、归档、放弃、清空、退出、订阅、升级、编辑、上传」等字样的控件都拒绝点击，脚本报错退出、不截图。写请求的拦截不受脚本影响。
+### 打字预览（ADR-0010）
+
+`type` 和 `clear` 只能用在「添加任务」输入框上：目标必须是文字输入框（`input` 文字类型、`textarea` 或可编辑区域），而且它或它往上 10 层祖先的 placeholder / aria-label / 提示文字里写着「添加任务」，或者祖先的 id 是 `add-task`。任务标题、描述、评论这类会自动保存的地方都不满足，工具拒绝打字、这次运行失败。不提供 Enter，也不能点「添加」类按钮，所以打的字不会保存；输入时页面发出的写请求照样被拦截。
+
+滴答网页版的添加任务框是 `#add-task` 里的 CodeMirror 编辑器，识别出的文字用 `cm-bold` 标出，右边的日期按钮（`#add-task .preset-time`）显示识别出的日期和时间，点开能看到提醒和重复。EURO-39 的核对脚本在 `scripts/euro-39-typing*.json`。
+
+没有拖动类的步骤；其他字段一律拒绝，整份脚本在启动浏览器之前就校验完。点击前工具会检查目标控件（离它最近的按钮 / 链接 / 菜单项）：输入框、下拉框、可编辑区域，以及文字里带「删除、新建、添加、完成、保存、确定、移动、归档、放弃、清空、退出、订阅、升级、编辑、上传」等字样的控件都拒绝点击，脚本报错退出、不截图。写请求的拦截不受脚本影响。
 
 输出 JSON 多了 `script`、`steps`（每一步执行完时已拦截的请求数 `blockedSoFar`）和 `screenshots`。
 

@@ -391,9 +391,27 @@ const FUZZY_TIMES = [
   { key: 'evening', label: '晚上' },
 ] as const;
 
+/** 更多设置 → 智能识别, as 滴答 has it: three switches, the first two with a 移除 tick. */
+const SMART_INPUT_SWITCHES = [
+  {
+    key: 'dateParse',
+    label: '日期识别',
+    hint: '添加任务时，识别日期和时间信息并自动设置提醒。',
+    remove: { key: 'removeDate', label: '移除文本中的日期' },
+  },
+  {
+    key: 'tagParse',
+    label: '标签识别',
+    hint: '添加任务时，你可以选择在任务标题中保留或移除标签文本。',
+    remove: { key: 'removeTag', label: '移除任务标题中的标签' },
+  },
+  { key: 'urlParse', label: '网址解析', hint: '当任务标题为网址时，将识别为网页标题以便查看。', remove: null },
+] as const;
+
 /**
- * 更多设置 → 智能识别 (spec 用户故事 57–58), where 滴答 has it: the 总开关,
- * 保留识别文字, and the 模糊时间 (上午 / 下午 / 晚上) default times.
+ * 更多设置 → 智能识别, laid out as 滴答's (EURO-39): 日期识别 + 移除文本中的日期,
+ * 标签识别 + 移除任务标题中的标签, 网址解析; then the 模糊时间 (上午 / 下午 / 晚上)
+ * default times of spec 用户故事 58, which 滴答 does not have.
  * Changes save at once; a failed save reverts them.
  */
 function SmartInputPanel({ settings, onSave }: { settings: Settings | null; onSave: (patch: UpdateSettingsRequest) => Promise<boolean> }) {
@@ -420,29 +438,33 @@ function SmartInputPanel({ settings, onSave }: { settings: Settings | null; onSa
         智能识别
       </h3>
       <div className="settings-card">
-        <div className="settings-row">
-          <div className="settings-row-stacked">
-            <label htmlFor={`${id}-enabled`} className="settings-row-label">
-              智能识别
-            </label>
-            <p id={`${id}-enabled-hint`} className="settings-row-hint">
-              添加任务时，识别日期、时间、重复、提醒、#标签、~清单和 !优先级。
+        {SMART_INPUT_SWITCHES.map(({ key, label, hint, remove }) => (
+          <div key={key} className="smart-input-group">
+            <div className="smart-input-switch-row">
+              <label htmlFor={`${id}-${key}`} className="settings-row-label">
+                {label}
+              </label>
+              <input
+                id={`${id}-${key}`}
+                type="checkbox"
+                role="switch"
+                className="ui-switch"
+                aria-describedby={`${id}-${key}-hint`}
+                checked={current[key]}
+                onChange={(e) => void change({ [key]: e.target.checked })}
+              />
+            </div>
+            <p id={`${id}-${key}-hint`} className="settings-row-hint smart-input-hint">
+              {hint}
             </p>
+            {remove && (
+              <label className="smart-input-keep">
+                <input type="checkbox" checked={current[remove.key]} disabled={!current[key]} onChange={(e) => void change({ [remove.key]: e.target.checked })} />
+                {remove.label}
+              </label>
+            )}
           </div>
-          <input
-            id={`${id}-enabled`}
-            type="checkbox"
-            role="switch"
-            className="ui-switch"
-            aria-describedby={`${id}-enabled-hint`}
-            checked={current.enabled}
-            onChange={(e) => void change({ enabled: e.target.checked })}
-          />
-        </div>
-        <label className="smart-input-keep">
-          <input type="checkbox" checked={current.keepText} disabled={!current.enabled} onChange={(e) => void change({ keepText: e.target.checked })} />
-          保留识别文字
-        </label>
+        ))}
       </div>
       <h4 className="smart-input-subtitle">模糊时间</h4>
       <p className="field-hint">输入“上午”“下午”“晚上”而没写具体钟点时，用下面的时间。</p>

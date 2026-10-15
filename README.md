@@ -292,9 +292,9 @@ const result = await app.notifier.send(userId, channelId, { title: '提醒：交
 
 ### 智能识别
 
-在「添加任务」里输入时，前端用 `packages/shared/src/smart-input.ts` 的 `parseSmartInput` 识别日期（今天/明天/后天、周X、下周X、M月D日、D号、N天后）、时间（上午/下午/晚上等模糊时间，以及 3点、下午3点半、15:40）、重复规则（每天、每周X、每个工作日、每月D号、每年M月D日…）、「提醒我」、`*提前N分钟/小时/天`、`#标签`、`~清单`（只认已有清单）和 `!高`/`!中`/`!低`。识别出的部分在输入框里高亮，点一下（或 Tab 到它按回车）取消。保存时由 `smartCreateRequest` 合成 `POST /api/tasks` 的请求，没有的标签会先创建。
+在「添加任务」里输入时，前端用 `packages/shared/src/smart-input.ts` 的 `parseSmartInput` 识别日期（今天/明天/后天、周X、下周X、下周、下个月、M月D日、D号、N天后、N小时后/N分钟后）、时间（上午/下午/晚上等模糊时间，早上 07:00、傍晚 17:00，以及 3点、下午3点半、15:40；不写日期的「9点」取最近的 9 点或 21 点）、重复规则（每天、每周X、每周X和周Y、每个工作日、每月D号、每年M月D日…）、「提醒我」（要和日期或时间一起写）、`*提前N分钟/小时/天`、`#标签`、`~清单`（只认已有清单）和 `!高`/`!中`/`!低`。规则按滴答的实际识别结果核对过（EURO-39）。识别出的部分在输入框里高亮，点一下（或 Tab 到它按回车）取消。保存时由 `smartCreateRequest` 合成 `POST /api/tasks` 的请求，没有的标签会先创建。
 
-设置在「设置 → 更多设置 → 智能识别」，存在 `PATCH /api/settings` 的 `smartInput`（`enabled` 总开关、`keepText` 保留识别文字、`morning`/`afternoon`/`evening` 模糊时间，默认 10:00/14:00/20:00；只改传入的字段）。
+设置在「设置 → 更多设置 → 智能识别」，和滴答一样分成日期识别（日期、时间、重复、提醒）+「移除文本中的日期」、标签识别（`#标签`、`~清单`、`!优先级`）+「移除任务标题中的标签」、网址解析三个开关，默认全开。存在 `PATCH /api/settings` 的 `smartInput`（`dateParse`、`removeDate`、`tagParse`、`removeTag`、`urlParse`，以及 `morning`/`afternoon`/`evening` 模糊时间，默认 09:00/15:00/20:00；只改传入的字段）。EURO-27 存下的旧设置（`enabled` 总开关、`keepText` 保留识别文字）读取时自动换成新结构：总开关关掉的三个都关，保留识别文字的两个「移除」都不勾；下次修改时按新结构写回。网址解析目前只保存开关，还不会改写标题。
 
 ### 移动布局与 PWA
 

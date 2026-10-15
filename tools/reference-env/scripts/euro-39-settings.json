@@ -1,0 +1,5 @@
+[
+  { "wait": 2000 },
+  { "read": "xpath=//h1[normalize-space(text())='智能识别']/ancestor::div[contains(@class,'settings-title')]" },
+  { "read": "xpath=//h1[normalize-space(text())='智能识别']/ancestor::div[contains(@class,'settings-title')]/following-sibling::div[1]", "html": true }
+]

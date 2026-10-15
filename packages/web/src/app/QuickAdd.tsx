@@ -2,7 +2,7 @@ import { parseSmartInput, type SmartInputSettings, type SmartParseResult, type S
 import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type InputHTMLAttributes } from 'react';
 import { Icon } from '../ui/Icon.js';
 
-/** What 智能识别 needs; null when it is switched off in 设置. */
+/** What 智能识别 needs; null when 日期识别 and 标签识别 are both off in 设置. */
 export interface SmartAddOptions {
   settings: SmartInputSettings;
   lists: readonly { id: string; name: string }[];
@@ -46,7 +46,10 @@ export function useSmartTitle(smart: SmartAddOptions | null, defaultDates: TaskD
       timeZone: smart.timeZone,
       fuzzyTimes: smart.settings,
       lists: smart.lists,
-      keepText: smart.settings.keepText,
+      dateParse: smart.settings.dateParse,
+      tagParse: smart.settings.tagParse,
+      removeDate: smart.settings.removeDate,
+      removeTag: smart.settings.removeTag,
       ignored,
       defaultDates,
     });

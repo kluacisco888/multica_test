@@ -519,3 +519,89 @@ test('workers cannot start at all, however they are created; blocked workers are
     }
   }
 });
+
+// ---- 打字预览（ADR-0010）----
+
+const TYPE_PAGE = `<!doctype html><title>type-probe</title>
+<div class="add"><input id="add" placeholder="添加任务至“收集箱”，回车即可保存"></div>
+<div class="desc"><h1 id="heading">收集箱</h1><div id="desc" contenteditable="true" style="min-height:20px"></div><span class="placeholder">描述</span></div>
+<p id="preview"></p>
+<script>
+  const add = document.getElementById('add');
+  add.oninput = () => {
+    document.getElementById('preview').textContent = add.value.includes('明天') ? '识别：明天' : '';
+    fetch('/autosave', { method: 'POST', body: add.value }).catch(() => {});
+  };
+  add.onkeydown = (e) => { if (e.key === 'Enter') fetch('/create-get-probe').catch(() => {}); };
+</script>`;
+
+async function pageServer(html, seen) {
+  const server = createServer((req, res) => {
+    seen.push(`${req.method} ${req.url}`);
+    if (req.url === '/') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(html);
+    } else {
+      res.writeHead(204);
+      res.end();
+    }
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  return server;
+}
+
+test('--script types into the 添加任务 field, reads the preview, clears it; writes stay blocked', { skip: !hasChromium && 'Chromium 未安装' }, async () => {
+  const seen = [];
+  const server = await pageServer(TYPE_PAGE, seen);
+  const home = mkdtempSync(path.join(tmpdir(), 'ref-env-it-'));
+  mkdirSync(path.join(home, 'profile'), { mode: 0o700 });
+  try {
+    const script = path.join(home, 'type.json');
+    writeFileSync(
+      script,
+      JSON.stringify([
+        { type: '明天开会', into: '#add' },
+        { read: '#preview' },
+        { read: '.add', html: true },
+        { clear: '#add' },
+        { read: '#preview' },
+      ]),
+    );
+    const r = await run([`http://127.0.0.1:${server.address().port}/`, '-o', path.join(home, 'final.png'), '--wait', '200', '--script', script], { DIDA_REF_HOME: home });
+    assert.equal(r.code, 0, r.err);
+    const out = JSON.parse(r.out);
+    assert.equal(out.reads[0].step, 2);
+    assert.equal(out.reads[0].selector, '#preview');
+    assert.equal(out.reads[0].matches[0].text, '识别：明天');
+    assert.ok(out.reads[0].matches[0].rect.width > 0, 'rect recorded');
+    assert.match(out.reads[1].matches[0].html, /<input id="add"/);
+    assert.deepEqual(out.reads[2].matches.map((m) => m.text), ['']);
+    assert.ok(out.blockedRequests.some((b) => b.startsWith('POST ') && b.endsWith('/autosave')), `autosave blocked: ${out.blockedRequests}`);
+    assert.ok(!seen.includes('GET /create-get-probe'), 'Enter was never pressed');
+    assert.deepEqual(seen.filter((s) => !/^(GET|HEAD|OPTIONS) /.test(s)), []);
+  } finally {
+    server.close();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('--script refuses to type anywhere but the 添加任务 field', { skip: !hasChromium && 'Chromium 未安装' }, async () => {
+  const seen = [];
+  const server = await pageServer(TYPE_PAGE, seen);
+  const home = mkdtempSync(path.join(tmpdir(), 'ref-env-it-'));
+  mkdirSync(path.join(home, 'profile'), { mode: 0o700 });
+  try {
+    for (const steps of [[{ type: '你好', into: '#desc' }], [{ type: '你好', into: '#heading' }], [{ clear: '#desc' }]]) {
+      const script = path.join(home, 'bad.json');
+      writeFileSync(script, JSON.stringify(steps));
+      const shot = path.join(home, 'bad.png');
+      const r = await run([`http://127.0.0.1:${server.address().port}/`, '-o', shot, '--wait', '200', '--script', script], { DIDA_REF_HOME: home });
+      assert.notEqual(r.code, 0, JSON.stringify(steps));
+      assert.match(r.err, /拒绝在 .* 里打字/);
+      assert.ok(!existsSync(shot), 'no screenshot after a refused step');
+    }
+  } finally {
+    server.close();
+    rmSync(home, { recursive: true, force: true });
+  }
+});

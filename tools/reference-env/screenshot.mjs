@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 只读截图工具：加载参照浏览器配置目录（维护者在 noVNC 里登录的那份），打开 url 并截图。
-// 可选 --script：按导航脚本做导航类的点击、悬停、滚动后截图（ADR-0008），不打字、不拖动，
-// 点击前拒绝输入控件和会改数据的控件。所有非 GET/HEAD/OPTIONS 请求和全部 WebSocket 连接都被拦截，防止改动参照账号的数据。
+// 可选 --script：按导航脚本做导航类的点击、悬停、滚动后截图（ADR-0008），不拖动，
+// 点击前拒绝输入控件和会改数据的控件；只能在「添加任务」输入框里打字预览、不按回车（ADR-0010）。所有非 GET/HEAD/OPTIONS 请求和全部 WebSocket 连接都被拦截，防止改动参照账号的数据。
 /* global window, Element, HTMLAnchorElement, HTMLFormElement, document -- used only in code that runs inside the page (addInitScript, evaluate) */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
-import { forbiddenControl, isReadOnlyMethod, parseArgs, parseScript, profileLockOwner, resolveOutputPath } from './lib.mjs';
+import { forbiddenControl, forbiddenTypingTarget, isReadOnlyMethod, parseArgs, parseScript, profileLockOwner, resolveOutputPath } from './lib.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -330,8 +330,10 @@ async function main() {
     await page.waitForTimeout(args.waitMs);
     const screenshots = [];
     const log = [];
+    const reads = [];
     for (const [i, step] of steps.entries()) {
-      await runStep(page, step, stepOutputs[i]);
+      const read = await runStep(page, step, stepOutputs[i]);
+      if (read) reads.push({ step: i + 1, selector: step.selector, matches: read });
       checkPages(`步骤 ${i + 1} `);
       if (stepOutputs[i]) screenshots.push(stepOutputs[i]);
       log.push({ ...step, blockedSoFar: blocked.length });
@@ -346,7 +348,7 @@ async function main() {
           requested: args.url,
           finalUrl: page.url(),
           title: await page.title(),
-          ...(args.script ? { script: path.resolve(args.script), steps: log, screenshots } : {}),
+          ...(args.script ? { script: path.resolve(args.script), steps: log, screenshots, reads } : {}),
           blockedRequests: blocked,
         },
         null,
@@ -359,6 +361,25 @@ async function main() {
 }
 
 const STEP_TIMEOUT_MS = 15_000;
+const MAX_READ_MATCHES = 20;
+const MAX_READ_TEXT = 2_000;
+const MAX_READ_HTML = 8_000;
+
+/** ADR-0010: the field must be a text field whose hint says 添加任务 (forbiddenTypingTarget). */
+async function checkTypingTarget(target, selector) {
+  const info = await target.evaluate((el) => {
+    const labels = [];
+    for (let node = el, depth = 0; node && depth < 10; node = node.parentElement, depth++) {
+      for (const attr of ['placeholder', 'aria-label', 'data-placeholder', 'title']) labels.push(node.getAttribute(attr));
+      if (node.id) labels.push(`#${node.id}`);
+      // Editors (ProseMirror, Draft.js …) draw their hint in a child element instead of an attribute.
+      for (const hint of node.querySelectorAll('[class*="placeholder" i]')) labels.push(hint.textContent);
+    }
+    return { tag: el.tagName.toLowerCase(), type: el.getAttribute('type'), editable: el.isContentEditable, labels };
+  });
+  const reason = forbiddenTypingTarget(info);
+  if (reason) throw new Error(`拒绝在 ${selector} 里打字：${reason}（ADR-0010）`);
+}
 
 /** One navigation step (ADR-0008). Clicks are checked against `forbiddenControl` first. */
 async function runStep(page, step, shotPath) {
@@ -396,6 +417,38 @@ async function runStep(page, step, shotPath) {
       await target.waitFor({ state: 'attached', timeout: STEP_TIMEOUT_MS });
       await target.evaluate((el, by) => el.scrollBy(0, by), step.by);
       return;
+    }
+    case 'type':
+    case 'clear': {
+      const target = page.locator(step.selector).first();
+      await target.waitFor({ state: 'visible', timeout: STEP_TIMEOUT_MS });
+      await checkTypingTarget(target, step.selector);
+      await target.focus({ timeout: STEP_TIMEOUT_MS });
+      if (step.action === 'type') {
+        // One character at a time, as a user types: the page's own highlighting runs on every input event.
+        await target.pressSequentially(step.text, { delay: 40, timeout: STEP_TIMEOUT_MS });
+      } else {
+        await page.keyboard.press('ControlOrMeta+A');
+        await page.keyboard.press('Backspace');
+      }
+      return;
+    }
+    case 'read': {
+      const all = await page.locator(step.selector).all();
+      const out = [];
+      for (const el of all.slice(0, MAX_READ_MATCHES)) {
+        out.push(
+          await el.evaluate(
+            (node, o) => ({
+              text: (node.innerText ?? node.textContent ?? '').slice(0, o.text),
+              rect: (({ x, y, width, height }) => ({ x, y, width, height }))(node.getBoundingClientRect()),
+              ...(o.html ? { html: node.outerHTML.slice(0, o.htmlMax) } : {}),
+            }),
+            { text: MAX_READ_TEXT, html: step.html, htmlMax: MAX_READ_HTML },
+          ),
+        );
+      }
+      return out;
     }
     case 'press':
       await page.keyboard.press(step.key);

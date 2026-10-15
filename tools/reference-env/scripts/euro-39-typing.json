@@ -1,0 +1,1537 @@
+[
+ {
+  "type": "每天上午背单词",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "screenshot": "story-1.png"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "明天上午提醒我去取快递",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "screenshot": "story-2.png"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "下周三下午3点开会",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "screenshot": "story-3.png"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "每个工作日晚上跑步",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "screenshot": "story-4.png"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "今天写周报",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "后天交房租",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "大后天体检",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "周五聚餐",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "星期一例会",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "本周六爬山",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "下下周二复盘",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "10月20日交报告",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "2027年1月5日续签",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "25号还信用卡",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "3天后回访",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "今晚看电影",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "明晚聚会",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "下午3点开会",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "晚上8点半跑步",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "上午九点一刻晨会",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "9点打卡",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "15:40接孩子",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "中午吃饭",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "早上跑步",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "凌晨2点发版",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "每3天浇花",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "每周开周会",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "每周一、三健身",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "每2周复盘",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "每个周末打扫",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "每个休息日睡懒觉",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "每月交房租",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "每月15号还款",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "每年体检",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "每年3月8日送花",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "明天开会*提前30分钟",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "明天交报告*提前1天",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "写代码 #工作 !高",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "快一点完成",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "type": "明天下午3点开会 #工作 !高",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "read": "#add-task"
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "press": "Escape"
+ }
+]

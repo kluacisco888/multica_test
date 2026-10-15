@@ -3468,11 +3468,28 @@ span.task-row-expand {
 
 /* ---- 设置 → 更多设置 → 智能识别 ---- */
 
+/* 智能识别 settings, as 滴答 lays them out: switch row, hint, then the 移除 tick. */
+.smart-input-group {
+  padding: var(--space-3) 0;
+}
+
+.smart-input-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.smart-input-hint {
+  margin-top: 6px;
+}
+
 .smart-input-keep {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 0 0 var(--space-3);
+  min-height: 30px;
+  margin-top: 6px;
   font-size: var(--font-size-sm);
 }
 
