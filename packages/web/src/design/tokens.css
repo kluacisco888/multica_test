@@ -160,6 +160,7 @@
   --date-day-size: 32px;
   --date-day-size-touch: 40px; /* mobile tap target */
   --settings-dialog-width: 800px;
+  --settings-dialog-height: 680px; /* reference: 800×680, the same on every tab */
   --settings-nav-width: 214px;
   --settings-row-height: 40px;
   --attachment-thumb-height: 320px; /* image 附件 in the detail pane: shown large like the reference's inline images */
