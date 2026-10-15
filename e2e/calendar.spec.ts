@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { createUser, isMobile, logIn, openSidebar } from './support.js';
 
 /*
@@ -166,4 +166,95 @@ test('周 / 日 / 多日: add at a time slot, drag to another time and onto the 
     .dragTo(page.getByRole('button', { name: /^10月17日 .*，新建全天任务$/ }));
   await expect.poll(async () => (await taskByTitle(page, '评审会')).dates).toEqual({ allDay: true, startDate: null, dueDate: '2026-10-17' });
   await expect(page.getByRole('list', { name: '全天任务' }).getByRole('button', { name: '评审会' })).toBeVisible();
+});
+
+/** A design token resolved by the browser to a computed colour, e.g. `rgb(236, 240, 254)`. */
+async function tokenColour(page: Page, token: string): Promise<string> {
+  return page.evaluate((name) => {
+    const probe = document.createElement('div');
+    probe.style.backgroundColor = `var(${name})`;
+    document.body.append(probe);
+    const colour = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return colour;
+  }, token);
+}
+
+const background = (target: Locator) => target.evaluate((el) => getComputedStyle(el).backgroundColor);
+
+/** Press the mouse on `source` and move it over the middle of `target`, still holding the button. */
+async function holdOver(page: Page, target: Locator, source?: Locator) {
+  if (source) {
+    const from = await source.boundingBox();
+    expect(from).toBeTruthy();
+    await page.mouse.move(from!.x + 10, from!.y + 4);
+    await page.mouse.down();
+  }
+  const to = await target.boundingBox();
+  expect(to).toBeTruthy();
+  await page.mouse.move(to!.x + to!.width / 2, to!.y + to!.height / 2, { steps: 5 });
+}
+
+test('拖放高亮: 全天 row (工作日 and 周末), 月视图 and hover colours (EURO-41)', async ({ page }, testInfo) => {
+  test.skip(isMobile(page), 'Drag and drop is a mouse gesture; desktop only.');
+  await page.clock.setFixedTime(NOW);
+  const user = createUser('calendar-drop');
+  await logIn(page, user.username, user.password);
+  // 09:00–10:00 in Shanghai on 10-13.
+  await api(page, 'POST', '/api/tasks', {
+    title: '站会',
+    dates: { allDay: false, startAt: '2026-10-13T01:00:00.000Z', dueAt: '2026-10-13T02:00:00.000Z' },
+  });
+  await openCalendar(page);
+  const dropColour = await tokenColour(page, '--color-date-range');
+  const weekendColour = await tokenColour(page, '--color-calendar-weekend');
+  const hoverColour = await tokenColour(page, '--color-calendar-cell-hover');
+  const transparent = 'rgba(0, 0, 0, 0)';
+  expect(new Set([dropColour, weekendColour, hoverColour, transparent]).size).toBe(4);
+
+  // 月视图: a 工作日 and a 周末 cell both highlight while a task is held over them.
+  const monthTask = taskButton(page, '站会');
+  await holdOver(page, cell(page, '10月15日'), monthTask);
+  await expect.poll(() => background(cell(page, '10月15日'))).toBe(dropColour);
+  await holdOver(page, cell(page, '10月17日'));
+  await expect.poll(() => background(cell(page, '10月17日'))).toBe(dropColour);
+  await expect.poll(() => background(cell(page, '10月15日'))).toBe(transparent);
+  // Back onto its own day and let go: nothing moves, the highlight goes.
+  await holdOver(page, cell(page, '10月13日'));
+  await page.mouse.up();
+  await page.mouse.move(5, 5);
+  await expect.poll(() => background(cell(page, '10月17日'))).toBe(transparent);
+  await expect.poll(() => background(cell(page, '10月17日').locator('..'))).toBe(weekendColour);
+  // Hover on a month day is unchanged.
+  await cell(page, '10月22日').hover({ position: { x: 60, y: 60 } });
+  await expect.poll(() => background(cell(page, '10月22日'))).toBe(hoverColour);
+
+  // 周视图, 全天 row: 10-15 is a Thursday, 10-17 a Saturday.
+  await switchView(page, '周');
+  const allDay = (label: string) => page.getByRole('button', { name: new RegExp(`^${label} .*，新建全天任务$`) });
+  await page.mouse.move(5, 5);
+  await expect.poll(() => background(allDay('10月15日'))).toBe(transparent);
+  await expect.poll(() => background(allDay('10月17日'))).toBe(weekendColour);
+
+  const block = page.getByRole('list', { name: '10月13日的任务' }).getByRole('button', { name: /站会/ });
+  await holdOver(page, allDay('10月15日'), block);
+  await expect.poll(() => background(allDay('10月15日'))).toBe(dropColour);
+  await holdOver(page, allDay('10月17日'));
+  await expect.poll(() => background(allDay('10月17日'))).toBe(dropColour);
+  await expect.poll(() => background(allDay('10月15日'))).toBe(transparent);
+  await page.screenshot({ path: testInfo.outputPath(`calendar-allday-drop-${testInfo.project.name}.png`) });
+  await page.mouse.up();
+  await expect.poll(async () => (await taskByTitle(page, '站会')).dates).toEqual({ allDay: true, startDate: null, dueDate: '2026-10-17' });
+
+  // Released: the 周末 cell is shaded again, the 工作日 cell clear.
+  await page.mouse.move(5, 5);
+  await expect.poll(() => background(allDay('10月17日'))).toBe(weekendColour);
+  await expect.poll(() => background(allDay('10月15日'))).toBe(transparent);
+
+  // Hover on a 全天 cell and on a time slot is unchanged.
+  await allDay('10月16日').hover();
+  await expect.poll(() => background(allDay('10月16日'))).toBe(hoverColour);
+  const slot = page.getByRole('button', { name: '10月16日 15:00，新建任务' });
+  await slot.hover({ position: { x: 10, y: 5 } });
+  await expect.poll(() => background(slot)).toBe(hoverColour);
 });
