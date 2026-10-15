@@ -4,6 +4,8 @@
 
 产品名为「叮叮清单」，只在 `packages/shared/src/product.ts` 的 `PRODUCT_NAME` 定义一次，Web 和服务端都引用它；compose 项目名、镜像名、数据卷、数据库名等技术标识仍是 `dida-clone`。
 
+验收和迁移：[验收手册](docs/acceptance-manual.md)（`ssh -L` 访问、按功能逐项检查、备份并迁移到自己的服务器、以后接 CloudFront 要改的配置）。
+
 开发由 Multica 上的智能体小队「软件交付小队」完成，需求与任务记录在 Multica 项目「复刻滴答清单」中。智能体协作约定见 `AGENTS.md` 与 `docs/agents/`，术语见 `GLOSSARY.md`，决策见 `docs/adr/`。
 
 ## 部署
@@ -91,6 +93,8 @@ docker compose -p dida-restore down -v   # 核对完删除副本
 2. 把**备份文件和 `.env` 一起**拷到新服务器的仓库目录。**`.env` 必须带走**：`APP_ENCRYPTION_KEY` 不在备份里，丢了它，加密保存的通知渠道凭证就再也解不开；`POSTGRES_PASSWORD` 也要保持一致。
 3. 新服务器：`docker compose build && scripts/restore.sh <备份文件>`。
 4. `curl http://127.0.0.1:8090/api/health` 确认正常后，再停掉旧服务器。
+
+迁移前后核对数据（每张表的行数和校验和、附件 sha256）的命令见[验收手册](docs/acceptance-manual.md)「核对数据一致」。`scripts/migration-drill.sh` 在本机用两个临时 compose 项目（`dida-drill-old` / `dida-drill-new`，端口 18391）把这四步完整演练一遍：填入各类数据、备份、在只拿到备份和 `.env` 的全新目录里恢复、比对指纹、HTTP 检查、重新部署，最后全部清理，并确认 Multica 和系统 nginx 没被动过（EURO-31，CI 的 compose 任务也跑它）。
 
 ### 回滚数据库迁移
 

@@ -71,5 +71,7 @@ jobs:
           curl -fsS http://127.0.0.1:8091/api/health
       - name: attachments survive backup and restore (upload, backup, restore, download, compare)
         run: scripts/backup-restore-smoke.sh
+      - name: migration drill (backup, restore on a fresh copy, compare every table and attachment, redeploy)
+        run: scripts/migration-drill.sh
       - if: failure()
         run: docker compose logs

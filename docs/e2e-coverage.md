@@ -20,7 +20,7 @@ spec（EURO-2）里的每条用户故事，对应到验证它的 E2E 用例；�
 | 2 | 配置都在 `.env`，有 `.env.example` | `scripts/e2e-compose.mjs` 照 `cp .env.example .env` 生成本次运行的 `.env`，只改端口、密钥和测试替身地址 | `packages/server/src/config.test.ts` |
 | 3 | 默认 `127.0.0.1:8090`，可在 `.env` 改 | compose 运行用 `APP_PORT=18190`，Playwright 直接连 `127.0.0.1:18190` | `config.test.ts`；`docker-compose.yml` 端口绑定 `${APP_BIND}:${APP_PORT}` |
 | 4 | `.env` 或命令创建首个管理员 | `auth.spec.ts › log in with the administrator created from .env on first start` | API `accounts.test.ts › creates the admin on first start only…`、`create-user creates a user or an admin…` |
-| 5 | 备份、恢复脚本（数据库 + 附件） | —（脚本操作，不是浏览器行为） | CI `compose` 任务：`scripts/backup.sh` → `scripts/restore.sh` 到第二个项目；`scripts/backup-restore-smoke.sh`（附件上传、备份、恢复、下载、比对） |
+| 5 | 备份、恢复脚本（数据库 + 附件） | —（脚本操作，不是浏览器行为） | CI `compose` 任务：`scripts/backup.sh` → `scripts/restore.sh` 到第二个项目；`scripts/backup-restore-smoke.sh`（附件上传、备份、恢复、下载、比对）；`scripts/migration-drill.sh`（迁移演练：全部表的行数和校验和、附件 sha256 前后一致，EURO-31） |
 | 6 | 反向代理 / CloudFront 后面也能用，外部地址可配 | compose 运行的 `GET /api/health` 回显 `publicUrl` 和经过代理头的 `request` | API `health.test.ts › applies X-Forwarded-* headers from a trusted proxy`；`config.test.ts`（`PUBLIC_URL`、`TRUST_PROXY`） |
 | 7 | 账号密码登录并保持登录 | `auth.spec.ts › log in: wrong password shows a message, then the right one signs in and survives a reload` | API `auth.test.ts` |
 | 8 | 退出登录、修改密码 | `auth.spec.ts › log out returns…`、`› change password…` | API `auth.test.ts` |
