@@ -18,12 +18,13 @@ describe('导入滴答清单备份（审查补充）', () => {
 
   const csvBody = 'a'.repeat(2 * 1024 * 1024);
 
-  // 审查发现的缺陷（PR #41）：修复后把 it.fails 改回 it。
-  it.fails('a text/csv body to the public 登录 route keeps the 1MB limit (as JSON does)', async () => {
+  it('a text/csv body to the public 登录 route keeps the 1MB limit (as JSON does)', async () => {
     const json = await t.app.inject({ method: 'POST', url: '/api/auth/login', headers: { 'content-type': 'application/json' }, payload: `"${csvBody}"` });
     expect(json.statusCode).toBe(413);
     const csv = await t.app.inject({ method: 'POST', url: '/api/auth/login', headers: { 'content-type': 'text/csv' }, payload: csvBody });
-    expect(csv.statusCode).toBe(413);
+    // Refused without reading the body: outside the 滴答 import route text/csv has no parser at all
+    // (415, as before PR #41), so the body is never read.
+    expect(csv.statusCode).toBe(415);
   });
 
   it('the 滴答 import itself still accepts a file over 1MB', async () => {

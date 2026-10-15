@@ -150,8 +150,8 @@ describe('导入滴答清单备份', () => {
     const body = res.json() as { error: { code: string; message: string; issues: ImportIssue[] } };
     expect(body.error).toMatchObject({ code: 'import_failed', message: '滴答清单备份里有不能导入的行，没有导入任何内容' });
     expect(body.error.issues.map(describeImportIssue)).toEqual([
-      '第 13 行：Priority「7」应为 0、1、3 或 5',
-      '第 16 行：Due Date「2026/12/31」不是滴答的时间格式（例如 2026-10-15T00:00:00+0000）',
+      '第 13 行（示例：每月最后一天）：Priority「7」应为 0、1、3 或 5',
+      '第 16 行（示例：每年）：Due Date「2026/12/31」不是滴答的时间格式（例如 2026-10-15T00:00:00+0000）',
     ]);
     const after = (await get(u, '/api/changes?since=0')).json() as { revision: number; entities: Record<string, { upserts: unknown[] }> };
     expect(after.entities.task?.upserts).toEqual([]);

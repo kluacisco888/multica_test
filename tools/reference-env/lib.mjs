@@ -201,11 +201,14 @@ export function parseScript(json) {
 }
 
 /** ADR-0010：读导出通知的地址（GET，不标已读），写死在这里。 */
+/** fetchBackup 只从这个域名下载备份。 */
+export const BACKUP_HOST = 'dida365.com';
+
 export const BACKUP_NOTICE_URL = 'https://api.dida365.com/api/v2/notification?autoMarkRead=false';
 
 /**
  * 从通知列表里取最新一条成功的导出（exportTask）通知的下载地址；没有时返回 null。
- * 只接受 https 地址。
+ * 只接受 https、并且是 dida365.com（含子域名）的地址。
  */
 export function backupDownloadLink(notifications) {
   const list = Array.isArray(notifications) ? notifications : [];
@@ -215,7 +218,10 @@ export function backupDownloadLink(notifications) {
   const link = exports[0]?.data.downloadLink;
   if (!link) return null;
   try {
-    return new URL(link).protocol === 'https:' ? link : null;
+    const url = new URL(link);
+    // Only 滴答's own host (and its subdomains): the second GET goes nowhere else.
+    const host = url.hostname.toLowerCase();
+    return url.protocol === 'https:' && (host === BACKUP_HOST || host.endsWith(`.${BACKUP_HOST}`)) ? link : null;
   } catch {
     return null;
   }

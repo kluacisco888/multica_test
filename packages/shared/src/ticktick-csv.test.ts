@@ -178,7 +178,15 @@ describe('parseTickTickBackup (errors)', () => {
     const { issues } = parseTickTickBackup(edited(taskId, column, value), 'Asia/Shanghai');
     expect(issues).toHaveLength(1);
     expect(issues[0]?.line).toBe(line);
+    // The row's title travels with the line, to find it in an editor.
+    expect(issues[0]?.title).toBeTruthy();
     expect(issues[0]?.message).toContain(message);
+  });
+
+  it('shortens the title shown with an issue (20 characters, one line)', () => {
+    const long = parseTickTickBackup(edited('10', 'Priority', '9'), 'Asia/Shanghai').issues[0];
+    expect(long?.title).toBe(`${'长'.repeat(20)}…`);
+    expect(parseTickTickBackup(edited('9', 'Priority', '9'), 'Asia/Shanghai').issues[0]?.title).toBeUndefined();
   });
 
   it('refuses a file that is not a 滴答 backup, or misses columns', () => {

@@ -170,7 +170,7 @@ export function BackupSettings() {
       <div className="settings-row">
         <span className="settings-row-stacked">
           <span className="settings-row-label">导入滴答清单备份</span>
-          <span className="settings-row-hint">选择滴答清单「生成备份」下载的 CSV 文件，清单、文件夹、标签、子任务、日期、重复和提醒都会导入</span>
+          <span className="settings-row-hint">选择滴答清单「生成备份」下载的 CSV 文件，清单、文件夹、标签、子任务、日期、重复和提醒都会导入；看板分栏不导入。同一份文件导入两次，会多出一套同样的清单和任务</span>
         </span>
         <button type="button" className="settings-link" aria-disabled={importing} onClick={() => !importing && tickTickInput.current?.click()}>
           导入滴答清单备份

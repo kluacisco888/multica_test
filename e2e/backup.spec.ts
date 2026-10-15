@@ -99,7 +99,7 @@ test('导入滴答清单备份: the mock 滴答 CSV goes in, a bad line is named
   const card = await openBackup(page);
   await card.getByLabel('选择滴答清单备份文件').setInputFiles({ name: 'TickTick-backup.csv', mimeType: 'text/csv', buffer: Buffer.from(broken) });
   await expect(card.getByRole('status', { name: '导入状态' })).toHaveText('滴答清单备份里有不能导入的行，没有导入任何内容');
-  await expect(card.getByRole('list', { name: '出错的数据' })).toContainText('第 16 行：重复规则「FREQ=DAILY;INTERVAL=364」：重复间隔最多 99');
+  await expect(card.getByRole('list', { name: '出错的数据' })).toContainText('第 16 行（示例：每年）：重复规则「FREQ=DAILY;INTERVAL=364」：重复间隔最多 99');
 
   await card.getByLabel('选择滴答清单备份文件').setInputFiles({ name: 'TickTick-backup.csv', mimeType: 'text/csv', buffer: Buffer.from(mock) });
   await expect(card.getByRole('status', { name: '导入状态' })).toContainText('导入完成：文件夹 1 条、清单 2 条、标签 3 条、任务 10 条、检查项 3 条');

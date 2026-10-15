@@ -82,7 +82,7 @@ node screenshot.mjs 'https://dida365.com/webapp/#q/all/tasks' -o ~/reference-sho
 | `{ "waitFor": "<选择器>" }` | 等元素出现（15 秒超时） |
 | `{ "screenshot": "month.png", "fullPage": false }` | 中途截一张，相对路径相对于 `-o` 所在目录，同样不能在仓库内 |
 | `{ "download": "text=\"生成备份\"", "saveAs": "x.csv" }` | ADR-0010：点「生成备份」并接收浏览器下载（滴答直接给文件时）。只认这一个按钮，文件只能是 `.csv`、存到仓库外（权限 600） |
-| `{ "fetchBackup": true, "saveAs": "x.csv", "waitMinutes": 10 }` | ADR-0010：滴答在后台生成备份时（弹窗「稍后可在通知中心下载文件」），用 GET 读通知列表 `https://api.dida365.com/api/v2/notification?autoMarkRead=false`（不标已读，地址写死在 `lib.mjs`），取最新一条成功的导出通知里的 https 下载地址并下载。最多等 `waitMinutes` 分钟 |
+| `{ "fetchBackup": true, "saveAs": "x.csv", "waitMinutes": 10 }` | ADR-0010：滴答在后台生成备份时（弹窗「稍后可在通知中心下载文件」），用 GET 读通知列表 `https://api.dida365.com/api/v2/notification?autoMarkRead=false`（不标已读，地址写死在 `lib.mjs`），取最新一条成功的导出通知里的下载地址并下载，地址只能是 https 的 `dida365.com`（含子域名）。最多等 `waitMinutes` 分钟 |
 
 新标签页和新窗口一律不许打开，分两层（EURO-22 审查）：
 

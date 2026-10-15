@@ -172,15 +172,22 @@ test('fetchBackup: one per script, .csv, picks the newest successful export noti
   const notice = (createdTime, status, downloadLink) => ({ type: 'exportTask', createdTime, data: { status, downloadLink } });
   assert.equal(
     backupDownloadLink([
-      notice('2026-10-14T00:00:00Z', 'success', 'https://x.example/old.csv'),
-      notice('2026-10-15T00:00:00Z', 'success', 'https://x.example/new.csv'),
-      notice('2026-10-16T00:00:00Z', 'fail', 'https://x.example/failed.csv'),
-      { type: 'other', data: { status: 'success', downloadLink: 'https://x.example/other' } },
+      notice('2026-10-14T00:00:00Z', 'success', 'https://dida365.com/old.csv'),
+      notice('2026-10-15T00:00:00Z', 'success', 'https://dida365.com/new.csv'),
+      notice('2026-10-16T00:00:00Z', 'fail', 'https://dida365.com/failed.csv'),
+      { type: 'other', data: { status: 'success', downloadLink: 'https://dida365.com/other' } },
     ]),
-    'https://x.example/new.csv',
+    'https://dida365.com/new.csv',
   );
-  assert.equal(backupDownloadLink([notice('2026-10-15T00:00:00Z', 'success', 'http://x.example/a.csv')]), null);
+  assert.equal(backupDownloadLink([notice('2026-10-15T00:00:00Z', 'success', 'http://dida365.com/a.csv')]), null);
   assert.equal(backupDownloadLink({}), null);
+  // Only dida365.com and its subdomains.
+  for (const link of ['https://evil.example/a.csv', 'https://dida365.com.evil.example/a.csv', 'https://notdida365.com/a.csv']) {
+    assert.equal(backupDownloadLink([notice('2026-10-15T00:00:00Z', 'success', link)]), null, link);
+  }
+  for (const link of ['https://dida365.com/api/v2/data/export/link/a', 'https://api.dida365.com/a.csv']) {
+    assert.equal(backupDownloadLink([notice('2026-10-15T00:00:00Z', 'success', link)]), link, link);
+  }
 });
 
 test('download output must be outside the repository and .csv', () => {

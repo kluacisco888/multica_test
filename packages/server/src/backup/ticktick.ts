@@ -44,7 +44,7 @@ export async function importTickTick(deps: BackupDeps, userId: string, text: str
   const { timeZone } = await readSettings(deps.db, userId);
   const { tasks: rows, issues } = parseTickTickBackup(text, timeZone);
   if (issues.length > 0) {
-    const out: ImportIssue[] = issues.map((i) => ({ entity: TICKTICK_ISSUE_ENTITY, index: i.line, id: null, message: i.message }));
+    const out: ImportIssue[] = issues.map((i) => ({ entity: TICKTICK_ISSUE_ENTITY, index: i.line, id: null, ...(i.title ? { title: i.title } : {}), message: i.message }));
     throw new ImportFailed(INVALID, out);
   }
   const inbox = await ensureInbox(deps.db, deps.sync, userId);

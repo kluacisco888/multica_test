@@ -146,7 +146,19 @@ export interface TickTickTask {
 
 export interface TickTickIssue {
   line: number;
+  /** Title of the row (shortened), to find it: line numbers count LF only, editors also break at CR. */
+  title?: string;
   message: string;
+}
+
+const TITLE_HINT_LENGTH = 20;
+
+/** The row's title on one line, at most 20 characters; undefined when empty. */
+export function titleHint(raw: string): string | undefined {
+  const one = raw.replace(/[\r\n]+/g, ' ').trim();
+  if (!one) return undefined;
+  const chars = [...one];
+  return chars.length > TITLE_HINT_LENGTH ? `${chars.slice(0, TITLE_HINT_LENGTH).join('')}…` : one;
 }
 
 export class TickTickRowError extends Error {}
@@ -418,32 +430,34 @@ export function parseTickTickBackup(text: string, defaultTimeZone: string): { ta
       continue;
     }
     const get = (column: string) => record.fields[index.get(column) as number] ?? '';
+    const title = titleHint(get('Title'));
     try {
       const task = parseRow(get, record.line, defaultTimeZone);
       const first = seen.get(task.sourceId);
       if (first !== undefined) {
-        issues.push({ line: record.line, message: `taskId ${task.sourceId} 和第 ${first} 行重复` });
+        issues.push({ line: record.line, title, message: `taskId ${task.sourceId} 和第 ${first} 行重复` });
         continue;
       }
       seen.set(task.sourceId, record.line);
       tasks.push(task);
     } catch (error) {
       if (!(error instanceof TickTickRowError)) throw error;
-      issues.push({ line: record.line, message: error.message });
+      issues.push({ line: record.line, title, message: error.message });
     }
   }
 
   // 子任务: a parent of the file, same 清单, no cycles, at most MAX_TASK_DEPTH levels.
   const byId = new Map(tasks.map((t) => [t.sourceId, t]));
+  const at = (task: TickTickTask, message: string): TickTickIssue => ({ line: task.line, title: titleHint(task.title), message });
   for (const task of tasks) {
     if (!task.sourceParentId) continue;
     const parent = byId.get(task.sourceParentId);
     if (!parent) {
-      if (!seen.has(task.sourceParentId)) issues.push({ line: task.line, message: `父任务 ${task.sourceParentId} 不在文件里` });
+      if (!seen.has(task.sourceParentId)) issues.push(at(task, `父任务 ${task.sourceParentId} 不在文件里`));
       continue;
     }
     if (parent.list !== task.list || parent.folder !== task.folder) {
-      issues.push({ line: task.line, message: '子任务和父任务不在同一个清单' });
+      issues.push(at(task, '子任务和父任务不在同一个清单'));
       continue;
     }
     // Level of the task, the root being 1; a cycle never reaches a root.
@@ -461,8 +475,8 @@ export function parseTickTickBackup(text: string, defaultTimeZone: string): { ta
       visited.add(up.sourceId);
       level += 1;
     }
-    if (cycle) issues.push({ line: task.line, message: '父子关系形成了循环' });
-    else if (level > MAX_TASK_DEPTH) issues.push({ line: task.line, message: `子任务最多 ${MAX_TASK_DEPTH} 层` });
+    if (cycle) issues.push(at(task, '父子关系形成了循环'));
+    else if (level > MAX_TASK_DEPTH) issues.push(at(task, `子任务最多 ${MAX_TASK_DEPTH} 层`));
   }
   issues.sort((a, b) => a.line - b.line);
   return { tasks, issues };

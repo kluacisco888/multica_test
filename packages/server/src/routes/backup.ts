@@ -70,18 +70,21 @@ export function backupRoutes(app: FastifyInstance, { cipher, maxBytes }: { ciphe
       .send(`\uFEFF${csv}`);
   });
 
-  // 滴答清单 backups are posted as the CSV file itself.
-  app.addContentTypeParser('text/csv', { parseAs: 'string', bodyLimit: maxBytes }, (_request, body, done) => done(null, body));
-
-  app.post('/api/backup/import-ticktick', { bodyLimit: maxBytes, onRequest: app.authenticate }, async (request, reply) => {
-    const userId = sessionUser(request).id;
-    if (typeof request.body !== 'string') return sendError(reply, 415, 'unsupported_media_type', '请用 text/csv 上传滴答清单的备份文件');
-    try {
-      return { imported: await importTickTick(deps(), userId, request.body) };
-    } catch (error) {
-      if (error instanceof ImportFailed) return sendError(reply, 400, 'import_failed', error.message, error.issues);
-      throw error;
-    }
+  // 滴答清单 backups are posted as the CSV file itself. The text/csv parser lives in
+  // its own encapsulated scope with this one route: every other route keeps the
+  // global 1MB body limit for text/csv too (EURO-30 review, PR #41).
+  void app.register(async (scope) => {
+    scope.addContentTypeParser('text/csv', { parseAs: 'string' }, (_request, body, done) => done(null, body));
+    scope.post('/api/backup/import-ticktick', { bodyLimit: maxBytes, onRequest: scope.authenticate }, async (request, reply) => {
+      const userId = sessionUser(request).id;
+      if (typeof request.body !== 'string') return sendError(reply, 415, 'unsupported_media_type', '请用 text/csv 上传滴答清单的备份文件');
+      try {
+        return { imported: await importTickTick(deps(), userId, request.body) };
+      } catch (error) {
+        if (error instanceof ImportFailed) return sendError(reply, 400, 'import_failed', error.message, error.issues);
+        throw error;
+      }
+    });
   });
 
   // Large body limit, so check the session before the body is read (the
