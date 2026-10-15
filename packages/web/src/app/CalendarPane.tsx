@@ -134,6 +134,12 @@ const hourLabel = (h: number) => (h === 0 ? '' : h === 12 ? '正午' : `${pad(h)
 const MARK_TEXT = { holiday: '休', makeup_workday: '班' } as const;
 const MARK_NAMES = { holiday: '休息', makeup_workday: '补班' } as const;
 
+/** 周六 or 周日, whatever day the week starts on. */
+function isWeekend(date: string): boolean {
+  const day = weekday(date);
+  return day === 0 || day === 6;
+}
+
 /** Accessible description of a day: 10月1日 周四 国庆节 休息. */
 function dayDescription(date: string, info: CalendarDay | undefined): string {
   const parts = [dayLabel(date), WEEKDAY_NAMES[weekday(date)]];
@@ -417,6 +423,7 @@ function MonthGrid(props: GridProps & { onDropDate: (date: string) => void }) {
                     key={date}
                     className={[
                       'calendar-cell',
+                      isWeekend(date) ? 'calendar-cell-weekend' : '',
                       date.slice(0, 7) !== month ? 'calendar-cell-outside' : '',
                       date === today ? 'calendar-cell-today' : '',
                       props.dropDate === date ? 'calendar-cell-drop' : '',
@@ -623,6 +630,8 @@ function TimeGrid(
   }, []);
 
   const gridStyle = { '--calendar-days': count } as CSSProperties;
+  // 周 and 多日 darken 周六 / 周日 like the reference; the single-day 日 view is left plain.
+  const shadeWeekend = (date: string) => count > 1 && isWeekend(date);
 
   return (
     <div className="calendar-timegrid" style={gridStyle}>
@@ -631,7 +640,11 @@ function TimeGrid(
         {visibleDays.map((date) => {
           const info = props.days.get(date);
           return (
-            <div key={date} className={`calendar-tg-day ${date === today ? 'calendar-tg-day-today' : ''}`} aria-hidden="true">
+            <div
+              key={date}
+              className={`calendar-tg-day ${date === today ? 'calendar-tg-day-today' : ''} ${shadeWeekend(date) ? 'calendar-tg-day-weekend' : ''}`}
+              aria-hidden="true"
+            >
               <span className="calendar-tg-weekday">{WEEKDAY_NAMES[weekday(date)]}</span>
               <DayHead date={date} info={info} firstOfMonth={date.endsWith('-01')} />
             </div>
@@ -663,7 +676,7 @@ function TimeGrid(
             <button
               key={date}
               type="button"
-              className={`calendar-allday-cell ${props.dropDate === date ? 'calendar-cell-drop' : ''}`}
+              className={`calendar-allday-cell ${shadeWeekend(date) ? 'calendar-allday-weekend' : ''} ${props.dropDate === date ? 'calendar-cell-drop' : ''}`}
               style={{ gridColumn: col + 1 }}
               aria-label={`${dayDescription(date, props.days.get(date))}，新建全天任务`}
               onClick={(e) => props.onOpenQuickAdd(e, date, null)}
@@ -716,7 +729,7 @@ function TimeGrid(
           {visibleDays.map((date) => (
             <div
               key={date}
-              className={`calendar-tg-col ${date === today ? 'calendar-tg-col-today' : ''}`}
+              className={`calendar-tg-col ${date === today ? 'calendar-tg-col-today' : ''} ${shadeWeekend(date) ? 'calendar-tg-col-weekend' : ''}`}
               onDragOver={(e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'move';

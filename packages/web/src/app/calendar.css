@@ -254,6 +254,10 @@
   outline-offset: -2px;
 }
 
+.calendar-cell-weekend {
+  background: var(--color-calendar-weekend);
+}
+
 .calendar-cell-outside {
   background: var(--color-calendar-outside);
 }
@@ -452,6 +456,12 @@
   background: transparent;
   border: 0;
   border-left: 1px solid var(--color-calendar-line);
+}
+
+.calendar-tg-day-weekend > .calendar-day-head,
+.calendar-allday-weekend:not(.calendar-cell-drop),
+.calendar-tg-col-weekend {
+  background: var(--color-calendar-weekend);
 }
 
 .calendar-allday-cell:hover {

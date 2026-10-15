@@ -247,6 +247,11 @@
   border-left: 1px solid var(--color-divider);
 }
 
+/* Nothing selected: the reference shows the page background here (EURO-40). */
+.habits-detail-idle {
+  background: var(--color-calendar-bg);
+}
+
 .habits-detail-empty {
   display: grid;
   place-items: center;
