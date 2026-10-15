@@ -18,7 +18,8 @@ import { useCallback, useEffect, useState } from 'react';
  *   /matrix                        → 四象限
  *   /focus                         → 番茄专注
  *   /countdowns                    → 倒数日 (记录中); /countdowns/archived → 已归档
- * Each but /trash, /focus, /countdowns and /habits takes `/tasks/<taskId>` for an open 任务.
+ *   /statistics                    → 统计 and 成就分
+ * Each but /trash, /focus, /countdowns, /statistics and /habits takes `/tasks/<taskId>` for an open 任务.
  */
 
 /** 日历 route: null mode / date mean "last used view" / "today". */
@@ -49,9 +50,11 @@ export interface Route {
   habits?: boolean;
   /** The open 习惯 on the 习惯 page. */
   habitId?: string | null;
+  /** 统计 (spec 用户故事 102、103). */
+  statistics?: boolean;
 }
 
-const EMPTY: Required<Route> = { listId: null, tagId: null, smartId: null, filterId: null, search: null, taskId: null, trash: false, calendar: null, matrix: false, focus: false, countdowns: null, habits: false, habitId: null };
+const EMPTY: Required<Route> = { listId: null, tagId: null, smartId: null, filterId: null, search: null, taskId: null, trash: false, calendar: null, matrix: false, focus: false, countdowns: null, habits: false, habitId: null, statistics: false };
 
 export function parseRoute(pathname: string): Route {
   if (/^\/trash\/?$/.test(pathname)) return { ...EMPTY, trash: true };
@@ -59,6 +62,7 @@ export function parseRoute(pathname: string): Route {
   const matrix = /^\/matrix(?:\/tasks\/([^/]+))?\/?$/.exec(pathname);
   if (matrix) return { ...EMPTY, matrix: true, taskId: matrix[1] ? safeDecode(matrix[1]) : null };
   if (/^\/focus\/?$/.test(pathname)) return { ...EMPTY, focus: true };
+  if (/^\/statistics\/?$/.test(pathname)) return { ...EMPTY, statistics: true };
   const countdowns = /^\/countdowns(\/archived)?\/?$/.exec(pathname);
   if (countdowns) return { ...EMPTY, countdowns: countdowns[1] ? 'archived' : 'active' };
   const habits = /^\/habits(?:\/([^/]+))?\/?$/.exec(pathname);
@@ -105,8 +109,9 @@ function safeDecode(value: string): string | null {
   }
 }
 
-export function routePath({ listId, tagId, smartId, filterId, search, taskId, trash, calendar, matrix, focus, countdowns, habits, habitId }: Route): string {
+export function routePath({ listId, tagId, smartId, filterId, search, taskId, trash, calendar, matrix, focus, countdowns, habits, habitId, statistics }: Route): string {
   if (trash) return '/trash';
+  if (statistics) return '/statistics';
   if (focus) return '/focus';
   if (countdowns) return countdowns === 'archived' ? '/countdowns/archived' : '/countdowns';
   if (habits) return habitId ? `/habits/${encodeURIComponent(habitId)}` : '/habits';

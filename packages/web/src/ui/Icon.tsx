@@ -319,6 +319,13 @@ const paths = {
       <rect x="13.5" y="13.5" width="6" height="6" rx="1.5" />
     </>
   ),
+  /** 统计: a small bar chart. */
+  chart: (
+    <>
+      <path d="M4.5 19.5h15" />
+      <path d="M7.5 16v-4M12 16V7.5M16.5 16v-6" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof paths;

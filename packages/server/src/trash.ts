@@ -7,6 +7,8 @@ import type { Db, Executor, Tx } from './db/client.js';
 import { attachments, comments } from './db/schema/attachments.js';
 import { checklistItems, kanbanColumns, lists, tasks } from './db/schema/tasks.js';
 import { ensureInbox, taskToApi, type TaskRow } from './organize.js';
+import { readSettings } from './settings.js';
+import { rememberOverdue } from './statistics.js';
 import { topOfList } from './task-order.js';
 import type { SyncOps, SyncWriter } from './sync/sync.js';
 import { descendantsOf, exceedsDepth, liveTasksOfList, lockTaskTrees } from './task-tree.js';
@@ -114,8 +116,11 @@ async function purgeBatch(ops: SyncOps, tx: Tx, userId: string, rootId: string, 
     .from(checklistItems)
     .where(and(eq(checklistItems.userId, userId), inArray(checklistItems.taskId, ids), isNotNull(checklistItems.deletedAt)));
   for (const item of items) await ops.updateTombstone(checklistItems, item.id, { title: '', completed: false, trashRootId: null });
+  const { timeZone } = await readSettings(tx, userId);
   for (const row of batch) {
     await ops.updateTombstone(tasks, row.id, {
+      // 成就分: clearing the dates must not take back the −2 of an overdue 任务.
+      ...rememberOverdue(row, timeZone, now),
       title: '',
       description: '',
       kind: 'text',

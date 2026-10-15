@@ -96,11 +96,11 @@ test.describe('移动布局', () => {
     await expect(page).toHaveURL(/\/habits$/);
     await expect(page.getByRole('heading', { level: 1, name: '习惯' })).toBeVisible();
 
-    // 更多: 四象限、倒数日、搜索、设置 in a sheet; Esc closes it.
+    // 更多: 四象限、倒数日、统计、搜索、设置 in a sheet; Esc closes it.
     await nav.getByRole('button', { name: '更多' }).click();
     const more = page.getByRole('dialog', { name: '更多' });
     await expect(more).toBeVisible();
-    await expect(more.getByRole('list').getByRole('button')).toHaveText(['四象限', '倒数日', '搜索', '设置']);
+    await expect(more.getByRole('list').getByRole('button')).toHaveText(['四象限', '倒数日', '统计', '搜索', '设置']);
     await page.keyboard.press('Escape');
     await expect(more).toBeHidden();
 

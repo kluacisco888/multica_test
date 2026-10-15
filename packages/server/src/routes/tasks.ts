@@ -27,6 +27,7 @@ import { endOfChildren, inKeyOrder, pinnedTasks, placeTask, topOfList, topOfPinn
 import { readSettings } from '../settings.js';
 import { moveToTrash } from '../trash.js';
 import { findOwned, type SyncOps } from '../sync/sync.js';
+import { rememberOverdue } from '../statistics.js';
 import { calendarTasks, filterTasks, matrixTasks, smartListTasks } from '../task-views.js';
 import {
   ancestorsOf,
@@ -481,8 +482,11 @@ async function applyTaskPatch(app: FastifyInstance, ops: SyncOps, tx: Tx, userId
 
   const now = app.clock.now();
   const wasOpen = task.status === 'open';
+  // 成就分: new dates must not take back the −2 of a 任务 already overdue.
+  const overduePatch = dates !== undefined ? rememberOverdue(task, (await readSettings(tx, userId)).timeZone, now) : {};
   const row = await ops.update(tasks, task.id, {
     ...fields,
+    ...overduePatch,
     ...repeatPatch,
     ...remindersPatch,
     ...pinPatch,
