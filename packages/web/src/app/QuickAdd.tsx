@@ -24,8 +24,8 @@ export interface SmartTitle {
   text: string;
   setText: (text: string) => void;
   tokens: SmartToken[];
-  /** 取消识别: the token's text stays plain text. */
-  ignore: (token: SmartToken) => void;
+  /** 取消识别: the tokens' text stays plain text (all of a highlight's tokens at once). */
+  ignore: (tokens: readonly SmartToken[]) => void;
   /** What to save: the parse result when something is recognised, else null (save `text` as typed). */
   result: SmartParseResult | null;
   reset: () => void;
@@ -63,7 +63,7 @@ export function useSmartTitle(smart: SmartAddOptions | null, defaultDates: TaskD
       setIgnored((prev) => prev.filter((t) => next.includes(t)));
     },
     tokens,
-    ignore: (token) => setIgnored((prev) => [...prev, token.text]),
+    ignore: (cancelled) => setIgnored((prev) => [...prev, ...cancelled.map((t) => t.text)]),
     result: parsed && tokens.length > 0 ? parsed : null,
     reset() {
       setTextState('');
@@ -79,6 +79,8 @@ type FieldInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'on
  * input's text (same font and padding, read from the input itself), with
  * transparent text so only the highlight backgrounds show. Only the
  * highlights take clicks; clicking one (or Tab to it and Enter) cancels it.
+ * As in 滴答, tokens next to each other or only spaces apart (明天上午10点,
+ * #工作 !高) are one highlight, cancelled as a whole.
  */
 export function SmartTitleInput({ smart, ...inputProps }: FieldInputProps & { smart: SmartTitle }) {
   const id = useId();
@@ -124,18 +126,18 @@ export function SmartTitleInput({ smart, ...inputProps }: FieldInputProps & { sm
           <div className="smart-highlights" data-testid="smart-highlights" style={box}>
             <div className="smart-highlights-text" style={{ transform: `translateX(${-scroll}px)` }}>
               {segments(text, tokens).map((s) =>
-                s.token ? (
+                s.tokens ? (
                   <button
                     key={s.start}
                     type="button"
                     className="smart-token"
-                    data-kind={s.token.kind}
-                    aria-label={`取消识别${KIND_LABELS[s.token.kind]}“${s.token.text}”`}
+                    data-kind={s.tokens.map((t) => t.kind).join(' ')}
+                    aria-label={`取消识别${s.tokens.map(describe).join('、')}`}
                     title="点击取消识别"
                     onMouseDown={(e) => e.preventDefault()}
                     onPointerDown={(e) => e.stopPropagation()}
                     onClick={() => {
-                      smart.ignore(s.token as SmartToken);
+                      smart.ignore(s.tokens ?? []);
                       own.current?.focus();
                     }}
                   >
@@ -148,7 +150,7 @@ export function SmartTitleInput({ smart, ...inputProps }: FieldInputProps & { sm
             </div>
           </div>
           <span id={summaryId} className="visually-hidden" aria-live="polite">
-            已识别：{tokens.map((t) => `${KIND_LABELS[t.kind]}“${t.text}”`).join('，')}
+            已识别：{tokens.map(describe).join('，')}
           </span>
         </>
       )}
@@ -204,13 +206,30 @@ export function submitSmart(title: SmartTitle, onAdd: (title: string, smart: Sma
   return onAdd(result ? result.title : title.text.trim(), result);
 }
 
-function segments(text: string, tokens: SmartToken[]): { start: number; text: string; token?: SmartToken }[] {
-  const out: { start: number; text: string; token?: SmartToken }[] = [];
-  let at = 0;
+const describe = (t: SmartToken) => `${KIND_LABELS[t.kind]}“${t.text}”`;
+
+/**
+ * `text` cut into plain runs and highlights. Tokens (in text order, not
+ * overlapping) with nothing or only whitespace between them share one
+ * highlight, which spans the whitespace too.
+ */
+function segments(text: string, tokens: readonly SmartToken[]): { start: number; text: string; tokens?: SmartToken[] }[] {
+  const groups: { start: number; end: number; tokens: SmartToken[] }[] = [];
   for (const token of tokens) {
-    if (token.start > at) out.push({ start: at, text: text.slice(at, token.start) });
-    out.push({ start: token.start, text: token.text, token });
-    at = token.end;
+    const last = groups.at(-1);
+    if (last && /^\s*$/.test(text.slice(last.end, token.start))) {
+      last.end = token.end;
+      last.tokens.push(token);
+    } else {
+      groups.push({ start: token.start, end: token.end, tokens: [token] });
+    }
+  }
+  const out: { start: number; text: string; tokens?: SmartToken[] }[] = [];
+  let at = 0;
+  for (const g of groups) {
+    if (g.start > at) out.push({ start: at, text: text.slice(at, g.start) });
+    out.push({ start: g.start, text: text.slice(g.start, g.end), tokens: g.tokens });
+    at = g.end;
   }
   if (at < text.length) out.push({ start: at, text: text.slice(at) });
   return out;

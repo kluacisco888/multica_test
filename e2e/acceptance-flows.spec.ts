@@ -265,7 +265,8 @@ test('1 智能识别「每个工作日上午10点提醒我」→ 飞书收到提
 
   // 智能识别 (用户故事 54、45、52): 重复、时间、提醒 are highlighted and taken out of the title.
   await quickAdd(page).fill('每个工作日上午10点提醒我站会');
-  for (const name of ['重复“每个工作日”', '时间“上午10点”', '提醒“提醒我”']) await expect(token(page, name)).toBeVisible();
+  // Next to each other: one highlight (EURO-43).
+  await expect(token(page, '重复“每个工作日”、时间“上午10点”、提醒“提醒我”')).toBeVisible();
   await quickAdd(page).press('Enter');
   await expect(openTasks(page).getByRole('button', { name: '站会', exact: true })).toBeVisible();
   const [task] = await search(page, '站会');
