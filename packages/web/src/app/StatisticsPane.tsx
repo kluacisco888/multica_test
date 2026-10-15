@@ -1,6 +1,7 @@
 import {
   statBucketLabel,
   WEEKDAY_NAMES,
+  weekday,
   type FocusStatUnit,
   type StatBucket,
   type Statistics,
@@ -331,7 +332,7 @@ function HabitWeekCard({ week, today }: { week: Statistics['habitWeek']; today: 
       <ol className="stats-habit-week">
         {week.map((d) => {
           const ratio = d.due === 0 ? 0 : d.done / d.due;
-          const name = WEEKDAY_NAMES[new Date(`${d.date}T00:00:00Z`).getUTCDay()]!;
+          const name = WEEKDAY_NAMES[weekday(d.date)]!;
           return (
             <li key={d.date} className={`stats-habit-day ${d.date === today ? 'stats-habit-today' : ''}`}>
               <svg viewBox="0 0 40 40" className="stats-habit-ring" role="img" aria-label={`${name}：${d.due === 0 ? '没有要打卡的习惯' : `完成 ${d.done}/${d.due}`}`}>

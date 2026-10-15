@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import {
   achievementScore,
+  daysBetween,
   focusPomodoroCount,
   habitWeek,
   statBucket,
@@ -141,7 +142,7 @@ export async function statistics(db: Executor, userId: string, now: Date, date?:
       tasks: live.length,
       completed: all.completed,
       lists: listRows.length,
-      days: Math.max(1, Math.round((Date.parse(today) - Date.parse(firstDay)) / 86_400_000) + 1),
+      days: Math.max(1, daysBetween(firstDay, today) + 1),
     },
     overview: {
       todayCompleted: todays.completed,
