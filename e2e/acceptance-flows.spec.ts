@@ -280,6 +280,8 @@ test('1 智能识别「每个工作日上午10点提醒我」→ 飞书收到提
   await api(page, 'PATCH', `/api/tasks/${task!.id}`, { dates: { allDay: false, dueAt } });
   await expect.poll(() => hookTexts(botToken).length, { timeout: 60_000 }).toBeGreaterThan(0);
   expect(hookTexts(botToken)[0]).toContain('站会');
+  // Delivery evidence for the PR (what the fake 飞书 robot received).
+  console.log(`[fake 飞书 ${testInfo.project.name}] ${JSON.stringify(hook.requests.find((r) => r.path.endsWith(`/${botToken}`))?.json)}`);
   // The open page shows the 应用内提醒 too (用户故事 82); 稍后提醒 would bring it back, so close it with 完成 later.
   const alert = page.getByRole('region', { name: '提醒' }).getByRole('article', { name: '站会' });
   await expect(alert).toBeVisible({ timeout: 30_000 });
@@ -607,6 +609,7 @@ test('7 两个通知渠道 → 任务只发到邮件 → 假 SMTP 收到提醒�
   await api(page, 'PATCH', `/api/tasks/${task.id}`, { dates: { allDay: false, dueAt: new Date(Date.now() + 8_000).toISOString() } });
   await expect.poll(() => mailsTo(to).length, { timeout: 60_000 }).toBe(1);
   expect(mailsTo(to)[0]!.subject).toBe('提醒：交房租');
+  console.log(`[fake SMTP ${testInfo.project.name}] to=${to} ${JSON.stringify(mailsTo(to)[0])}`);
   expect(hookTexts(botToken)).toEqual([]);
 
   // 应用内提醒 → 完成 (用户故事 82).
