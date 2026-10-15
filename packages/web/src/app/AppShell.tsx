@@ -858,6 +858,8 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
     try {
       await api.updateList(list.id, { archived });
       await reloadSidebar();
+      // An archived 清单's tasks leave every 智能清单 (and come back on 取消归档).
+      setTasksEpoch((n) => n + 1);
     } catch (e) {
       fail(e);
     }

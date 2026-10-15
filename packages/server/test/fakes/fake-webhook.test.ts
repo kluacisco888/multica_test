@@ -25,6 +25,14 @@ describe('fake Webhook receiver', () => {
     expect(request?.headers['content-type']).toBe('application/json');
   });
 
+  it('listens where told and hands out the host name clients use (compose e2e run)', async () => {
+    hook = await startFakeWebhook({ listen: { bind: '127.0.0.1', publicHost: 'localhost' } });
+    expect(hook.url).toMatch(/^http:\/\/localhost:\d+$/);
+    const res = await fetch(`${hook.url.replace('localhost', '127.0.0.1')}/hook`, { method: 'POST', body: '{}' });
+    expect(res.status).toBe(200);
+    expect((await hook.waitForRequests(1))[0]?.path).toBe('/hook');
+  });
+
   it('replays queued failures before returning to success', async () => {
     hook = await startFakeWebhook();
     hook.replyNext({ status: 500 }, { status: 200, body: { code: 19021, msg: 'sign match fail' } });

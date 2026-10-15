@@ -36,6 +36,15 @@ describe('fake SMTP server', () => {
     expect(decodeMail(mail!.raw)).toEqual({ subject: '提醒：交周报', text: '交周报\n.\n第二行' });
   });
 
+  it('listens where told and hands out the host name clients use (compose e2e run)', async () => {
+    smtp = await startFakeSmtp({ listen: { bind: '127.0.0.1', publicHost: 'host.docker.internal' } });
+    expect(smtp.host).toBe('host.docker.internal');
+    await nodemailer
+      .createTransport({ host: '127.0.0.1', port: smtp.port, secure: false, ignoreTLS: true })
+      .sendMail({ from: 'a@example.com', to: 'b@example.com', subject: 'hi', text: 'x' });
+    expect((await smtp.waitForMessages(1))[0]?.to).toEqual(['b@example.com']);
+  });
+
   it('decodes long base64 and quoted-printable bodies', async () => {
     smtp = await startFakeSmtp();
     const long = `${'很长的中文正文，'.repeat(30)}100% 完成`;

@@ -4,17 +4,45 @@ import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import type { FakeListen } from '../packages/server/test/fakes/fake-smtp.js';
 import { databaseUrl, E2E_DATABASE, ensureTestPostgres } from '../scripts/test-postgres.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let e2eDatabaseUrl: string | undefined;
 
+/*
+ * Two targets (see README「测试」):
+ * - default: scripts/e2e-server.mjs, the built server on the test PostgreSQL;
+ * - compose: `node scripts/e2e-compose.mjs`, a `docker compose` deployment.
+ *   It sets E2E_COMPOSE_APP (the app container), E2E_DATABASE_URL (its
+ *   PostgreSQL, published on loopback for e2eSql only) and E2E_FAKE_BIND /
+ *   E2E_FAKE_HOST (where fake receivers listen and how the container reaches them).
+ */
+const composeApp = process.env.E2E_COMPOSE_APP;
+
+function e2eDatabase(): string {
+  e2eDatabaseUrl ??= process.env.E2E_DATABASE_URL ?? databaseUrl(ensureTestPostgres(), E2E_DATABASE);
+  return e2eDatabaseUrl;
+}
+
+/** Where fake SMTP / Webhook receivers listen so the server under test can reach them. */
+export function fakeListen(): FakeListen {
+  return { bind: process.env.E2E_FAKE_BIND ?? '127.0.0.1', publicHost: process.env.E2E_FAKE_HOST ?? '127.0.0.1' };
+}
+
 /**
- * Run the built admin CLI (`dida …`, the same file the container runs) against
- * the e2e server's database. `stdin` answers the password prompt.
+ * Run the admin CLI (`dida …`) against the server under test: the built file
+ * on the e2e database, or the real `dida` command in the compose app
+ * container. `stdin` answers the password prompt.
  */
 export function dida(args: string[], stdin = ''): string {
-  e2eDatabaseUrl ??= databaseUrl(ensureTestPostgres(), E2E_DATABASE);
+  if (composeApp) {
+    return execFileSync('docker', ['exec', '-i', '-e', 'LOG_LEVEL=silent', composeApp, 'dida', ...args], {
+      input: stdin,
+      encoding: 'utf8',
+    });
+  }
+  const e2eDatabaseUrl = e2eDatabase();
   return execFileSync(process.execPath, [path.join(repoRoot, 'packages/server/dist/cli.js'), ...args], {
     input: stdin,
     encoding: 'utf8',
@@ -27,8 +55,7 @@ export function dida(args: string[], stdin = ''): string {
  * states the app itself no longer produces (e.g. data left by a fixed bug).
  */
 export async function e2eSql(text: string, values: unknown[] = []): Promise<pg.QueryResult> {
-  e2eDatabaseUrl ??= databaseUrl(ensureTestPostgres(), E2E_DATABASE);
-  const client = new pg.Client({ connectionString: e2eDatabaseUrl });
+  const client = new pg.Client({ connectionString: e2eDatabase() });
   await client.connect();
   try {
     return await client.query(text, values);

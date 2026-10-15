@@ -1515,6 +1515,13 @@ span.task-row-expand {
   width: min(var(--settings-dialog-width), calc(100vw - 2 * var(--space-4)));
 }
 
+@media (min-width: 768px) {
+  /* Fixed like the reference, so switching tabs does not resize it; long tabs scroll inside. */
+  .ui-dialog.settings-dialog {
+    height: min(var(--settings-dialog-height), calc(100vh - 2 * var(--space-8)));
+  }
+}
+
 .settings-layout {
   display: grid;
   grid-template-columns: var(--settings-nav-width) 1fr;
@@ -1597,6 +1604,8 @@ span.task-row-expand {
   .date-popover.date-popover-sheet {
     position: fixed;
     top: auto;
+    /* Above the 应用内提醒 cards (45), which sit over the sheet's 确定 at 390px. */
+    z-index: 46;
     right: 0;
     bottom: 0;
     left: 0;

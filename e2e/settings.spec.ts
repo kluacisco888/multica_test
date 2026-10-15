@@ -59,3 +59,17 @@ test('设置 is keyboard operable', async ({ page }) => {
   await dialog.getByRole('button', { name: '关闭' }).click();
   await expect(dialog).toBeHidden();
 });
+
+test('设置 keeps the reference size, 800×680, on every tab (EURO-33 参照比对)', async ({ page }) => {
+  test.skip(isMobile(page), '390px: 设置 is full screen');
+  const user = createUser('settings-size');
+  await logIn(page, user.username, user.password);
+  const dialog = await openSettings(page);
+  const tabs = await dialog.getByRole('tab').allTextContents();
+  expect(tabs.length).toBeGreaterThan(3);
+  for (const name of tabs) {
+    await dialog.getByRole('tab', { name: name.trim(), exact: true }).click();
+    const box = (await dialog.boundingBox())!;
+    expect({ tab: name, width: box.width, height: box.height }).toEqual({ tab: name, width: 800, height: 680 });
+  }
+});

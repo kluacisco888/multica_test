@@ -1,0 +1,22 @@
+# Overlay for the end-to-end run against a compose deployment
+# (`node scripts/e2e-compose.mjs`, README「测试」). Not for production.
+#   docker compose -p <name> -f docker-compose.yml -f docker-compose.e2e.yml --env-file <run>/.env up -d
+services:
+  app:
+    # Own tag: building must not replace dida-clone-app:local, which other
+    # deployments on the machine run.
+    image: dida-clone-app:${E2E_IMAGE_TAG:-e2e}
+    # The run's own `.env` (copied from .env.example), so a `.env` in the repo
+    # root is neither needed nor touched.
+    env_file: !override
+      - path: ${E2E_ENV_FILE:?run through scripts/e2e-compose.mjs}
+        required: true
+    # Fake SMTP / 飞书 / holiday-cn receivers run in the test process on the
+    # Docker bridge; the app reaches them under this name.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  postgres:
+    # Loopback only, so tests can set up states the app no longer produces (e2eSql).
+    ports:
+      - "127.0.0.1:${E2E_PG_PORT:?run through scripts/e2e-compose.mjs}:5432"
