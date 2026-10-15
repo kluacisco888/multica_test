@@ -84,6 +84,8 @@ node screenshot.mjs 'https://dida365.com/webapp/#q/all/tasks' -o ~/reference-sho
 | `{ "read": "<选择器>", "html": false }` | 只读：把所有匹配元素（最多 20 个）的文字、位置（`rect`），`html: true` 时还有 HTML，记进输出的 `reads` |
 | `{ "type": "明天上午开会", "into": "<选择器>" }` | 打字预览（ADR-0010）：一个字一个字打进输入框，1–200 字，不能有换行、制表符等控制字符 |
 | `{ "clear": "<选择器>" }` | 清空同一个输入框（全选后删除） |
+| `{ "download": "text=\"生成备份\"", "saveAs": "x.csv" }` | ADR-0010：点「生成备份」并接收浏览器下载（滴答直接给文件时）。只认这一个按钮，文件只能是 `.csv`、存到仓库外（权限 600） |
+| `{ "fetchBackup": true, "saveAs": "x.csv", "waitMinutes": 10 }` | ADR-0010：滴答在后台生成备份时（弹窗「稍后可在通知中心下载文件」），用 GET 读通知列表 `https://api.dida365.com/api/v2/notification?autoMarkRead=false`（不标已读，地址写死在 `lib.mjs`），取最新一条成功的导出通知里的下载地址并下载，地址只能是 https 的 `dida365.com`（含子域名）。最多等 `waitMinutes` 分钟 |
 
 新标签页和新窗口一律不许打开，分两层（EURO-22 审查）：
 
@@ -97,9 +99,11 @@ node screenshot.mjs 'https://dida365.com/webapp/#q/all/tasks' -o ~/reference-sho
 
 ### 打字预览（ADR-0010）
 
-`type` 和 `clear` 只能用在「添加任务」输入框上：目标必须是文字输入框（`input` 文字类型、`textarea` 或可编辑区域），而且它或它往上 10 层祖先的 placeholder / aria-label / 提示文字里写着「添加任务」，或者祖先的 id 是 `add-task`。任务标题、描述、评论这类会自动保存的地方都不满足，工具拒绝打字、这次运行失败。不提供 Enter，也不能点「添加」类按钮，所以打的字不会保存；输入时页面发出的写请求照样被拦截。
+`type` 和 `clear` 只能用在「添加任务」输入框上：目标必须是文字输入框（`input` 文字类型、`textarea` 或可编辑区域），而且它自己或它所在的编辑器（CodeMirror、ProseMirror 等）的 placeholder / aria-label / 提示文字里写着「添加任务」，或者它在 id 为 `add-task` / `quick-add` 的容器里。外层容器里别处的「添加任务」字样不算。任务标题、描述、评论这类会自动保存的地方都不满足，工具拒绝打字、这次运行失败。不提供 Enter，也不能点「添加」类按钮，所以打的字不会保存；输入时页面发出的写请求照样被拦截。
 
 滴答网页版的添加任务框是 `#add-task` 里的 CodeMirror 编辑器，识别出的文字用 `cm-bold` 标出，右边的日期按钮（`#add-task .preset-time`）显示识别出的日期和时间，点开能看到提醒和重复。EURO-39 的核对脚本在 `scripts/euro-39-typing*.json`。
+
+一个脚本里 `download` 和 `fetchBackup` 合计最多一次（ADR-0010：每个子任务最多导出一次）。失败的运行也会在 stderr 打出 `blockedRequests`。
 
 没有拖动类的步骤；其他字段一律拒绝，整份脚本在启动浏览器之前就校验完。点击前工具会检查目标控件（离它最近的按钮 / 链接 / 菜单项）：输入框、下拉框、可编辑区域，以及文字里带「删除、新建、添加、完成、保存、确定、移动、归档、放弃、清空、退出、订阅、升级、编辑、上传」等字样的控件都拒绝点击，脚本报错退出、不截图。写请求的拦截不受脚本影响。
 

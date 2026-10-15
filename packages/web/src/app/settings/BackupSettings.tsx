@@ -13,7 +13,8 @@ import * as api from '../../api.js';
 /*
  * 设置 →「关联与导入」→ 备份与还原 (spec 用户故事 110–112): 生成备份 downloads
  * the whole account as JSON, 导出任务 the 任务 as CSV, 导入本地备份 imports a
- * JSON backup of this app. A refused file lists the records at fault.
+ * JSON backup of this app, 导入滴答清单备份 a 滴答 CSV (用户故事 113). A refused
+ * file lists the records (or lines) at fault.
  */
 
 type Message = { kind: 'ok' | 'error'; text: string };
@@ -30,6 +31,8 @@ export function BackupSettings() {
   const titleId = useId();
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
+  const tickTickInputId = useId();
+  const tickTickInput = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportMessage, setExportMessage] = useState<Message | null>(null);
@@ -74,10 +77,28 @@ export function BackupSettings() {
       setMessage({ kind: 'error', text: '这不是有效的 JSON 文件，请选择本应用导出的备份文件' });
       return;
     }
+    await runImport(() => api.importBackup(doc).then((r) => r.imported));
+  }
+
+  /** 导入滴答清单备份 (spec 用户故事 113): the CSV file as 滴答's 生成备份 downloaded it. */
+  async function onTickTickFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || importing) return;
+    setIssues([]);
+    setImported(false);
+    if (file.size > BACKUP_IMPORT_MAX_BYTES) {
+      setMessage({ kind: 'error', text: `文件太大，最大 ${formatBackupSize(BACKUP_IMPORT_MAX_BYTES)}` });
+      return;
+    }
+    await runImport(() => api.importTickTickBackup(file));
+  }
+
+  async function runImport(run: () => Promise<Record<string, number>>) {
     setImporting(true);
     setMessage({ kind: 'ok', text: '正在导入…' });
     try {
-      const result = await api.importBackup(doc);
+      const result = { imported: await run() };
       setMessage({ kind: 'ok', text: `导入完成：${summary(result.imported)}。刷新页面后可以看到导入的数据。` });
       setImported(true);
     } catch (e) {
@@ -144,6 +165,27 @@ export function BackupSettings() {
           className="visually-hidden"
           tabIndex={-1}
           onChange={(e) => void onFile(e)}
+        />
+      </div>
+      <div className="settings-row">
+        <span className="settings-row-stacked">
+          <span className="settings-row-label">导入滴答清单备份</span>
+          <span className="settings-row-hint">选择滴答清单「生成备份」下载的 CSV 文件，清单、文件夹、标签、子任务、日期、重复和提醒都会导入；看板分栏不导入。同一份文件导入两次，会多出一套同样的清单和任务</span>
+        </span>
+        <button type="button" className="settings-link" aria-disabled={importing} onClick={() => !importing && tickTickInput.current?.click()}>
+          导入滴答清单备份
+        </button>
+        <label htmlFor={tickTickInputId} className="visually-hidden">
+          选择滴答清单备份文件
+        </label>
+        <input
+          ref={tickTickInput}
+          id={tickTickInputId}
+          type="file"
+          accept=".csv,text/csv"
+          className="visually-hidden"
+          tabIndex={-1}
+          onChange={(e) => void onTickTickFile(e)}
         />
       </div>
       <div className="backup-status">

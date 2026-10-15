@@ -218,7 +218,7 @@ function parentsFirst(entries: Entry[], selfRefs: BackupColumn[]): Entry[] | { c
 }
 
 /** Reserve `count` revisions of the user; returns the one before the first. */
-async function reserveRevisions(tx: Tx, userId: string, count: number): Promise<number> {
+export async function reserveRevisions(tx: Tx, userId: string, count: number): Promise<number> {
   const [row] = await tx
     .insert(userRevisions)
     .values({ userId, revision: count })
