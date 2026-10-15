@@ -137,7 +137,10 @@ const composeEnv = { ...process.env, E2E_ENV_FILE: envFile, E2E_PG_PORT: String(
 function run(command, args, options) {
   return new Promise((resolve) => {
     const child = spawn(command, args, { stdio: 'inherit', ...options });
-    child.on('error', () => resolve(1));
+    child.on('error', (error) => {
+      console.error(`[e2e-compose] cannot run ${command}: ${error.message}`);
+      resolve(1);
+    });
     child.on('exit', (code) => resolve(code ?? 1));
   });
 }
