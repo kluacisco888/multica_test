@@ -136,7 +136,7 @@ curl http://127.0.0.1:8090/api/health
 
 ### 核对数据一致
 
-迁移前后各在服务器上跑一次，输出应该完全相同（行数 + 校验和；附件是 sha256）。迁移前先停 `app`，否则会话等数据会在两次之间变化：
+迁移前后各在服务器上跑一次，输出应该完全相同（行数 + 校验和；附件是 sha256）。迁移前先停 `app`，否则会话等数据会在两次之间变化。这里只列用户数据的关键表；`scripts/migration-drill.sh` 比对的是全部表：
 
 ```bash
 docker compose exec -T postgres psql -U dida -d dida -At <<'SQL'
