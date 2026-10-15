@@ -558,3 +558,16 @@ export async function importBackup(doc: unknown): Promise<ImportResponse> {
   const res = await call('POST', '/api/backup/import', doc);
   return importResponseSchema.parse(await res.json());
 }
+
+/** Import a 滴答清单 backup (the CSV file as it was downloaded); refusals carry the lines in `issues`. */
+export async function importTickTickBackup(file: File): Promise<Record<string, number>> {
+  const res = await check(
+    await fetch('/api/backup/import-ticktick', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'text/csv' },
+      body: file,
+    }),
+  );
+  return ((await res.json()) as { imported: Record<string, number> }).imported;
+}

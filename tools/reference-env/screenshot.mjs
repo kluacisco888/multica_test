@@ -4,13 +4,13 @@
 // 点击前拒绝输入控件和会改数据的控件。所有非 GET/HEAD/OPTIONS 请求和全部 WebSocket 连接都被拦截，防止改动参照账号的数据。
 /* global window, Element, HTMLAnchorElement, HTMLFormElement, document -- used only in code that runs inside the page (addInitScript, evaluate) */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
-import { forbiddenControl, isReadOnlyMethod, parseArgs, parseScript, profileLockOwner, resolveOutputPath } from './lib.mjs';
+import { BACKUP_NOTICE_URL, backupDownloadLink, forbiddenControl, isReadOnlyMethod, parseArgs, parseScript, profileLockOwner, resolveOutputPath } from './lib.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,7 +29,11 @@ async function main() {
   // Parse and check the whole script (and every screenshot path) before touching the profile.
   const steps = args.script ? parseScript(readFileSync(args.script, 'utf8')) : [];
   const stepOutputs = steps.map((step) =>
-    step.action === 'screenshot' ? resolveOutputPath(step.output, root, path.dirname(output)) : null,
+    step.action === 'screenshot'
+      ? resolveOutputPath(step.output, root, path.dirname(output))
+      : step.action === 'download' || step.action === 'fetchBackup'
+        ? resolveOutputPath(step.output, root, path.dirname(output), '.csv')
+        : null,
   );
   const stateDir = process.env.DIDA_REF_HOME || path.join(homedir(), '.dida-reference');
   const profileDir = path.join(stateDir, 'profile');
@@ -329,11 +333,13 @@ async function main() {
     await page.goto(args.url, { waitUntil: 'load', timeout: 60_000 });
     await page.waitForTimeout(args.waitMs);
     const screenshots = [];
+    const downloads = [];
     const log = [];
     for (const [i, step] of steps.entries()) {
       await runStep(page, step, stepOutputs[i]);
       checkPages(`步骤 ${i + 1} `);
-      if (stepOutputs[i]) screenshots.push(stepOutputs[i]);
+      if (stepOutputs[i] && step.action === 'screenshot') screenshots.push(stepOutputs[i]);
+      if (step.action === 'download' || step.action === 'fetchBackup') downloads.push(stepOutputs[i]);
       log.push({ ...step, blockedSoFar: blocked.length });
     }
     checkPages('');
@@ -346,19 +352,25 @@ async function main() {
           requested: args.url,
           finalUrl: page.url(),
           title: await page.title(),
-          ...(args.script ? { script: path.resolve(args.script), steps: log, screenshots } : {}),
+          ...(args.script ? { script: path.resolve(args.script), steps: log, screenshots, ...(downloads.length > 0 ? { downloads, fetchedFrom } : {}) } : {}),
           blockedRequests: blocked,
         },
         null,
         2,
       ),
     );
+  } catch (e) {
+    // A failed run still says what was blocked (ADR-0008: the PR lists blockedRequests).
+    console.error(JSON.stringify({ blockedRequests: blocked, blockedPopups, newPages: [...heldPages, ...extraPages] }, null, 2));
+    throw e;
   } finally {
     await context.close();
   }
 }
 
 const STEP_TIMEOUT_MS = 15_000;
+/** Where fetchBackup downloaded from (origin and path, without the signed query). */
+const fetchedFrom = [];
 
 /** One navigation step (ADR-0008). Clicks are checked against `forbiddenControl` first. */
 async function runStep(page, step, shotPath) {
@@ -406,6 +418,43 @@ async function runStep(page, step, shotPath) {
     case 'waitFor':
       await page.locator(step.selector).first().waitFor({ state: 'visible', timeout: STEP_TIMEOUT_MS });
       return;
+    case 'download': {
+      // ADR-0010: the 生成备份 button fetches the backup with GET requests (the write guard stays as it is)
+      // and saves it with a blob: link; Playwright receives the download.
+      const target = page.locator(step.selector).first();
+      await target.waitFor({ state: 'visible', timeout: STEP_TIMEOUT_MS });
+      mkdirSync(path.dirname(shotPath), { recursive: true, mode: 0o700 });
+      const [download] = await Promise.all([
+        page.waitForEvent('download', { timeout: 60_000 }).catch(async (e) => {
+          // What the page shows instead (a dialog, a 2FA prompt): saved next to the file, which never came.
+          await page.screenshot({ path: shotPath.replace(/\.csv$/i, '.no-download.png') }).catch(() => {});
+          throw e;
+        }),
+        target.click({ timeout: STEP_TIMEOUT_MS }),
+      ]);
+      await download.saveAs(shotPath);
+      chmodSync(shotPath, 0o600);
+      return;
+    }
+    case 'fetchBackup': {
+      // GET only (ADR-0010): the notification list (not marked read), then the download link it names.
+      const request = page.context().request;
+      const deadline = Date.now() + step.waitMinutes * 60_000;
+      let link = null;
+      for (;;) {
+        const res = await request.get(BACKUP_NOTICE_URL, { headers: { 'x-requested-with': 'XMLHttpRequest' } });
+        if (res.ok()) link = backupDownloadLink(await res.json());
+        if (link || Date.now() >= deadline) break;
+        await page.waitForTimeout(20_000);
+      }
+      if (!link) throw new Error(`${step.waitMinutes} 分钟内通知中心里没有生成好的备份`);
+      const file = await request.get(link, { timeout: 120_000 });
+      if (!file.ok()) throw new Error(`下载备份失败：HTTP ${file.status()}`);
+      mkdirSync(path.dirname(shotPath), { recursive: true, mode: 0o700 });
+      writeFileSync(shotPath, await file.body(), { mode: 0o600 });
+      fetchedFrom.push(`GET ${new URL(link).origin}${new URL(link).pathname.replace(/[^/]+$/, '<文件名>')}`);
+      return;
+    }
     case 'screenshot':
       mkdirSync(path.dirname(shotPath), { recursive: true, mode: 0o700 });
       await page.screenshot({ path: shotPath, fullPage: step.fullPage });

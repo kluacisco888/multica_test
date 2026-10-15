@@ -92,6 +92,8 @@ export const importIssueSchema = z.object({
   entity: z.string(),
   index: z.number().int(),
   id: z.string().nullable(),
+  /** 滴答清单 CSV: the row's title (shortened), to find the line. */
+  title: z.string().optional(),
   message: z.string(),
 });
 export type ImportIssue = z.infer<typeof importIssueSchema>;
@@ -104,6 +106,11 @@ export type ImportResponse = z.infer<typeof importResponseSchema>;
 
 /** 任务 第 3 条（id …）：原因 */
 export function describeImportIssue(issue: ImportIssue): string {
+  // 滴答清单 CSV: `index` is the line of the file.
+  if (issue.entity === 'ticktickCsv') {
+    if (issue.index <= 0) return issue.message;
+    return `第 ${issue.index} 行${issue.title ? `（${issue.title}）` : ''}：${issue.message}`;
+  }
   const name = BACKUP_ENTITY_NAMES[issue.entity as BackupEntityType] ?? issue.entity;
   const where = issue.index > 0 ? `${name} 第 ${issue.index} 条` : name;
   return `${where}${issue.id ? `（id ${issue.id}）` : ''}：${issue.message}`;

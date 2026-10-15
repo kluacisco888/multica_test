@@ -14,14 +14,14 @@ export function isReadOnlyMethod(method) {
 }
 
 /** 解析输出路径为绝对路径；拒绝写进仓库，避免截图里的个人数据被提交。 */
-export function resolveOutputPath(output, repoRoot, cwd = process.cwd()) {
+export function resolveOutputPath(output, repoRoot, cwd = process.cwd(), ext = '.png') {
   const abs = path.resolve(cwd, output);
   const rel = path.relative(path.resolve(repoRoot), abs);
   if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
     throw new Error(`输出路径 ${abs} 在仓库内；截图含个人数据，只能写到仓库外`);
   }
-  if (path.extname(abs).toLowerCase() !== '.png') {
-    throw new Error('输出文件必须以 .png 结尾');
+  if (path.extname(abs).toLowerCase() !== ext) {
+    throw new Error(`输出文件必须以 ${ext} 结尾`);
   }
   return abs;
 }
@@ -125,7 +125,7 @@ export function parseScript(json) {
     throw new Error(`导航脚本不是合法 JSON：${e.message}`, { cause: e });
   }
   if (!Array.isArray(raw)) throw new Error('导航脚本必须是步骤数组');
-  return raw.map((step, i) => {
+  const steps = raw.map((step, i) => {
     if (step === null || typeof step !== 'object' || Array.isArray(step)) throw stepError(i, step, '每一步是一个对象');
     const keys = Object.keys(step);
     const only = (...allowed) => {
@@ -171,15 +171,64 @@ export function parseScript(json) {
       if (!NAVIGATION_KEYS.has(step.press)) throw stepError(i, step, `只允许导航键 ${[...NAVIGATION_KEYS].join(' ')}`);
       return { action: 'press', key: step.press };
     }
+    if ('download' in step) {
+      // ADR-0010：点「生成备份」并接收下载。只认这一个按钮，文件只能是 .csv，存到仓库外。
+      only('download', 'saveAs');
+      if (step.download !== BACKUP_EXPORT_BUTTON) throw stepError(i, step, `download 只能点 ${BACKUP_EXPORT_BUTTON}（ADR-0010）`);
+      if (typeof step.saveAs !== 'string' || !step.saveAs.toLowerCase().endsWith('.csv')) throw stepError(i, step, 'saveAs 以 .csv 结尾');
+      return { action: 'download', selector: step.download, output: step.saveAs };
+    }
+    if ('fetchBackup' in step) {
+      // ADR-0010：滴答的备份是后台生成的，生成好后在通知中心给出下载地址。这一步只发 GET：
+      // 读通知列表（不标已读），取最新一条成功的导出通知里的下载地址并下载。
+      only('fetchBackup', 'saveAs', 'waitMinutes');
+      if (step.fetchBackup !== true) throw stepError(i, step, 'fetchBackup 只能是 true');
+      if (typeof step.saveAs !== 'string' || !step.saveAs.toLowerCase().endsWith('.csv')) throw stepError(i, step, 'saveAs 以 .csv 结尾');
+      const minutes = step.waitMinutes ?? 10;
+      if (!Number.isInteger(minutes) || minutes < 0 || minutes > 30) throw stepError(i, step, 'waitMinutes 是 0–30 的整数');
+      return { action: 'fetchBackup', output: step.saveAs, waitMinutes: minutes };
+    }
     if ('screenshot' in step) {
       only('screenshot', 'fullPage');
       if (typeof step.screenshot !== 'string' || !step.screenshot.toLowerCase().endsWith('.png')) throw stepError(i, step, '截图文件以 .png 结尾');
       if (step.fullPage !== undefined && typeof step.fullPage !== 'boolean') throw stepError(i, step, 'fullPage 是布尔值');
       return { action: 'screenshot', output: step.screenshot, fullPage: step.fullPage ?? false };
     }
-    throw stepError(i, step, '只允许 click / hover / scroll / press / wait / waitFor / screenshot（不打字、不拖动）');
+    throw stepError(i, step, '只允许 click / hover / scroll / press / wait / waitFor / screenshot / download（不打字、不拖动）');
   });
+  if (steps.filter((s) => s.action === 'download' || s.action === 'fetchBackup').length > 1) throw new Error('一个脚本最多导出一次备份（ADR-0010）');
+  return steps;
 }
+
+/** ADR-0010：读导出通知的地址（GET，不标已读），写死在这里。 */
+/** fetchBackup 只从这个域名下载备份。 */
+export const BACKUP_HOST = 'dida365.com';
+
+export const BACKUP_NOTICE_URL = 'https://api.dida365.com/api/v2/notification?autoMarkRead=false';
+
+/**
+ * 从通知列表里取最新一条成功的导出（exportTask）通知的下载地址；没有时返回 null。
+ * 只接受 https、并且是 dida365.com（含子域名）的地址。
+ */
+export function backupDownloadLink(notifications) {
+  const list = Array.isArray(notifications) ? notifications : [];
+  const exports = list
+    .filter((n) => n && n.type === 'exportTask' && n.data && n.data.status === 'success' && typeof n.data.downloadLink === 'string')
+    .sort((a, b) => String(b.createdTime ?? b.createdDate ?? '').localeCompare(String(a.createdTime ?? a.createdDate ?? '')));
+  const link = exports[0]?.data.downloadLink;
+  if (!link) return null;
+  try {
+    const url = new URL(link);
+    // Only 滴答's own host (and its subdomains): the second GET goes nowhere else.
+    const host = url.hostname.toLowerCase();
+    return url.protocol === 'https:' && (host === BACKUP_HOST || host.endsWith(`.${BACKUP_HOST}`)) ? link : null;
+  } catch {
+    return null;
+  }
+}
+
+/** ADR-0010：唯一允许 download 的控件，滴答设置「关联与导入 → 备份与还原」里的「生成备份」。 */
+export const BACKUP_EXPORT_BUTTON = 'text="生成备份"';
 
 /** 会新建、修改、删除数据或改变账号状态的控件文字（ADR-0008：这些不点）。 */
 const FORBIDDEN_LABELS =

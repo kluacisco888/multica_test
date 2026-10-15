@@ -1,0 +1,3 @@
+[
+  { "fetchBackup": true, "saveAs": "dida-backup.csv", "waitMinutes": 10 }
+]
