@@ -527,10 +527,39 @@ describe('导出大小和并发', () => {
   it('builds one export per user at a time', async () => {
     const u = await withFiles([10 * 1024]);
     const other = await withFiles([10 * 1024]);
-    const [a, b, c] = await Promise.all([exportOf(u), exportOf(u), exportOf(other)]);
-    expect([a.statusCode, b.statusCode].sort()).toEqual([200, 409]);
-    expect([a, b].find((r) => r.statusCode === 409)?.json().error.code).toBe('export_running');
-    expect(c.statusCode).toBe(200);
+    // Hold u's first export inside the handler (reading its file) until the
+    // other requests have answered. Firing both at once with Promise.all does
+    // not make them overlap: each first awaits its session lookup, and when
+    // the second lookup lags behind the whole first export, the second export
+    // rightly gets 200 (EURO-42).
+    const open = t.app.attachmentStore.open;
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let entered!: () => void;
+    const inside = new Promise<void>((resolve) => (entered = resolve));
+    let held = false;
+    t.app.attachmentStore.open = async (userId, id) => {
+      if (userId === u.id && !held) {
+        held = true;
+        entered();
+        await released;
+      }
+      return open(userId, id);
+    };
+    try {
+      const first = exportOf(u);
+      await inside;
+      const [second, c] = await Promise.all([exportOf(u), exportOf(other)]);
+      expect(second.statusCode).toBe(409);
+      expect(second.json().error.code).toBe('export_running');
+      // Per user: another user's export is not held up.
+      expect(c.statusCode).toBe(200);
+      release();
+      expect((await first).statusCode).toBe(200);
+    } finally {
+      release();
+      t.app.attachmentStore.open = open;
+    }
     // Released afterwards, also after a refused export.
     expect((await exportOf(u)).statusCode).toBe(200);
     const tooBig = await withFiles([40 * 1024, 40 * 1024]);
