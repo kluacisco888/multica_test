@@ -11,6 +11,7 @@ import {
   parseArgs,
   parseScript,
   forbiddenControl,
+  forbiddenTypingTarget,
   profileLockOwner,
 } from '../lib.mjs';
 
@@ -124,7 +125,7 @@ test('parseScript accepts multi-select clicks (Shift / Ctrl / Cmd) and right cli
   }
 });
 
-test('parseScript rejects typing, dragging, unknown steps and bad values', () => {
+test('parseScript rejects fill, typing without a field, dragging, unknown steps and bad values', () => {
   assert.throws(() => parseScript('{}'), /数组/);
   assert.throws(() => parseScript('not json'), /JSON/);
   for (const step of [
@@ -213,5 +214,59 @@ test('forbiddenControl flags controls that would create, change or delete data',
   assert.ok(forbiddenControl({ text: '', tag: 'div', editable: true }), 'contenteditable');
   for (const label of ['月', '周', '日', '多日', '日历', '今天', '下一页', '']) {
     assert.equal(forbiddenControl({ text: label, tag: 'div' }), null, label);
+  }
+});
+
+test('parseScript accepts typing into a field, clearing it and reading text (ADR-0010)', () => {
+  assert.deepEqual(
+    parseScript(
+      JSON.stringify([
+        { type: '明天上午提醒我去取快递', into: '.add-task-input' },
+        { read: '.add-task-input', html: true },
+        { read: 'text=明天' },
+        { clear: '.add-task-input' },
+      ]),
+    ),
+    [
+      { action: 'type', selector: '.add-task-input', text: '明天上午提醒我去取快递' },
+      { action: 'read', selector: '.add-task-input', html: true },
+      { action: 'read', selector: 'text=明天', html: false },
+      { action: 'clear', selector: '.add-task-input' },
+    ],
+  );
+});
+
+test('parseScript refuses typing that could submit or is not plain text', () => {
+  for (const step of [
+    { type: 'abc' },
+    { type: '', into: 'x' },
+    { type: 'a\nb', into: 'x' },
+    { type: 'a\rb', into: 'x' },
+    { type: 'a\tb', into: 'x' },
+    { type: 'x'.repeat(201), into: 'x' },
+    { type: 1, into: 'x' },
+    { type: 'a', into: '' },
+    { type: 'a', into: 'x', press: 'Enter' },
+    { clear: '' },
+    { read: 'x', html: 'yes' },
+    { read: 'x', extra: 1 },
+  ]) {
+    assert.throws(() => parseScript(JSON.stringify([step])), /步骤/, JSON.stringify(step));
+  }
+});
+
+test('forbiddenTypingTarget allows only the 添加任务 field (ADR-0010)', () => {
+  assert.equal(forbiddenTypingTarget({ tag: 'input', type: 'text', labels: ['添加任务至"收集箱"，回车即可保存'] }), null);
+  assert.equal(forbiddenTypingTarget({ tag: 'div', editable: true, labels: ['', '+ 添加任务'] }), null);
+  assert.equal(forbiddenTypingTarget({ tag: 'textarea', labels: ['快速添加任务'] }), null);
+  // 滴答：#add-task 里的 CodeMirror 编辑器，提示文字画在旁边的 span 里。
+  assert.equal(forbiddenTypingTarget({ tag: 'textarea', labels: [null, '#add-task'] }), null);
+  assert.match(forbiddenTypingTarget({ tag: 'textarea', labels: ['#task-detail', '#add-task-button-x'] }), /添加任务/);
+  assert.match(forbiddenTypingTarget({ tag: 'div', editable: false, labels: ['添加任务'] }), /输入框/);
+  assert.match(forbiddenTypingTarget({ tag: 'input', type: 'checkbox', labels: ['添加任务'] }), /输入框/);
+  assert.match(forbiddenTypingTarget({ tag: 'input', type: 'password', labels: ['添加任务'] }), /输入框/);
+  // Fields that save on their own: a task's title, description, comments, search, list names.
+  for (const label of ['标题', '描述', '写评论', '搜索', '清单名称', '']) {
+    assert.match(forbiddenTypingTarget({ tag: 'div', editable: true, labels: [label] }), /添加任务/, label);
   }
 });

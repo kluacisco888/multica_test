@@ -1,0 +1,43 @@
+[
+ {
+  "type": "写代码 #zz测试标签",
+  "into": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "read": "#add-task .task-title > .relative > .MDEditor .CodeMirror-code",
+  "html": true
+ },
+ {
+  "read": "#add-task .preset-time"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "click": "#add-task .preset-time"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "read": "[class*='popover' i], [class*='dropdown-menu' i], [role='dialog'], [class*='date-picker' i]"
+ },
+ {
+  "press": "Escape"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "clear": "#add-task .task-title > .relative > .MDEditor .CodeMirror textarea"
+ },
+ {
+  "press": "Escape"
+ }
+]

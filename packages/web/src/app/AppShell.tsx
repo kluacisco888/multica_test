@@ -252,9 +252,9 @@ export function AppShell({ user, onLoggedOut }: { user: CurrentUser; onLoggedOut
   const timeZone = settings?.timeZone ?? DEFAULT_TIME_ZONE;
   const smartInput = settings?.smartInput;
   const sidebarLists = sidebar?.lists;
-  /** 智能识别 for every 新建任务 field (添加任务, 看板, 四象限, 日历); null when switched off. */
+  /** 智能识别 for every 新建任务 field (添加任务, 看板, 四象限, 日历); null when 日期识别 and 标签识别 are both off. */
   const smartAdd = useMemo<SmartAddOptions | null>(
-    () => (smartInput?.enabled ? { settings: smartInput, lists: sidebarLists ?? [], now, timeZone } : null),
+    () => (smartInput && (smartInput.dateParse || smartInput.tagParse) ? { settings: smartInput, lists: sidebarLists ?? [], now, timeZone } : null),
     [smartInput, sidebarLists, now, timeZone],
   );
   const today = todayIn(now, timeZone);

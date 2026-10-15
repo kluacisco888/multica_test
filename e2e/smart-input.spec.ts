@@ -2,10 +2,11 @@ import { expect, test, type Page } from '@playwright/test';
 import { createUser, isMobile, logIn, openAccount, openSidebar } from './support.js';
 
 /*
- * 智能识别 (EURO-27, spec 用户故事 51–58): the recognised parts are
- * highlighted in 添加任务, a click cancels one, 保留识别文字 keeps the text in
- * the title, and the 总开关 switches it all off. The server uses the real
- * clock, so dates are checked as 明天 (the list's label for tomorrow).
+ * 智能识别 (EURO-27, spec 用户故事 51–58; settings as 滴答's, EURO-39): the
+ * recognised parts are highlighted in 添加任务, a click cancels one, unticking
+ * 移除文本中的日期 / 移除任务标题中的标签 keeps their text in the title, and
+ * 日期识别 / 标签识别 switch them off. The server uses the real clock, so
+ * dates are checked as 明天 (the list's label for tomorrow).
  */
 
 const quickAdd = (page: Page) => page.getByRole('textbox', { name: '添加任务' });
@@ -94,53 +95,87 @@ test('a click on a highlight cancels that part', async ({ page }) => {
     await token(page, '日期“明天”').click();
   }
 
+  // 提醒我 alone is not recognised (滴答): nothing is left, the text is saved as typed.
+  await expect(page.getByTestId('smart-highlights')).toHaveCount(0);
   await quickAdd(page).press('Enter');
-  await expect(taskButton(page, '明天上午去取快递')).toBeVisible();
-  // 提醒我 still applies: today, with a reminder.
-  await expect(openRow(page, '明天上午去取快递')).toContainText('今天');
+  await expect(taskButton(page, '明天上午提醒我去取快递')).toBeVisible();
+  await expect(openRow(page, '明天上午提醒我去取快递')).not.toContainText('今天');
 });
 
-test('保留识别文字 keeps the recognised text in the title', async ({ page }) => {
+test('the 智能识别 settings are laid out as 滴答’s, with 滴答’s defaults', async ({ page }, testInfo) => {
+  const user = createUser('smart-layout');
+  await logIn(page, user.username, user.password);
+
+  const dialog = await openSmartSettings(page, user.username);
+  const section = dialog.getByRole('region', { name: '智能识别' });
+  await expect(section.getByRole('switch')).toHaveCount(3);
+  for (const name of ['日期识别', '标签识别', '网址解析']) await expect(section.getByRole('switch', { name })).toBeChecked();
+  for (const name of ['移除文本中的日期', '移除任务标题中的标签']) await expect(section.getByRole('checkbox', { name })).toBeChecked();
+  await expect(section.getByRole('switch', { name: '日期识别' })).toHaveAccessibleDescription('添加任务时，识别日期和时间信息并自动设置提醒。');
+  await expect(section.getByRole('switch', { name: '标签识别' })).toHaveAccessibleDescription('添加任务时，你可以选择在任务标题中保留或移除标签文本。');
+  await expect(section.getByRole('switch', { name: '网址解析' })).toHaveAccessibleDescription('当任务标题为网址时，将识别为网页标题以便查看。');
+  // 滴答's order: each switch, then its 移除 tick.
+  const order = await section.locator('input[type="checkbox"]').evaluateAll((els) => els.map((el) => (el as HTMLInputElement).labels?.[0]?.textContent?.trim()));
+  expect(order).toEqual(['日期识别', '移除文本中的日期', '标签识别', '移除任务标题中的标签', '网址解析']);
+  await page.screenshot({ path: testInfo.outputPath(`smart-input-settings-${testInfo.project.name}.png`) });
+});
+
+test('unticking 移除文本中的日期 / 移除任务标题中的标签 keeps that text in the title', async ({ page }) => {
   const user = createUser('smart-keep');
   await logIn(page, user.username, user.password);
 
   const dialog = await openSmartSettings(page, user.username);
-  const keep = dialog.getByRole('checkbox', { name: '保留识别文字' });
-  await expect(keep).not.toBeChecked();
-  await saveSetting(page, () => keep.check());
+  await saveSetting(page, () => dialog.getByRole('checkbox', { name: '移除文本中的日期' }).uncheck());
   await closeSettings(page);
 
-  await quickAdd(page).fill('明天买牛奶');
+  await quickAdd(page).fill('明天买牛奶 #购物');
   await expect(token(page, '日期“明天”')).toBeVisible();
   await quickAdd(page).press('Enter');
+  // The date text stays, the 标签 is still taken out.
   await expect(taskButton(page, '明天买牛奶')).toBeVisible();
   await expect(openRow(page, '明天买牛奶')).toContainText('明天');
+  await expect(openRow(page, '明天买牛奶')).toContainText('购物');
+
+  const again = await openSmartSettings(page, user.username);
+  await saveSetting(page, () => again.getByRole('checkbox', { name: '移除任务标题中的标签' }).uncheck());
+  await closeSettings(page);
+  await quickAdd(page).fill('后天买面包 #购物');
+  await expect(token(page, '标签“#购物”')).toBeVisible();
+  await quickAdd(page).press('Enter');
+  await expect(taskButton(page, '后天买面包 #购物')).toBeVisible();
 });
 
-test('the 智能识别 switch turns recognition off', async ({ page }, testInfo) => {
+test('日期识别 off: dates are no longer recognised, 标签 still are; 标签识别 off too: nothing is', async ({ page }) => {
   const user = createUser('smart-off');
   await logIn(page, user.username, user.password);
 
   const dialog = await openSmartSettings(page, user.username);
-  const toggle = dialog.getByRole('switch', { name: '智能识别' });
-  await expect(toggle).toBeChecked();
-  await page.screenshot({ path: testInfo.outputPath(`smart-input-settings-${testInfo.project.name}.png`) });
-  await saveSetting(page, () => toggle.uncheck());
-  await expect(dialog.getByRole('checkbox', { name: '保留识别文字' })).toBeDisabled();
+  await saveSetting(page, () => dialog.getByRole('switch', { name: '日期识别' }).uncheck());
+  await expect(dialog.getByRole('checkbox', { name: '移除文本中的日期' })).toBeDisabled();
   await closeSettings(page);
 
   await quickAdd(page).fill('明天买牛奶 #购物');
-  await expect(page.getByTestId('smart-highlights')).toHaveCount(0);
+  await expect(token(page, '标签“#购物”')).toBeVisible();
+  await expect(token(page, '日期“明天”')).toHaveCount(0);
   await quickAdd(page).press('Enter');
-  await expect(taskButton(page, '明天买牛奶 #购物')).toBeVisible();
-  await taskButton(page, '明天买牛奶 #购物').click();
+  await expect(taskButton(page, '明天买牛奶')).toBeVisible();
+  await taskButton(page, '明天买牛奶').click();
   const detail = page.getByRole('complementary', { name: '任务详情' });
   await expect(detail.getByRole('button', { name: '设置日期' })).toBeVisible();
   if (isMobile(page)) await page.getByRole('button', { name: '返回列表' }).click();
 
+  const tags = await openSmartSettings(page, user.username);
+  await saveSetting(page, () => tags.getByRole('switch', { name: '标签识别' }).uncheck());
+  await expect(tags.getByRole('checkbox', { name: '移除任务标题中的标签' })).toBeDisabled();
+  await closeSettings(page);
+  await quickAdd(page).fill('明天买面包 #购物');
+  await expect(page.getByTestId('smart-highlights')).toHaveCount(0);
+  await quickAdd(page).press('Enter');
+  await expect(taskButton(page, '明天买面包 #购物')).toBeVisible();
+
   // Back on: recognised again.
   const again = await openSmartSettings(page, user.username);
-  await saveSetting(page, () => again.getByRole('switch', { name: '智能识别' }).check());
+  await saveSetting(page, () => again.getByRole('switch', { name: '日期识别' }).check());
   await closeSettings(page);
   await quickAdd(page).fill('后天买牛奶');
   await expect(token(page, '日期“后天”')).toBeVisible();
@@ -152,7 +187,7 @@ test('模糊时间 settings change what 上午 means', async ({ page }) => {
 
   const dialog = await openSmartSettings(page, user.username);
   const morning = dialog.getByLabel('上午', { exact: true });
-  await expect(morning).toHaveValue('10:00');
+  await expect(morning).toHaveValue('09:00');
   await saveSetting(page, () => morning.fill('08:30'));
   await closeSettings(page);
 
@@ -257,7 +292,7 @@ test('四象限: the quadrant quick add highlights, cancels on click and keeps t
   await expect(quadrant.getByRole('button', { name: '交报告 #客户', exact: true })).toBeVisible();
   const tomorrow = shanghaiDate(1);
   const task = await taskTitled(page, `from=${shanghaiDate(-1)}&to=${shanghaiDate(3)}`, '交报告 #客户');
-  expect(task).toMatchObject({ priority: 'high', tagIds: [], dates: { allDay: false, dueAt: shanghaiAt(tomorrow, '10:00') } });
+  expect(task).toMatchObject({ priority: 'high', tagIds: [], dates: { allDay: false, dueAt: shanghaiAt(tomorrow, '09:00') } });
 });
 
 test('日历: the 新建任务 popover highlights, cancels on click, and a recognised date replaces the clicked day', async ({ page }) => {
@@ -289,13 +324,13 @@ test('日历: the 新建任务 popover highlights, cancels on click, and a recog
   expect(await taskTitled(page, range, '明天交周报')).toMatchObject({ priority: 'medium', dates: { allDay: true, dueDate: '2026-10-22' } });
 });
 
-test('保留识别文字 and the 智能识别 switch apply to the 看板, 四象限 and 日历 fields too', async ({ page }) => {
+test('移除文本中的日期 and the 日期识别 / 标签识别 switches apply to the 看板, 四象限 and 日历 fields too', async ({ page }) => {
   const user = createUser('smart-views');
   await logIn(page, user.username, user.password);
 
-  // 保留识别文字: the 看板 card keeps its text and still gets the date.
+  // 移除文本中的日期 unticked: the 看板 card keeps its text and still gets the date.
   const keep = await openSmartSettings(page, user.username);
-  await saveSetting(page, () => keep.getByRole('checkbox', { name: '保留识别文字' }).check());
+  await saveSetting(page, () => keep.getByRole('checkbox', { name: '移除文本中的日期' }).uncheck());
   await closeSettings(page);
   const listId = await openBoard(page);
   await page.getByRole('button', { name: '在「未分组」中添加任务' }).click();
@@ -305,9 +340,10 @@ test('保留识别文字 and the 智能识别 switch apply to the 看板, 四象
   expect((await taskTitled(page, `listId=${listId}`, '后天复盘')).dates).toMatchObject({ allDay: true, dueDate: shanghaiDate(2) });
   await page.getByRole('textbox', { name: '添加任务到「未分组」' }).press('Escape');
 
-  // Switched off: no highlights anywhere, the text is saved as typed.
+  // Both switched off: no highlights anywhere, the text is saved as typed.
   const off = await openSmartSettings(page, user.username);
-  await saveSetting(page, () => off.getByRole('switch', { name: '智能识别' }).uncheck());
+  await saveSetting(page, () => off.getByRole('switch', { name: '日期识别' }).uncheck());
+  await saveSetting(page, () => off.getByRole('switch', { name: '标签识别' }).uncheck());
   await closeSettings(page);
 
   await page.getByRole('button', { name: '在「未分组」中添加任务' }).click();

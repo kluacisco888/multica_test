@@ -101,7 +101,10 @@ export function profileLockOwner(profileDir) {
 // 一个 JSON 数组，每一步只能是下面之一（selector 是 Playwright 选择器，如 `text=月`、`role=button[name="周"]`、CSS）：
 //   { "click": sel }   { "hover": sel }   { "scroll": sel, "by": 像素 }   { "press": "Escape" }
 //   { "wait": 毫秒 }   { "waitFor": sel }   { "screenshot": "名字.png", "fullPage"?: bool }
-// 没有 fill / type / drag：不打字、不拖动。press 只允许关闭弹层和翻页用的键。
+//   { "read": sel, "html"?: bool }：把匹配元素的文字（和 HTML）记进输出，只读
+// ADR-0010 打字预览：{ "type": "文字", "into": sel } 只能打进「添加任务」输入框（见 forbiddenTypingTarget），
+//   文字里不能有换行、制表符；{ "clear": sel } 清空同一个输入框。仍然没有 Enter、fill、drag。
+// press 只允许关闭弹层和翻页用的键。
 
 const MAX_WAIT_MS = 120_000;
 /** 只用于关闭弹层、移动焦点、滚动的键；不含 Enter / 空格（会触发按钮）和字符键。 */
@@ -115,6 +118,9 @@ function stepError(index, step, why) {
 }
 
 const isSelector = (v) => typeof v === 'string' && v.trim() !== '';
+
+/** 打字预览一次最多打的字数（ADR-0010）。 */
+const MAX_TYPE_LENGTH = 200;
 
 /** 解析并校验导航脚本，返回规范化的步骤；任何不在白名单里的操作都拒绝。 */
 export function parseScript(json) {
@@ -171,6 +177,28 @@ export function parseScript(json) {
       if (!NAVIGATION_KEYS.has(step.press)) throw stepError(i, step, `只允许导航键 ${[...NAVIGATION_KEYS].join(' ')}`);
       return { action: 'press', key: step.press };
     }
+    if ('type' in step) {
+      only('type', 'into');
+      if (!isSelector(step.into)) throw stepError(i, step, 'into 是非空选择器（要打字的输入框）');
+      if (typeof step.type !== 'string' || step.type === '' || step.type.length > MAX_TYPE_LENGTH) {
+        throw stepError(i, step, `type 是 1–${MAX_TYPE_LENGTH} 个字的文字`);
+      }
+      // 换行会被当成回车提交；控制字符一律不许（ADR-0010：不按回车）。
+      // eslint-disable-next-line no-control-regex
+      if (/[\u0000-\u001f\u007f\u2028\u2029]/.test(step.type)) throw stepError(i, step, '文字里不能有换行、制表符等控制字符');
+      return { action: 'type', selector: step.into, text: step.type };
+    }
+    if ('clear' in step) {
+      only('clear');
+      if (!isSelector(step.clear)) throw stepError(i, step, '需要非空选择器');
+      return { action: 'clear', selector: step.clear };
+    }
+    if ('read' in step) {
+      only('read', 'html');
+      if (!isSelector(step.read)) throw stepError(i, step, '需要非空选择器');
+      if (step.html !== undefined && typeof step.html !== 'boolean') throw stepError(i, step, 'html 是布尔值');
+      return { action: 'read', selector: step.read, html: step.html ?? false };
+    }
     if ('download' in step) {
       // ADR-0010：点「生成备份」并接收下载。只认这一个按钮，文件只能是 .csv，存到仓库外。
       only('download', 'saveAs');
@@ -194,7 +222,7 @@ export function parseScript(json) {
       if (step.fullPage !== undefined && typeof step.fullPage !== 'boolean') throw stepError(i, step, 'fullPage 是布尔值');
       return { action: 'screenshot', output: step.screenshot, fullPage: step.fullPage ?? false };
     }
-    throw stepError(i, step, '只允许 click / hover / scroll / press / wait / waitFor / screenshot / download（不打字、不拖动）');
+    throw stepError(i, step, '只允许 click / hover / scroll / press / wait / waitFor / screenshot / read / type+into / clear / download / fetchBackup（不拖动）');
   });
   if (steps.filter((s) => s.action === 'download' || s.action === 'fetchBackup').length > 1) throw new Error('一个脚本最多导出一次备份（ADR-0010）');
   return steps;
@@ -248,4 +276,23 @@ export function forbiddenControl(el) {
   const text = String(el.text ?? '').trim();
   const hit = FORBIDDEN_LABELS.exec(text);
   return hit ? `控件「${text.slice(0, 40)}」含「${hit[0]}」，可能改数据` : null;
+}
+
+/** 「添加任务」类输入框的提示文字（ADR-0010：只在这里打字）。 */
+const ADD_TASK_LABEL = /添加任务|快速添加|\badd (a )?task\b|^#(add-task|quick-add)$/i;
+const TEXT_INPUT_TYPES = new Set(['', 'text', 'search']);
+
+/**
+ * 打字前检查目标；返回拒绝原因，可以打时返回 null。
+ * `el`：{ tag, type?, editable?, labels: 目标和它的祖先上的 placeholder / aria-label / data-placeholder / 提示文字，
+ *        以及祖先的 id（写成 `#id`；滴答的添加任务框是 `#add-task` 里的 CodeMirror） }
+ * 任务标题、描述、评论这类会自动保存的地方不许打字，所以只认提示文字里写着「添加任务」的输入框。
+ */
+export function forbiddenTypingTarget(el) {
+  const tag = String(el.tag ?? '').toLowerCase();
+  const isTextInput = (tag === 'input' && TEXT_INPUT_TYPES.has(String(el.type ?? '').toLowerCase())) || tag === 'textarea' || Boolean(el.editable);
+  if (!isTextInput) return `只能在文字输入框里打字（${tag}${el.type ? ` ${el.type}` : ''}）`;
+  const labels = (el.labels ?? []).map((l) => String(l ?? '').trim()).filter(Boolean);
+  if (!labels.some((l) => ADD_TASK_LABEL.test(l))) return `只能在「添加任务」输入框里打字（提示文字：${labels.join(' / ').slice(0, 60) || '无'}）`;
+  return null;
 }
