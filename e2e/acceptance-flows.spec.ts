@@ -656,9 +656,8 @@ test('8 子任务、检查项、评论和附件 → 搜索能按评论找到 →
   const box = page.getByRole('searchbox', { name: '搜索任务' });
   await box.fill('供应商');
   await box.press('Enter');
-  const rowOf = (title: string) => main(page).getByRole('listitem').filter({ has: page.getByRole('button', { name: title, exact: true }) });
-  await expect(rowOf('筹备年会')).toContainText('匹配评论');
-  await expect(rowOf('采购清单')).toContainText('匹配检查项');
+  await expect(taskRow(page, '筹备年会')).toContainText('匹配评论');
+  await expect(taskRow(page, '采购清单')).toContainText('匹配检查项');
   await page.screenshot({ path: testInfo.outputPath(`flow8-search-${testInfo.project.name}.png`) });
 
   // 完成 the parent from the 收件箱: its 子任务 is completed too; both are under 已完成 (用户故事 27、40).

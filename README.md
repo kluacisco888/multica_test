@@ -152,7 +152,7 @@ node scripts/e2e-compose.mjs --project-name dd-e2e --port 18190 --pg-port 18191 
 1. 确认 `127.0.0.1` 上的端口空闲、compose 项目还不存在（拒绝 `dida-clone` 和 `multica` 这两个项目名）。
 2. 照 `cp .env.example .env` 在 `test-results/compose-e2e/<项目名>/.env` 生成本次的配置，只改端口、随机密钥、e2e 管理员密码和节假日数据地址。仓库根目录的 `.env` 不用也不改。
 3. `docker compose -p <项目名> -f docker-compose.yml -f docker-compose.e2e.yml up -d --build --wait`。叠加文件只给测试用：镜像打成 `dida-clone-app:e2e`（不覆盖 `dida-clone-app:local`）、PostgreSQL 映射到 `127.0.0.1:<pg-port>`（只给 `e2eSql` 用），容器里加上 `host.docker.internal`。
-4. Playwright 直接连 `http://127.0.0.1:<port>`，不起 `scripts/e2e-server.mjs`。`dida …` 在 app 容器里执行；假 SMTP、假飞书和 holiday-cn 替身在测试进程里，监听 Docker 网桥（`docker0` 网关），容器通过 `host.docker.internal` 访问，消息不出本机。
+4. Playwright 直接连 `http://127.0.0.1:<port>`，不起 `scripts/e2e-server.mjs`。`dida …` 在 app 容器里执行；假 SMTP、假飞书和 holiday-cn 替身在测试进程里，监听 Docker 网桥（`docker0` 网关），容器通过 `host.docker.internal` 访问，消息不出本机（这几个替身本机上的其他容器也能连到，只在测试期间存在）。
 5. 最后 `docker compose -p <项目名> down -v`，并检查这个项目没有剩下容器、数据卷和网络；有剩余就以失败退出。`--keep` 跳过清理，方便排查，清理命令会打印出来。
 
 `e2e/acceptance-flows.spec.ts` 是跨功能的主流程（EURO-33）。用户故事 1–115 和测试的对应关系见 `docs/e2e-coverage.md`。
