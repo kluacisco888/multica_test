@@ -95,6 +95,8 @@ node screenshot.mjs 'https://dida365.com/webapp/#q/all/tasks' -o ~/reference-sho
 两种情况都让这次运行失败、不截图。
 
 后台 worker（Worker、SharedWorker）一律不许启动（EURO-22 第 3 次审查：worker 里开的 WebSocket 不经过 `routeWebSocket`，CDP 的 `Fetch` 和 `Network.setBlockedURLs` 也都管不到 WebSocket）。做法是浏览器层给每个文档的响应加上 `Content-Security-Policy: worker-src 'none'`，由浏览器执行，about:blank / srcdoc / blob 这类继承文档策略的 iframe 也一样。被挡下的 worker 记进 `blockedRequests`，写作 `WORKER <地址>`；万一还有 worker 启动了，立刻关掉，这次运行失败。试过的其他办法：先挂起 worker 再下发设置（Playwright 自己也挂在 worker 上，会马上让它继续跑，抢不过）；只放行 HTTP 的代理（wss 和 https 都走 CONNECT 隧道，分不出来）。截至 EURO-22，滴答网页版的三个参照脚本里没有出现过创建 worker 的情况。
+
+加禁令要用 `Fetch.fulfillRequest` 改写文档，改写过的文档没有 IP 地址空间，Chromium 的本地网络访问检查（Local Network Access）会把它里面跨源的子 frame（另一个端口或主机、重定向过去的、跨源 `<object>`）当成公网页面访问本地网络，请求发不出去。所以截图工具给上下文授予了 `local-network-access` 权限（EURO-37），跨源子 frame 正常加载，同样带禁令；写请求照旧只放行 GET/HEAD/OPTIONS。子 frame 的文档还是没拿到（连不上、加不上禁令等，frame 被移除或改跳导致的中止除外）时，这次运行失败，报错里写明是哪个 frame。跨站子 frame 在独立渲染进程里，它里面（含 `document.write` 写的 about:blank iframe、`javascript:` URL iframe）挡下的 worker 也从该 frame 自己的 DevTools 会话记进 `blockedRequests`。
 （试过用 `waitForDebuggerOnStart` 先挂起新页面再关：`window.open` 开的弹窗和打开它的页面共用渲染进程，挂起弹窗会把原页面一起冻住，点击一直不返回，所以改用按 frame 拦请求。）
 
 ### 打字预览（ADR-0010）

@@ -60,6 +60,13 @@ async function main() {
     serviceWorkers: 'block', // service worker 发出的请求绕过 route，直接禁用
   });
 
+  // Documents are fulfilled from here with the worker ban added (below). A fulfilled document has no IP address
+  // space, so Chromium's Local Network Access checks treat its cross-origin frames (another port, another host,
+  // a redirect, an <object>) as a public page reaching into the local network and fail them before they are sent
+  // (EURO-37). Allowing local network access restores what an unmodified document may load; it adds no methods:
+  // the write guard below still lets only GET/HEAD/OPTIONS through.
+  await context.grantPermissions(['local-network-access']);
+
   const blocked = [];
   await context.route('**/*', (route) => {
     const req = route.request();
@@ -117,7 +124,15 @@ async function main() {
   const startedWorkers = [];
   const workerTargets = new Set();
   const browserSession = await context.browser().newBrowserCDPSession();
-  browserSession.on('Fetch.requestPaused', async ({ requestId, request, frameId, responseStatusCode, responseStatusText, responseHeaders }) => {
+  // Frames whose document never arrived: the screenshot would have a hole, so the run fails and names them.
+  const failedFrames = [];
+  browserSession.on('Fetch.requestPaused', async ({ requestId, request, frameId, responseStatusCode, responseStatusText, responseHeaders, responseErrorReason }) => {
+    if (responseErrorReason !== undefined) {
+      // Response stage of a document that failed on the way (refused, blocked, …). A frame removed or sent
+      // elsewhere while loading is Aborted: nothing is missing then.
+      if (responseErrorReason !== 'Aborted') failedFrames.push(`${request.url}（${responseErrorReason}）`);
+      return browserSession.send('Fetch.continueRequest', { requestId }).catch(() => {});
+    }
     if (responseStatusCode !== undefined) {
       // Response stage (documents only): add the worker ban. (Fetch.continueResponse ignores new headers, so
       // the response is fulfilled with its own body.) Redirects create no document: they go on as they are.
@@ -136,6 +151,7 @@ async function main() {
       } catch {
         // A document that cannot carry the ban does not get through.
         blocked.push(`无法加上 worker 禁令 ${request.method} ${request.url}`);
+        failedFrames.push(`${request.url}（无法加上 worker 禁令）`);
         await browserSession.send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' }).catch(() => {});
       }
       return;
@@ -191,11 +207,36 @@ async function main() {
     blocked.push(entry);
   };
   await context.exposeBinding('__didaRefWorkerBlocked', (_source, url) => recordWorker(String(url)));
-  pageSession.on('Audits.issueAdded', ({ issue }) => {
+  const onIssue = ({ issue }) => {
     const csp = issue.details?.contentSecurityPolicyIssueDetails;
     if (csp?.violatedDirective === 'worker-src') recordWorker(csp.blockedURL);
-  });
+  };
+  pageSession.on('Audits.issueAdded', onIssue);
   await pageSession.send('Audits.enable');
+  // A cross-site frame runs in its own renderer with its own DevTools target: its issues never reach pageSession,
+  // and in documents the init script never ran in (document.write into an about:blank iframe, a javascript: URL
+  // iframe) that is the only report of a blocked worker (EURO-37). Each such frame gets its own session;
+  // Audits.enable replays the issues raised before it was sent.
+  const frameTargets = new Set();
+  const frameAudits = [];
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) return;
+    frameAudits.push(
+      (async () => {
+        let session;
+        try {
+          session = await context.newCDPSession(frame); // throws for a frame in the page's own renderer
+        } catch {
+          return;
+        }
+        const { targetId } = (await session.send('Target.getTargetInfo')).targetInfo;
+        if (frameTargets.has(targetId)) return session.detach();
+        frameTargets.add(targetId);
+        session.on('Audits.issueAdded', onIssue);
+        await session.send('Audits.enable');
+      })().catch(() => {}),
+    );
+  });
 
   // New tabs and windows are where the write guard leaks (EURO-22 审查: a popup's sendBeacon reached the server even
   // though the popup was closed at once), so pages may not open them at all: window.open, links and forms aimed at
@@ -327,6 +368,7 @@ async function main() {
     if (heldPages.length > 0) throw new Error(`${where}打开了新页面（${heldPages.join(', ')}），它的请求全部拦下，页面已关闭；为保护参照账号，本次运行失败`);
     if (extraPages.length > 0) throw new Error(`${where}打开了新页面（${extraPages.join(', ')}），已关闭；为保护参照账号，本次运行失败`);
     if (blockedPopups.length > 0) throw new Error(`${where}页面想打开新页面（${blockedPopups.join(', ')}），已阻止；为保护参照账号，本次运行失败`);
+    if (failedFrames.length > 0) throw new Error(`${where}有 frame 没加载出来（${failedFrames.join(', ')}），截图会缺一块；本次运行失败`);
   };
 
   try {
@@ -347,6 +389,7 @@ async function main() {
     checkPages('');
     await page.screenshot({ path: output, fullPage: args.fullPage });
     screenshots.push(output);
+    await Promise.all(frameAudits); // the frames' replayed issues are in blockedRequests
     console.log(
       JSON.stringify(
         {
@@ -363,7 +406,7 @@ async function main() {
     );
   } catch (e) {
     // A failed run still says what was blocked (ADR-0008: the PR lists blockedRequests).
-    console.error(JSON.stringify({ blockedRequests: blocked, blockedPopups, newPages: [...heldPages, ...extraPages] }, null, 2));
+    console.error(JSON.stringify({ blockedRequests: blocked, blockedPopups, newPages: [...heldPages, ...extraPages], failedFrames }, null, 2));
     throw e;
   } finally {
     await context.close();

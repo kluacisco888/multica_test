@@ -520,6 +520,130 @@ test('workers cannot start at all, however they are created; blocked workers are
   }
 });
 
+// EURO-37：给文档加 worker 禁令要用 Fetch.fulfillRequest 改写响应，改写过的文档在浏览器看来没有 IP 地址空间，
+// 它里面跨源的子 frame（另一个端口、另一个主机）被本地网络访问检查（Local Network Access）挡下，请求到不了服务器，运行却照样成功。
+// 两个本机服务互为跨源：A 是 127.0.0.1，B 用 localhost（不同站点，走独立渲染进程）或 127.0.0.1 的另一个端口（同站不同源）。
+async function twoOrigins(pageFor, frameHtml, bHost = 'localhost') {
+  const seen = [];
+  const handler = (name) => (req, res) => {
+    seen.push(`${name} ${req.method} ${req.url}`);
+    if (name === 'A' && req.url === '/') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(pageFor(b));
+    } else if (name === 'A' && req.url === '/redir') {
+      res.writeHead(302, { location: `${b.origin}/frame?redir` });
+      res.end();
+    } else if (name === 'B' && req.url.startsWith('/frame')) {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(frameHtml);
+    } else {
+      res.writeHead(204);
+      res.end();
+    }
+  };
+  const a = createServer(handler('A'));
+  const b = createServer(handler('B'));
+  for (const s of [a, b]) {
+    s.on('upgrade', (req, socket) => {
+      seen.push(`UPGRADE ${req.url}`);
+      socket.destroy();
+    });
+  }
+  await new Promise((r) => a.listen(0, '127.0.0.1', r));
+  await new Promise((r) => b.listen(0, '127.0.0.1', r));
+  b.origin = `http://${bHost}:${b.address().port}`;
+  return { seen, url: `http://127.0.0.1:${a.address().port}/`, close: () => (a.close(), b.close()) };
+}
+
+// The frame's script tries a worker (must stay blocked) and says it ran with a GET (must arrive).
+const CROSS_FRAME = `<!doctype html><title>cross</title><p>跨源</p><script>
+  fetch('/frame-ran?' + location.search.slice(1)).catch(() => {});
+  try { new Worker(URL.createObjectURL(new Blob(["fetch('/frame-worker-ran')"]))); } catch (e) {}
+</script>`;
+
+test('cross-origin iframes, iframes redirected cross-origin and cross-origin <object>s load, and their workers stay blocked', { skip: !hasChromium && 'Chromium 未安装' }, async () => {
+  for (const host of ['localhost', '127.0.0.1']) {
+    const env = await twoOrigins(
+      (b) => `<!doctype html><title>frames</title>
+<iframe src="${b.origin}/frame?iframe"></iframe>
+<iframe src="/redir"></iframe>
+<object type="text/html" data="${b.origin}/frame?object"></object>`,
+      CROSS_FRAME,
+      host,
+    );
+    const home = mkdtempSync(path.join(tmpdir(), 'ref-env-it-'));
+    mkdirSync(path.join(home, 'profile'), { mode: 0o700 });
+    try {
+      const r = await run([env.url, '-o', path.join(home, 'x.png'), '--wait', '1500'], { DIDA_REF_HOME: home });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      assert.equal(r.code, 0, `${host}: ${r.err}`);
+      for (const which of ['iframe', 'redir', 'object']) {
+        assert.ok(env.seen.includes(`B GET /frame-ran?${which}`), `${host}: the ${which} frame loaded and ran: ${env.seen}`);
+      }
+      assert.ok(!env.seen.some((s) => s.includes('/frame-worker-ran')), `${host}: a worker in a cross-origin frame ran: ${env.seen}`);
+      assert.ok(JSON.parse(r.out).blockedRequests.some((b) => b.startsWith('WORKER ')), `${host}: blocked worker recorded`);
+    } finally {
+      env.close();
+      rmSync(home, { recursive: true, force: true });
+    }
+  }
+});
+
+test('a frame whose document cannot be loaded fails the run and names the frame', { skip: !hasChromium && 'Chromium 未安装' }, async () => {
+  // Nothing listens on this port: the frame's document never arrives.
+  const dead = createServer();
+  await new Promise((r) => dead.listen(0, '127.0.0.1', r));
+  const deadUrl = `http://127.0.0.1:${dead.address().port}/gone`;
+  await new Promise((r) => dead.close(r));
+  const seen = [];
+  const server = await pageServer(`<!doctype html><title>dead-frame</title><iframe src="${deadUrl}"></iframe>`, seen);
+  const home = mkdtempSync(path.join(tmpdir(), 'ref-env-it-'));
+  mkdirSync(path.join(home, 'profile'), { mode: 0o700 });
+  try {
+    const shot = path.join(home, 'x.png');
+    const r = await run([`http://127.0.0.1:${server.address().port}/`, '-o', shot, '--wait', '500'], { DIDA_REF_HOME: home });
+    assert.notEqual(r.code, 0, 'a missing frame fails the run');
+    assert.match(r.err, /没加载出来/);
+    assert.ok(r.err.includes(deadUrl), `the frame is named: ${r.err}`);
+    assert.ok(!existsSync(shot), 'no screenshot with a hole in it');
+  } finally {
+    server.close();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+// EURO-37：document.write 写进 about:blank iframe、javascript: URL iframe 里起的 worker 被挡下了，但没有 WORKER 记录：
+// 这两种文档里没有 init script 的监听，跨源 frame（独立渲染进程）里的 DevTools issue 也不经过主页面的会话。
+const WRITTEN_FRAME_ENTRIES = {
+  'document.write into an about:blank iframe': `const f = document.createElement('iframe'); document.body.append(f); const d = f.contentDocument; d.open(); d.write('<scr' + 'ipt>new Worker(URL.createObjectURL(new Blob([parent.W])))</scr' + 'ipt>'); d.close()`,
+  'javascript: URL iframe': `const f = document.createElement('iframe'); f.src = 'javascript:"<scr' + 'ipt>new Worker(URL.createObjectURL(new Blob([parent.W])))</scr' + 'ipt>"'; document.body.append(f)`,
+};
+
+test('workers started in document.write and javascript: URL iframes are recorded, in the page and in a cross-origin frame', { skip: !hasChromium && 'Chromium 未安装' }, async () => {
+  for (const [name, code] of Object.entries(WRITTEN_FRAME_ENTRIES)) {
+    const probe = `<!doctype html><title>w</title><body><script>
+  window.W = "fetch('/written-worker-ran')";
+  try { ${code}; } catch (e) {}
+</script>`;
+    for (const where of ['page', 'cross-origin frame']) {
+      const env = await twoOrigins((b) => (where === 'page' ? probe : `<!doctype html><title>outer</title><iframe src="${b.origin}/frame"></iframe>`), probe);
+      const home = mkdtempSync(path.join(tmpdir(), 'ref-env-it-'));
+      mkdirSync(path.join(home, 'profile'), { mode: 0o700 });
+      try {
+        const r = await run([env.url, '-o', path.join(home, 'x.png'), '--wait', '1500'], { DIDA_REF_HOME: home });
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        assert.equal(r.code, 0, `${name} in the ${where}: ${r.err}`);
+        if (where !== 'page') assert.ok(env.seen.includes('B GET /frame'), `${name}: the cross-origin frame loaded: ${env.seen}`);
+        assert.ok(!env.seen.some((s) => s.includes('/written-worker-ran')), `${name} in the ${where}: the worker ran: ${env.seen}`);
+        assert.ok(JSON.parse(r.out).blockedRequests.some((b) => b.startsWith('WORKER ')), `${name} in the ${where}: blocked worker recorded: ${r.out}`);
+      } finally {
+        env.close();
+        rmSync(home, { recursive: true, force: true });
+      }
+    }
+  }
+});
+
 // ---- 打字预览（ADR-0010）----
 
 const TYPE_PAGE = `<!doctype html><title>type-probe</title>
