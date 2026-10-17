@@ -124,7 +124,7 @@ export async function buildApp(deps: AppDeps) {
   );
   // 节假日数据更新: open next instances of 重复任务 move to the corrected 工作日 (用户故事 50).
   app.holidays.onUpdated(async ({ calendar }) => {
-    const moved = await recomputeNextInstances(db, app.sync, calendar);
+    const moved = await recomputeNextInstances(db, app.sync, calendar, app.clock.now());
     if (moved.length > 0) app.log.info({ tasks: moved.length }, 'repeat instances recomputed after holiday data update');
   });
   const cipher = config.encryptionKey ? createCredentialCipher(config.encryptionKey) : null;

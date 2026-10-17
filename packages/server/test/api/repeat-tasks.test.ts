@@ -1,4 +1,4 @@
-import { checklistItemsResponseSchema, taskSchema, tasksResponseSchema, type HolidayYear, type Task } from '@dida/shared';
+import { checklistItemsResponseSchema, statisticsSchema, taskSchema, tasksResponseSchema, type HolidayYear, type Task } from '@dida/shared';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { fixedClock } from '../../src/clock.js';
 import { startFakeHolidayCn, type FakeHolidayCn } from '../support/fake-holiday-cn.js';
@@ -245,5 +245,40 @@ describe('repeat tasks API', () => {
     // The correction is a normal change: it shows up in the sync feed.
     const changes = (await api(alice, 'GET', '/api/changes?since=0')).json() as { entities: { task?: { upserts: { id: string; dueDate: string }[] } } };
     expect(changes.entities.task?.upserts.find((x) => x.id === (newYear as Task).id)?.dueDate).toBe('2027-01-04');
+  });
+
+  it('节假日数据更新 that moves an overdue next instance keeps its −2 on the day it became overdue', async () => {
+    // Wednesday 2027-12-29, and a user of its own: other users' tasks are overdue by then.
+    clock.set('2027-12-29T02:00:00.000Z');
+    const carol = await t.createUser('carol');
+    const created = await api(carol, 'POST', '/api/tasks', { title: '跨年日报', dates: allDay('2027-12-31'), repeat: { freq: 'workday' } });
+    expect(created.statusCode, created.body).toBe(201);
+    const first = taskSchema.parse(created.json());
+    const carolTasks = async () => tasksResponseSchema.parse((await api(carol, 'GET', `/api/tasks?listId=${first.listId}`)).json()).tasks;
+    const completed = await api(carol, 'PATCH', `/api/tasks/${first.id}`, { status: 'completed' });
+    expect(completed.statusCode, completed.body).toBe(200);
+    // 2028 is not published yet: the 工作日 after Friday 2027-12-31 is Monday 2028-01-03.
+    const open = (await carolTasks()).find((x) => x.status === 'open');
+    expect(open?.dates).toMatchObject({ dueDate: '2028-01-03' });
+
+    // A week later, Wednesday 2028-01-05: overdue since 01-04, −2 on that day (+5 from completing on time).
+    clock.set('2028-01-05T02:00:00.000Z');
+    const history = async () => {
+      const res = await api(carol, 'GET', '/api/statistics');
+      expect(res.statusCode, res.body).toBe(200);
+      return Object.fromEntries(statisticsSchema.parse(res.json()).achievement.history.map((d) => [d.date, d.score]));
+    };
+    expect(await history()).toMatchObject({ '2028-01-03': 5, '2028-01-04': 3, '2028-01-05': 3 });
+
+    // 01-03 becomes a holiday: the instance moves to 01-04, which alone would make it overdue only from 01-05.
+    fake.set(2028, { json: { year: 2028, days: [{ name: '元旦', date: '2028-01-03', isOffDay: true }] } satisfies HolidayYear });
+    const refresh = await api(carol, 'POST', '/api/holidays/refresh');
+    expect(refresh.statusCode, refresh.body).toBe(200);
+    expect(refresh.json()).toMatchObject({ results: expect.arrayContaining([{ year: 2028, outcome: 'updated' }]) });
+    const moved = (await carolTasks()).find((x) => x.id === open?.id);
+    expect(moved?.dates).toMatchObject({ dueDate: '2028-01-04' });
+
+    // The −2 already taken stays on 01-04.
+    expect(await history()).toMatchObject({ '2028-01-03': 5, '2028-01-04': 3, '2028-01-05': 3 });
   });
 });
