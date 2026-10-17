@@ -10,6 +10,8 @@ import {
 import type { Db, Tx } from './db/client.js';
 import { checklistItems, tasks } from './db/schema/tasks.js';
 import { taskDatesToApi, taskDateColumns, type TaskRow } from './organize.js';
+import { readSettings } from './settings.js';
+import { rememberOverdue } from './statistics.js';
 import type { SyncOps, SyncWriter } from './sync/sync.js';
 import { liveChecklistItems } from './task-tree.js';
 
@@ -87,7 +89,7 @@ export async function generateNextInstance(
  * generated next instance with the new 工作日日历. Instances whose date the
  * user changed by hand are left alone. Returns the ids of the moved tasks.
  */
-export async function recomputeNextInstances(db: Db, sync: SyncWriter, calendar: WorkdayCalendar): Promise<string[]> {
+export async function recomputeNextInstances(db: Db, sync: SyncWriter, calendar: WorkdayCalendar, now: Date): Promise<string[]> {
   const rows = await db
     .select()
     .from(tasks)
@@ -111,7 +113,10 @@ export async function recomputeNextInstances(db: Db, sync: SyncWriter, calendar:
       // Re-check under the transaction: the user may have changed it meanwhile.
       const [current] = await tx.select().from(tasks).where(and(eq(tasks.id, row.id), isNull(tasks.deletedAt)));
       if (!current || current.status !== 'open' || current.revision !== row.revision) return null;
+      const { timeZone } = await readSettings(tx, row.userId);
       return ops.update(tasks, row.id, {
+        // 成就分: the new date must not take back the −2 of an instance already overdue.
+        ...rememberOverdue(current, timeZone, now),
         ...taskDateColumns(shiftTaskDates(dates, nextDue), row.timeZone),
         repeatBasis: { ...basis, nextDue },
       });
